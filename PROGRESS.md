@@ -220,3 +220,17 @@
 - 测试单调性：父提交共有 11 个测试属性，提交后为 27 个，新增 16 个且既有测试未删除；`git diff --check` 通过。
 - 结论：核心提交边界适合主任务 cherry-pick；`PROGRESS.md` 因主分支新增 C2 记录可能需由主任务解决上下文冲突，集成后必须重跑 restore/build/test。
 - 下一步：等待 C4 独立提交 App 接入及完整五命令结果；主任务做代码正确性审查后按顺序集成，不把核心提交单独视为产品接入完成。
+
+## 2026-08-05 Input Core 采集核心与生产管线
+
+- 分支/提交：`codex/input-core-work@0a31520`；本项待提交，未 push。
+- 范围：新增独立 `InputTracker.Input` 类库和普通测试项目；加入隐藏 Win32 消息窗口、keyboard/mouse 的 `RIDEV_INPUTSINK | RIDEV_DEVNOTIFY` 注册、`WM_INPUT`/插拔/私有控制消息、单写单读有界 Channel、后台 worker、设备代次、暂停原因与只读诊断；未修改 `tests/Acceptance/**` 或 `scripts/verify.ps1`。
+- 隐私：公共键盘 DTO 仅含运行时设备 ID、MakeCode、E0/E1、Down/Up 和 timestamp；入口序号仅为内部管线诊断；源码测试禁止文字、键名、窗口、进程和前台 API。
+- restore：沙箱首次因 `AppData/Local/Microsoft SDKs` 读取被拒退出 1；按权限流程受控重试后 5 项目恢复成功，退出码 0。
+- build：首次核心构建 0 errors、2 个可空性 warnings；改为值类型设备条目后复核为 0 warnings / 0 errors，退出码 0。
+- test 第 1 次：65,536 容量的瞬时百万生产循环按预期触发 `TryWrite=false`，1 失败/4 通过；未放宽 overflow 断言，改用同一生产队列的明确 1,000,000 有界容量，另保留容量 1 的溢出故障测试。
+- test 第 2 次：百万混合流因最初两个键盘事件为无对应 Down 的 Up，sink 实际收到 `999,998`，1 失败/18 通过；修正生成序列为合法 Down/Up，未修改生产过滤逻辑或目标计数。
+- test 最终：`InputTracker.Input.Tests` 共 20 passed、0 failed、0 skipped，含真实 User32 注册/暂停/恢复/注销测试；百万事件 `produced=accepted=dequeued=sinkAcknowledged=1,000,000`，`overflow=parseErrors=outOfOrder=0`，测试 sink 仅保留计数与滚动 hash。
+- 未验证：真实两键盘两鼠标、前后台 2 小时及 1000Hz 鼠标 30 分钟仍为 B-003；自动测试和真实 User32 注册不冒充物理硬件终验。
+- 结果：核心契约、Win32 入口、有界管线、设备隔离、暂停 barrier、overflow/sink failure 的 IntegrityFault 和公开诊断已完成并自动验证。
+- 下一步：提交本核心单元；随后提交 App 最小生命周期接入，再运行统一五命令和 Bootstrap 回归。
