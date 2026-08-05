@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "minimumTotalTests": 11,
+  "minimumAcceptanceTests": 5,
+  "minimumGateCount": 11,
+  "requiredGateIds": [
+    "local-sdk-10",
+    "restore",
+    "build",
+    "tests-no-skip",
+    "acceptance-test-count",
+    "publish-self-contained",
+    "manifest-as-invoker",
+    "unicode-space-self-check",
+    "single-instance",
+    "green-path-boundary",
+    "no-residual-process"
+  ]
+}
