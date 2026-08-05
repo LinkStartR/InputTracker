@@ -500,3 +500,22 @@
 - 测试单调性：测试属性由 46 增至 58，统一实际运行 63 passed / 0 failed / 0 skipped；未删除、skip 或弱化既有测试。
 - 发布阻塞：native WAL 风险、物理突然断电与真实多设备/1000Hz 硬件仍明确阻塞最终发布，不因本里程碑提交解除。
 - 处置：仅暂存审查批准的 19 个文件，执行 cached diff/name 复核后提交 `feat: add storage durability foundation`；不 push、不建 PR、不开始下一切片。
+
+## 2026-08-05 Storage durability 第一里程碑主分支集成
+
+- worker 提交：`codex/storage-stats-work@61b341f29948e255c793417f7bb5e852d82f9969`，19 files changed / 1741 insertions / 2 deletions，工作树 clean，未 push/PR。
+- 主任务集成：在 `codex/storage-stats@56493f0` 执行 `git cherry-pick 61b341f...`；首次退出码 1，唯一冲突为 `PROGRESS.md` 的两侧追加记录，功能代码、solution、依赖与 `BLOCKED.md` 均无冲突。
+- 冲突处置：保留主分支的 Input Core 合并与 C2 Storage 验收设计，同时完整保留 C5 的失败、修复、尖峰、统一回归及 C1 审查记录；`git diff --cached --check` 退出码 0，无冲突标记。
+- `git cherry-pick --continue` 退出码 0，生成 `3180070 feat: add storage durability foundation`；19 files changed / 1742 insertions / 2 deletions，多出的 1 行为冲突合并时恢复 Markdown 段落空行。
+- 结论：B-006 仅在契约层解除；B-007 native SQLite `3.49.1`、物理突然断电和真实多设备/1000Hz 硬件仍阻塞发布，未因集成改变。
+- 下一步：在集成提交上只跑快速 Release build 与排除 `StorageSpike` 的 11 个 Storage 普通测试；不重复已冻结源码上全绿的 4 分钟尖峰。通过后提交本集成/索引记录，再开始正式压缩轨迹块切片。
+
+## 2026-08-05 Storage durability 集成后快速红→绿
+
+- 首次 `./.tools/dotnet/dotnet.exe build InputTracker.sln -c Release --no-restore`：沙箱内退出码 1，7 项目均在 Windows SDK 探测时报 `MSB4184`（拒绝读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs`）；源码未变。
+- 同命令受控重跑：进入真实构建后退出码 1；既有 5 项目生成成功，新集成的 Storage/Storage.Tests 因主工作区尚无 `project.assets.json` 报 2 个 `NETSDK1004`，0 warnings / 2 errors。
+- `./.tools/dotnet/dotnet.exe restore InputTracker.sln` 受控执行退出码 0，7 项目成功恢复，Storage 与 Storage.Tests 各约 223ms；未更改依赖版本或系统环境。
+- 原 Release build 再跑退出码 0，7 项目全部生成，0 warnings / 0 errors，用时 1.93 秒。
+- `./.tools/dotnet/dotnet.exe test tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-build --no-restore --filter "Category!=StorageSpike"` 退出码 0：11 passed / 0 failed / 0 skipped，用时 266ms。
+- 结果：功能提交 `3180070` 在主工作区通过快速编译与非尖峰恢复/迁移/durable seam 回归；未重复已经在同一源码语义上完成并记录的 4 分钟尖峰。
+- 下一步：提交仅含 `PROGRESS.md` 与 `docs/codex/thread-index.md` 的集成记录；随后向 C5 下发正式压缩轨迹块与恢复的独立切片。
