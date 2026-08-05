@@ -285,3 +285,12 @@
 - 未验证：B-003 的真实两键盘两鼠标前后台 2 小时与 1000Hz 鼠标 30 分钟仍未执行；当前仅逐 `WM_INPUT` 使用 `GetRawInputData`，是否需要 `GetRawInputBuffer` buffered drain 等待真实终验数据决定。
 - 结果：Input Core 自动化实现、故障收口、App 最小接入和 Bootstrap 回归均通过；代码可交主任务集成，但最终硬件验收仍保持阻塞。
 - 下一步：提交本纯验证记录并回报主任务；不 push、不创建 PR。
+
+## 2026-08-05 Storage 只读设计与 Input Core 兼容门
+
+- 分支/提交：主任务 `codex/input-core@99690ce`；C5 本轮只读审查，未建分支、未修改、未提交或推送。
+- 设备描述门：当前 `RawDeviceRegistry.Resolve()` 可在首个输入时隐式创建设备，但 `InputWorker` 不向 sink 发送对应 `DeviceChange.Arrived`；Storage 因而只能看到进程内 `RuntimeDeviceId`，拿不到接口路径、硬件摘要与置信度，无法正确实现重插映射。
+- 时间边界：事件 `Timestamp` 属于 `Stopwatch` 单调时钟域，不能当作 UTC/Unix ticks；Storage 与 Input Core 同进程时可用同一频率建立 UTC 校准段，因此不是立即阻塞，后续建议非破坏性暴露时钟元数据。
+- 持久化风险：当前 sink 为逐事件 await；Storage 可以在暂停、移除、停止 boundary 强制落盘，但若把 `SinkAcknowledged` 定义为抵抗突然断电的逐事件持久确认，则需要批量 durable-ack 契约，进入 Storage 技术尖峰前不得静默假设。
+- 处置：已向可定位的 C4 线程下发最小兼容修补，只允许保证 descriptor-before-first-event 并增加普通测试；不得碰 Acceptance、判卷脚本、依赖或 Storage。
+- 下一步：C2 完成 InputCore 阶段判卷；C4 返回独立兼容提交后由主任务审查、集成并重跑统一命令。
