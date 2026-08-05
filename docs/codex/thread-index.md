@@ -4,11 +4,11 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：Bootstrap PR #1 已合并为 `main@1fc6177`；Input Core draft PR #2 已创建，等待 CI、mergeability 与审查复核。
+- 当前阶段：Input Core draft PR #2 首轮 CI 因 publish `--no-build` 缺 RID assets 失败；已做一行 workflow 修复，等待本地复核与新 CI。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 等待 PR 检查 | Git 状态、分支、PR | `codex/input-core@ea4496d` 已推送；draft PR #2 | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 独立边界审查通过；等待 CI/mergeability，真实硬件仍待验 |
+| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | CI 修复复核中 | Git 状态、分支、PR | draft PR #2；首轮 runs `30993493390` / `30993490199` 失败 | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 失败仅在 publish RID assets；一行 workflow 修复待新 CI，真实硬件仍待验 |
 | C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | 本阶段完成 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | worker `25d3e11`；主分支集成 `03985a4` | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | 51 total / 12 Acceptance / 23 gates / 0 skip；硬件状态 not-run，releaseEligible=false |
 | C3 | Bootstrap | 最小 WPF、CI、单实例、托盘暂停 | 已集成 | `src/**`, 常规 `tests/**`, `.github/**`, solution/Directory 文件 | PR #1 已合并，merge `1fc6177` | 是：`019fd04e-0c87-71e0-b2e1-bfa363a691df` | gpt-5.6-sol / xhigh | 首个架构与权限边界 | 自动/CI/受控桌面状态链通过；普通用户可视启动/UAC/截图仍为 B-005 |
 | C4 | Input Core | Raw Input、多设备、有界队列 | draft PR #2 | 输入模块及普通测试 | worker `b4efeb4`；集成分支 `ea4496d`；PR #2 | 是：`019fd04e-0c7c-7c22-9135-1b53679805f1` | sol / high | 并发、设备身份、不丢事件 | 自动化与红→绿通过；等待 PR 检查，真实硬件仍为 B-003 |

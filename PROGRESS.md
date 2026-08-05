@@ -358,3 +358,12 @@
 - PR 输出：14 commits、42 changed files、4603 additions、55 deletions；创建时 GitHub 返回 `state=open`、`draft=true`、`mergeable=false`，该字段可能仍在异步计算，不能据此宣称可合并。
 - PR 声明：正文列出 51/12/23/0 的自动验证与两类红→绿，同时明确两键盘两鼠标 2 小时、1000Hz 30 分钟和普通用户/UAC 现场证据未完成，`releaseEligible=false`。
 - 下一步：提交并推送本 PR 记录；等待 GitHub CI 和 mergeability 稳定，检查审查线程后再决定是否可从 draft 转为 ready。Storage 分支不得在 Input Core PR 合并前开始实现。
+
+## 2026-08-05 Input Core PR #2 CI 首轮失败与修复
+
+- 检查：`gh pr checks 2 --repo LinkStartR/InputTracker` 返回两个 `windows` 均为 fail，分别为 pull_request run `30993493390` 与 push run `30993490199`，用时 1m3s / 1m6s。
+- 工具过程：按 `github:gh-fix-ci` 先执行 `gh auth status`，账号已认证且具有 `repo`/`workflow` scope；其 bundled Python 检查脚本因本机 GBK 解码 GitHub UTF-8 日志触发 `UnicodeDecodeError` 后又因空日志触发 `AttributeError`，未据此作产品结论，改走 skill 规定的 `gh` 手工回退。
+- 日志：两次 run 均在 `Publish portable win-x64` 失败；命令含 `--no-build`，`InputTracker.Input` 的 assets 文件没有 `net10.0-windows10.0.19041.0/win-x64` target，报 `NETSDK1047` 并退出 1；Restore、Build、Test 阶段未被日志标为失败。
+- 根因：CI 的非 RID restore/build 不能满足随后 solution 级 win-x64 publish 的 `--no-build` 前置条件；与组合验证中额外 `--no-restore` 的首次失败属于同一 RID assets 边界，不是产品采集逻辑或测试失败。
+- 修复：仅删除 `.github/workflows/ci.yml` Publish 步骤的 `--no-build`，使 CI 与任务书原命令一致并允许 publish 自行执行必要 RID restore/build；未改产品代码、依赖、测试、断言或阈值。
+- 下一步：运行本地原 publish 命令与 diff 检查，提交推送后等待新的 push/PR 两次 CI；旧失败 run 不重跑，因为新提交会自然触发新检查。
