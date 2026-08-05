@@ -519,3 +519,12 @@
 - `./.tools/dotnet/dotnet.exe test tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-build --no-restore --filter "Category!=StorageSpike"` 退出码 0：11 passed / 0 failed / 0 skipped，用时 266ms。
 - 结果：功能提交 `3180070` 在主工作区通过快速编译与非尖峰恢复/迁移/durable seam 回归；未重复已经在同一源码语义上完成并记录的 4 分钟尖峰。
 - 下一步：提交仅含 `PROGRESS.md` 与 `docs/codex/thread-index.md` 的集成记录；随后向 C5 下发正式压缩轨迹块与恢复的独立切片。
+
+## 2026-08-05 Storage 正式压缩块切片启动
+
+- 分支准备：保留已审查的 `codex/storage-stats-work@61b341f` 不动，在 C5 可定位工作树从最新主任务点 `codex/storage-stats@67955e6` 新建 `codex/storage-chunks-work`，`git switch -c` 退出码 0。
+- 任务边界：仅 `src/InputTracker.Storage/**`、普通 Storage tests、`docs/storage/**`、`PROGRESS.md`、`BLOCKED.md`；禁止新增依赖或修改 Acceptance/verify、App/Input/UI/portable、solution、LICENSE/.github。
+- 目标：versioned Brotli 增量轨迹块、CRC32C + canonical SHA-256、严格 reader、tmp→flush→rename→SQLite commit 后公开水位，以及 orphan/missing/corrupt 的幂等恢复矩阵；不得抽样或删除过渡 spool/损坏文件。
+- 风险门：先核对现有 spool record 是否覆盖 Input Core 全鼠标原始字段；不足则写 BLOCKED，不静默丢信息。native SQLite `3.49.1` 继续只允许唯一 writer/checkpointer 与 `Pooling=false`。
+- 线程：固定 C5 `Storage Stats`（`019fd04e-21df-7482-a248-99deb1617a5f`）已收到完整任务卡，推荐 `terra/high`，可见且可定位。
+- 下一步：C5 增量实现并回报精确代跑命令；完成真实 FS/SQLite 单测与统一回归后，由 C1 独立审查再提交，不 push。
