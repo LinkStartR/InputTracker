@@ -15,8 +15,14 @@ public sealed class TrayIconController : IDisposable
         Action exitApplication)
     {
         _collection = collection;
-        _pauseItem = new System.Windows.Forms.ToolStripMenuItem("暂停", null, (_, _) => _collection.Pause());
-        _resumeItem = new System.Windows.Forms.ToolStripMenuItem("恢复", null, (_, _) => _collection.Resume());
+        _pauseItem = new System.Windows.Forms.ToolStripMenuItem(
+            "暂停",
+            null,
+            async (_, _) => await ExecuteControlAsync("暂停采集", _collection.PauseAsync));
+        _resumeItem = new System.Windows.Forms.ToolStripMenuItem(
+            "恢复",
+            null,
+            async (_, _) => await ExecuteControlAsync("恢复采集", _collection.ResumeAsync));
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("打开 InputTracker", null, (_, _) => showWindow());
@@ -47,11 +53,27 @@ public sealed class TrayIconController : IDisposable
 
     private void OnCollectionChanged(object? sender, CollectionSnapshot snapshot) => Render(snapshot);
 
+    private async Task ExecuteControlAsync(string operation, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception error)
+        {
+            _collection.HandleCaptureControlException(operation, error);
+        }
+    }
+
     private void Render(CollectionSnapshot snapshot)
     {
         _notifyIcon.Text = snapshot.Mode switch
         {
             CollectionMode.Paused => "InputTracker - 已暂停",
+            CollectionMode.Collecting => "InputTracker - 采集中",
+            CollectionMode.IntegrityFault => "InputTracker - 完整性故障，采集已停止",
+            CollectionMode.ControlUncertain => "InputTracker - 状态不确定，采集可能仍在运行",
+            CollectionMode.StartFailed => "InputTracker - 采集启动失败",
             CollectionMode.RejectedProgramDirectory => "InputTracker - 目录不可写，采集已拒绝",
             _ => "InputTracker - 未采集"
         };

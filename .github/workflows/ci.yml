@@ -21,4 +21,4 @@ jobs:
       - name: Test
         run: dotnet test InputTracker.sln -c Release --no-build --logger "trx;LogFileName=tests.trx"
       - name: Publish portable win-x64
-        run: dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true --no-build
+        run: dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true

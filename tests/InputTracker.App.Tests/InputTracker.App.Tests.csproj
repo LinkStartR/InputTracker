@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\InputTracker.App\InputTracker.App.csproj" />
+    <ProjectReference Include="..\..\src\InputTracker.Input\InputTracker.Input.csproj" />
   </ItemGroup>
 </Project>

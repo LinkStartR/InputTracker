@@ -28,6 +28,14 @@
 
 普通用户、UAC、可视托盘暂停和恢复按 `tests/Acceptance/Manual/bootstrap-checklist.md` 人工验收。真实多设备、性能、统计、恢复和最终视觉在对应后续阶段到达前保持未验，不得因 Bootstrap 全绿而标记为通过。
 
+## Input Core 阶段
+
+执行 `scripts/verify.ps1 -Stage InputCore`。它必须完整回归 Bootstrap gate，并额外验证生产 `BoundedInputQueue` 与 `InputWorker` 的 1,000,000 事件计数：`produced`、`accepted`、`dequeued`、`sinkAcknowledged` 均为 1,000,000，且 `overflow`、`parseErrors`、`outOfOrder` 均为 0。
+
+队列溢出与 sink 异常必须关闭入口、注销 Raw Input 并进入 `IntegrityFault`；暂停原因集合必须只有在最后一个原因解除后才能恢复，且 barrier 前的已接受事件均已消费并确认。键盘公共 schema 仅允许运行时设备 ID、物理扫描码、E0/E1、Down/Up 与聚合 timestamp；`VKey` 与 `Message` 只允许存在于 `RawInputInterop.cs` 的私有 Win32 布局，不能映射到 parser、公共 DTO 或产品调用。鼠标必须保留相对/绝对 dx/dy、按钮变化、垂直/水平滚轮和有符号数据；设备句柄复用必须生成新 arrival generation 和 RuntimeDeviceId。
+
+InputCore 自动测试仅验证规范化注入和生产管线，不是物理硬件终验。`tests/Acceptance/Manual/input-core-hardware-runbook.md` 和性能 schema 必须存在；证据必须明确 `hardwareTerminalStatus=not-run`、`releaseEligible=false`，直到完成两键盘两鼠标 2 小时与 1000Hz 鼠标 30 分钟现场验收。
+
 ## 反向验证
 
 分别临时破坏聚合期望、轨迹块校验、绿色路径规则，保存非零退出码和关键失败输出；恢复原状后运行全套命令并保存全绿输出。临时破坏不得提交。

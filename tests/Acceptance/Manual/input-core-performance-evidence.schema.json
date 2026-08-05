@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InputTracker Input Core hardware performance evidence",
+  "type": "object",
+  "required": [
+    "commit", "windows", "dotnet", "cpu", "logicalProcessorCount", "devices", "durationSeconds", "pollingRateEvidence",
+    "foregroundBackgroundPlan", "pipeline", "averageCpuPercent", "peakWorkingSetBytes",
+    "uiLatency", "diskGrowth", "hardwareTerminalStatus", "releaseEligible"
+  ],
+  "properties": {
+    "commit": { "type": "string" },
+    "windows": { "type": "string" },
+    "dotnet": {
+      "type": "object",
+      "required": ["sdk", "runtime"],
+      "properties": {
+        "sdk": { "type": "string" },
+        "runtime": { "type": "string" }
+      }
+    },
+    "cpu": { "type": "string" },
+    "logicalProcessorCount": { "type": "integer", "minimum": 1 },
+    "devices": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["deviceKind", "interfaceId", "hardwareSummary", "identityConfidence"],
+        "properties": {
+          "deviceKind": { "enum": ["Keyboard", "Mouse"] },
+          "interfaceId": { "type": "string", "minLength": 1 },
+          "hardwareSummary": { "type": "string", "minLength": 1 },
+          "identityConfidence": { "enum": ["SessionOnly", "RequiresConfirmation", "Unattributed"] }
+        }
+      },
+      "allOf": [
+        {
+          "contains": { "type": "object", "properties": { "deviceKind": { "const": "Keyboard" } }, "required": ["deviceKind"] },
+          "minContains": 2
+        },
+        {
+          "contains": { "type": "object", "properties": { "deviceKind": { "const": "Mouse" } }, "required": ["deviceKind"] },
+          "minContains": 2
+        }
+      ]
+    },
+    "durationSeconds": { "type": "integer", "minimum": 1800 },
+    "pollingRateEvidence": {
+      "type": "object",
+      "required": ["reportedHz", "method"],
+      "properties": {
+        "reportedHz": { "type": "integer", "minimum": 1000 },
+        "method": { "type": "string", "minLength": 1 }
+      }
+    },
+    "foregroundBackgroundPlan": {
+      "type": "object",
+      "required": ["foreground", "background"],
+      "properties": {
+        "foreground": { "type": "string", "minLength": 1 },
+        "background": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": ["produced", "accepted", "dequeued", "sinkAcknowledged", "overflow", "parseErrors", "outOfOrder"],
+      "properties": {
+        "produced": { "type": "integer", "minimum": 0 },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "dequeued": { "type": "integer", "minimum": 0 },
+        "sinkAcknowledged": { "type": "integer", "minimum": 0 },
+        "overflow": { "type": "integer", "const": 0 },
+        "parseErrors": { "type": "integer", "const": 0 },
+        "outOfOrder": { "type": "integer", "const": 0 }
+      }
+    },
+    "averageCpuPercent": { "type": "number", "maximum": 3 },
+    "peakWorkingSetBytes": { "type": "integer", "maximum": 209715200 },
+    "uiLatency": {
+      "type": "object",
+      "required": ["method", "maximumMilliseconds"],
+      "properties": {
+        "method": { "type": "string", "minLength": 1 },
+        "maximumMilliseconds": { "type": "number", "maximum": 200 }
+      }
+    },
+    "diskGrowth": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["measured", "not-applicable-until-storage"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "startBytes": { "type": "integer", "minimum": 0 },
+        "endBytes": { "type": "integer", "minimum": 0 },
+        "bytesPerHour": { "type": "number", "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "not-applicable-until-storage" } } },
+          "then": { "required": ["reason"] },
+          "else": { "required": ["startBytes", "endBytes", "bytesPerHour"] }
+        }
+      ]
+    },
+    "hardwareTerminalStatus": { "enum": ["not-run", "passed", "failed"] },
+    "releaseEligible": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "hardwareTerminalStatus": { "const": "not-run" } } },
+      "then": { "properties": { "releaseEligible": { "const": false } } }
+    }
+  ]
+}

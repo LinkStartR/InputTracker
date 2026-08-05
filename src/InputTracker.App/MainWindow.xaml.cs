@@ -31,8 +31,11 @@ public partial class MainWindow : Window
         ResumeButton.IsEnabled = snapshot.CanResume;
     }
 
-    private void PauseButton_Click(object sender, RoutedEventArgs e) => _collection.Pause();
-    private void ResumeButton_Click(object sender, RoutedEventArgs e) => _collection.Resume();
+    private async void PauseButton_Click(object sender, RoutedEventArgs e) =>
+        await ExecuteControlAsync("暂停采集", _collection.PauseAsync);
+
+    private async void ResumeButton_Click(object sender, RoutedEventArgs e) =>
+        await ExecuteControlAsync("恢复采集", _collection.ResumeAsync);
     private void HideButton_Click(object sender, RoutedEventArgs e) => MinimizeToTrayRequested?.Invoke(this, EventArgs.Empty);
     private void ExitButton_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
@@ -41,6 +44,18 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized)
         {
             MinimizeToTrayRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private async Task ExecuteControlAsync(string operation, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception error)
+        {
+            _collection.HandleCaptureControlException(operation, error);
         }
     }
 }
