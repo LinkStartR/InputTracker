@@ -68,9 +68,9 @@ public partial class App : System.Windows.Application
             {
                 await _capture.StartAsync();
             }
-            catch
+            catch (Exception error)
             {
-                // InputCaptureService publishes an honest StartFailed state for the UI.
+                _collection.HandleCaptureControlException("启动采集", error);
             }
         }
     }

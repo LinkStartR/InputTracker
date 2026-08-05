@@ -86,14 +86,10 @@ internal sealed class RawInputMessageWindow : IRawInputHost
         }
     }
 
-    public void StopAfterFault()
+    public ValueTask StopAfterFaultAsync(CancellationToken cancellationToken)
     {
         CloseIngress();
-        nint window = Volatile.Read(ref _window);
-        if (window != 0)
-        {
-            RawInputInterop.PostMessageW(window, RawInputInterop.WmAppStopAfterFault, 0, 0);
-        }
+        return SendAsync(new ControlRequest(ControlKind.StopAfterFault), cancellationToken);
     }
 
     private async ValueTask SendAsync(ControlRequest request, CancellationToken cancellationToken)
@@ -243,11 +239,6 @@ internal sealed class RawInputMessageWindow : IRawInputHost
                 ProcessControls();
                 return 0;
 
-            case RawInputInterop.WmAppStopAfterFault:
-                CloseIngress();
-                TryUnregister();
-                return 0;
-
             case RawInputInterop.WmClose:
                 RawInputInterop.DestroyWindow(window);
                 return 0;
@@ -346,6 +337,10 @@ internal sealed class RawInputMessageWindow : IRawInputHost
                             EnqueueBoundary(request, AggregationBoundaryKind.Stopping);
                         }
 
+                        break;
+                    case ControlKind.StopAfterFault:
+                        CloseIngress();
+                        TryUnregister();
                         break;
                     case ControlKind.Destroy:
                         RawInputInterop.DestroyWindow(_window);
@@ -467,6 +462,7 @@ internal sealed class RawInputMessageWindow : IRawInputHost
         Pause,
         Resume,
         PrepareStop,
+        StopAfterFault,
         Destroy
     }
 

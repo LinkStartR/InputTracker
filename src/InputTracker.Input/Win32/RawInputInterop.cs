@@ -10,7 +10,6 @@ internal static class RawInputInterop
     internal const uint WmClose = 0x0010;
     internal const uint WmDestroy = 0x0002;
     internal const uint WmAppControl = 0x8001;
-    internal const uint WmAppStopAfterFault = 0x8002;
 
     internal const nuint RimInput = 0;
     internal const uint RimTypeMouse = 0;

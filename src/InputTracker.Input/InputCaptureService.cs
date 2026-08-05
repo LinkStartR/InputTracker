@@ -1,4 +1,5 @@
 using InputTracker.Input.Win32;
+using System.Runtime.ExceptionServices;
 
 namespace InputTracker.Input;
 
@@ -86,7 +87,7 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
             _counters,
             sink,
             new RawDeviceInfoProvider(),
-            OnWorkerFault);
+            OnWorkerFaultAsync);
         _host = hostFactory.Create(
             _queue,
             _counters,
@@ -233,18 +234,7 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
                 return;
             }
 
-            SetStatus(InputCaptureState.Stopping, CurrentStatus.PauseReasons, null);
-            _host.CloseIngress();
-            bool workerCanDrain = _workerTask is { IsCompleted: false };
-            await _host.PrepareStopAsync(workerCanDrain, cancellationToken).ConfigureAwait(false);
-            _queue.Complete();
-            if (_workerTask is not null)
-            {
-                await _workerTask.ConfigureAwait(false);
-            }
-
-            await _host.DestroyAsync(cancellationToken).ConfigureAwait(false);
-            SetStatus(InputCaptureState.Stopped, PauseReason.None, null);
+            await StopWhileLockedAsync(state).ConfigureAwait(false);
         }
         finally
         {
@@ -270,18 +260,8 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
         {
             if (CurrentStatus.State != InputCaptureState.Stopped)
             {
-                SetStatus(InputCaptureState.Stopping, CurrentStatus.PauseReasons, null);
-                _host.CloseIngress();
-                bool workerCanDrain = _workerTask is { IsCompleted: false };
-                await _host.PrepareStopAsync(workerCanDrain, CancellationToken.None).ConfigureAwait(false);
-                _queue.Complete();
-                if (_workerTask is not null)
-                {
-                    await _workerTask.ConfigureAwait(false);
-                }
-
-                await _host.DestroyAsync(CancellationToken.None).ConfigureAwait(false);
-                SetStatus(InputCaptureState.Stopped, PauseReason.None, null);
+                InputCaptureState state = CurrentStatus.State;
+                await StopWhileLockedAsync(state).ConfigureAwait(false);
             }
         }
         finally
@@ -290,17 +270,83 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
         }
     }
 
+    private async ValueTask StopWhileLockedAsync(InputCaptureState stateBeforeStop)
+    {
+        SetStatus(InputCaptureState.Stopping, CurrentStatus.PauseReasons, null);
+        _host.CloseIngress();
+        Exception? firstError = null;
+
+        try
+        {
+            bool workerCanDrain = stateBeforeStop is InputCaptureState.Running or InputCaptureState.Paused
+                && _worker.CanAcceptBarrier;
+            await _host.PrepareStopAsync(workerCanDrain, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            firstError = error;
+        }
+
+        try
+        {
+            _queue.Complete();
+        }
+        catch (Exception error)
+        {
+            firstError ??= error;
+        }
+
+        try
+        {
+            if (_workerTask is not null)
+            {
+                await _workerTask.ConfigureAwait(false);
+            }
+        }
+        catch (Exception error)
+        {
+            firstError ??= error;
+        }
+
+        try
+        {
+            await _host.DestroyAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            firstError ??= error;
+        }
+
+        if (firstError is null)
+        {
+            SetStatus(InputCaptureState.Stopped, PauseReason.None, null);
+            return;
+        }
+
+        SetStatus(InputCaptureState.IntegrityFault, CurrentStatus.PauseReasons, firstError.Message);
+        ExceptionDispatchInfo.Capture(firstError).Throw();
+    }
+
     private void OnIngressFault(string error)
     {
         _host.CloseIngress();
         SetStatus(InputCaptureState.IntegrityFault, CurrentStatus.PauseReasons, error);
     }
 
-    private void OnWorkerFault(Exception error)
+    private async ValueTask OnWorkerFaultAsync(Exception error)
     {
         _host.CloseIngress();
-        _host.StopAfterFault();
-        SetStatus(InputCaptureState.IntegrityFault, CurrentStatus.PauseReasons, error.Message);
+        string message = error.Message;
+        try
+        {
+            await _host.StopAfterFaultAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception stopError)
+        {
+            message = $"{message} Raw Input shutdown also failed: {stopError.Message}";
+        }
+
+        SetStatus(InputCaptureState.IntegrityFault, CurrentStatus.PauseReasons, message);
     }
 
     private void OnRegistrationChanged(bool registered)
@@ -351,7 +397,7 @@ internal interface IRawInputHost
     ValueTask ResumeAsync(CancellationToken cancellationToken);
     ValueTask PrepareStopAsync(bool enqueueBarrier, CancellationToken cancellationToken);
     ValueTask DestroyAsync(CancellationToken cancellationToken);
-    void StopAfterFault();
+    ValueTask StopAfterFaultAsync(CancellationToken cancellationToken);
 }
 
 internal sealed class RawInputHostFactory : IRawInputHostFactory

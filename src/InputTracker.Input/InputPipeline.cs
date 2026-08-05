@@ -103,6 +103,15 @@ internal sealed class BoundedInputQueue
     }
 
     public void Complete(Exception? error = null) => _channel.Writer.TryComplete(error);
+
+    public void FaultPendingBarriers(Exception error)
+    {
+        _channel.Writer.TryComplete(error);
+        while (_channel.Reader.TryRead(out SequencedIngressEvent pending))
+        {
+            pending.Input.Barrier?.TrySetException(error);
+        }
+    }
 }
 
 internal interface IRawDeviceInfoProvider
@@ -124,17 +133,18 @@ internal sealed class InputWorker
     private readonly IRawDeviceInfoProvider _deviceInfo;
     private readonly RawDeviceRegistry _devices = new();
     private readonly HashSet<PressedKey> _pressedKeys = [];
-    private readonly Action<Exception> _onFault;
+    private readonly Func<Exception, ValueTask> _onFault;
     private readonly CancellationToken _cancellationToken;
     private Task? _runTask;
     private long _lastSequence;
+    private int _canAcceptBarrier;
 
     public InputWorker(
         BoundedInputQueue queue,
         InputPipelineCounters counters,
         IInputEventSink sink,
         IRawDeviceInfoProvider deviceInfo,
-        Action<Exception> onFault,
+        Func<Exception, ValueTask> onFault,
         CancellationToken cancellationToken = default)
     {
         _queue = queue;
@@ -147,9 +157,16 @@ internal sealed class InputWorker
 
     public Task Start()
     {
-        _runTask ??= Task.Run(RunAsync, CancellationToken.None);
+        if (_runTask is null)
+        {
+            Volatile.Write(ref _canAcceptBarrier, 1);
+            _runTask = Task.Run(RunAsync, CancellationToken.None);
+        }
+
         return _runTask;
     }
+
+    public bool CanAcceptBarrier => Volatile.Read(ref _canAcceptBarrier) != 0;
 
     private async Task RunAsync()
     {
@@ -164,7 +181,15 @@ internal sealed class InputWorker
                 }
 
                 _lastSequence = item.Sequence;
-                await ProcessAsync(item.Input).ConfigureAwait(false);
+                try
+                {
+                    await ProcessAsync(item.Input).ConfigureAwait(false);
+                }
+                catch (Exception error)
+                {
+                    item.Input.Barrier?.TrySetException(error);
+                    throw;
+                }
             }
         }
         catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested)
@@ -172,7 +197,13 @@ internal sealed class InputWorker
         }
         catch (Exception error)
         {
-            _onFault(error);
+            Volatile.Write(ref _canAcceptBarrier, 0);
+            _queue.FaultPendingBarriers(error);
+            await _onFault(error).ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _canAcceptBarrier, 0);
         }
     }
 

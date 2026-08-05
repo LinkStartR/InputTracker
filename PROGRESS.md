@@ -246,3 +246,17 @@
 - test：`InputTracker.App.Tests` 共 7 passed、0 failed、0 skipped；新增状态映射、用户暂停原因和 IntegrityFault 可见性测试。
 - 结果：Input Core 已最小接入真实 App 生命周期，Bootstrap 原有目录 fail-closed、单实例和自检路径保持不采集。
 - 下一步：提交 App 接入单元；随后运行完整 solution 测试、Bootstrap 判卷回归和 self-contained publish。
+
+## 2026-08-05 Input Core 故障时序与退出清理收口
+
+- 分支/提交：`codex/input-core-work`，已有 `30814c0`、`1fa152a`；本修复待独立提交，未 amend、未 push。
+- worker 故障：sink 异常后先关闭入口，通过带 completion 的消息线程控制请求完成 Raw Input 注销，再发布 `IntegrityFault`；真实/假 host 测试均在状态事件时断言 `IngressOpen=false`、`RawInputRegistered=false` 且注销计数已增加。
+- barrier 竞态：worker 离开消费态时封闭队列并故障所有待处理 barrier；Stop 在改为 Stopping 前保留原状态，并结合 worker 消费态决定是否请求新 barrier。并发 Stop 与未完成 worker fault callback 的测试在 5 秒边界内完成，不遗留无人消费的 barrier。
+- 退出清理：`PrepareStopAsync` 失败后仍依次尝试 complete queue、等待 worker、销毁 host；保留并重新抛出首个异常，同时发布可观察的 `IntegrityFault`。fake-host 注销失败测试确认入口关闭、销毁已尝试且调用方收到原异常。
+- App 异常：启动 catch 不再为空；窗口和托盘的 async 控制异常统一转为可测试的可见状态。仅 diagnostics 同时证明入口和 Raw Input 注册关闭时显示“已停止”，否则使用 `ControlUncertain` 明确“状态不确定、采集可能仍在运行、请退出程序”。
+- 受影响测试第 1 次：Input 测试 22 passed / 1 failed；失败源于原生 host 启动后的设备到达可能先触发始终失败的 sink，未据此放宽生产断言。
+- 受影响测试第 2 次：Input 测试 23 passed / 0 failed / 0 skipped；随后按审查意见将 native sink 改为仅在真实 pause `AggregationBoundary` 失败，消除 arrival 消费竞态。
+- 受影响 solution 复核：加入诊断分支测试前 Input 23、App 9、Acceptance 5，合计 37 passed / 0 failed / 0 skipped；Acceptance 与 verify 文件未修改。
+- 提交前受影响项目复核：确定性 boundary sink 的 Input 测试 23 passed / 0 failed / 0 skipped；新增 `ControlUncertain` 诊断分支后的 App 测试 10 passed / 0 failed / 0 skipped。
+- 高频验收边界：当前热路径仅逐个 `WM_INPUT` 调用 `GetRawInputData`，没有 `GetRawInputBuffer` buffered drain；本阶段不声称已验证 1000Hz，是否加入 buffered drain 由 B-003 的真实 1000Hz/30 分钟终验决定。
+- 下一步：提交本聚焦修复；从该提交重新执行统一五命令并记录最终输出。

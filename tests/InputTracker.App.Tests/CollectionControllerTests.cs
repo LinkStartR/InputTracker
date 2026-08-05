@@ -54,15 +54,73 @@ public sealed class CollectionControllerTests
         Assert.False(controller.Current.CanResume);
     }
 
+    [Fact]
+    public void PublishedStartFailureIsExplicitlyRenderedWhenStartupThrows()
+    {
+        var capture = new FakeCapture(InputCaptureState.Running);
+        using var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null),
+            capture);
+        capture.Publish(InputCaptureState.StartFailed, PauseReason.None, "registration denied");
+
+        controller.HandleCaptureControlException("启动采集", new IOException("start failed"));
+
+        Assert.Equal(CollectionMode.StartFailed, controller.Current.Mode);
+        Assert.Contains("registration denied", controller.Current.Explanation);
+        Assert.False(controller.Current.CanPause);
+        Assert.False(controller.Current.CanResume);
+    }
+
+    [Fact]
+    public void UnexpectedControlExceptionBecomesVisibleUncertainState()
+    {
+        var capture = new FakeCapture(InputCaptureState.Running);
+        using var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null),
+            capture);
+
+        controller.HandleCaptureControlException("暂停采集", new InvalidOperationException("unexpected failure"));
+
+        Assert.Equal(CollectionMode.ControlUncertain, controller.Current.Mode);
+        Assert.Contains("暂停采集", controller.Current.Explanation);
+        Assert.Contains("unexpected failure", controller.Current.Explanation);
+        Assert.Contains("采集可能仍在运行", controller.Current.Explanation);
+        Assert.DoesNotContain("已停止", controller.Current.Label + controller.Current.Explanation);
+        Assert.False(controller.Current.CanPause);
+        Assert.False(controller.Current.CanResume);
+    }
+
+    [Fact]
+    public void IntegrityFaultWithOpenRegistrationIsRenderedAsControlUncertain()
+    {
+        var capture = new FakeCapture(InputCaptureState.Running)
+        {
+            IngressOpenOverride = true,
+            RawInputRegisteredOverride = true
+        };
+        using var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null),
+            capture);
+
+        capture.Publish(InputCaptureState.IntegrityFault, PauseReason.None, "unregister failed");
+
+        Assert.Equal(CollectionMode.ControlUncertain, controller.Current.Mode);
+        Assert.Contains("采集可能仍在运行", controller.Current.Explanation);
+        Assert.Contains("unregister failed", controller.Current.Explanation);
+        Assert.DoesNotContain("已停止", controller.Current.Label + controller.Current.Explanation);
+    }
+
     private sealed class FakeCapture(InputCaptureState initialState) : IInputCaptureControl
     {
         public InputCaptureStatus CurrentStatus { get; private set; } = new(initialState, PauseReason.None, null);
+        public bool? IngressOpenOverride { get; set; }
+        public bool? RawInputRegisteredOverride { get; set; }
         public DiagnosticsSnapshot Diagnostics => new(
             0, 0, 0, 0, 0, 0, 0, 1,
             CurrentStatus.State,
             CurrentStatus.PauseReasons,
-            CurrentStatus.State == InputCaptureState.Running,
-            CurrentStatus.State == InputCaptureState.Running,
+            IngressOpenOverride ?? CurrentStatus.State == InputCaptureState.Running,
+            RawInputRegisteredOverride ?? CurrentStatus.State == InputCaptureState.Running,
             0, 0, 0,
             CurrentStatus.Error);
 

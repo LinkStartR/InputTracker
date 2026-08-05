@@ -13,7 +13,7 @@ public sealed class InputWorkerBehaviorTests
             counters,
             sink,
             new FixedProvider(RawDeviceKind.Keyboard),
-            error => throw error);
+            error => ValueTask.FromException(error));
         Task run = worker.Start();
         nint handle = new(10);
 

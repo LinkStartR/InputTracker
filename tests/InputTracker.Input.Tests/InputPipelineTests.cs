@@ -11,7 +11,11 @@ public sealed class InputPipelineTests
         var sink = new RollingHashSink();
         var provider = new FakeDeviceInfoProvider();
         Exception? fault = null;
-        var worker = new InputWorker(queue, counters, sink, provider, error => fault = error);
+        var worker = new InputWorker(queue, counters, sink, provider, error =>
+        {
+            fault = error;
+            return ValueTask.CompletedTask;
+        });
         Task workerTask = worker.Start();
 
         nint[] handles = [new(11), new(12), new(21), new(22)];
@@ -99,7 +103,11 @@ public sealed class InputPipelineTests
             counters,
             new ThrowingSink(),
             new FakeDeviceInfoProvider(),
-            error => failure.TrySetResult(error));
+            error =>
+            {
+                failure.TrySetResult(error);
+                return ValueTask.CompletedTask;
+            });
 
         Task workerTask = worker.Start();
         Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.Mouse, new nint(21), 1)));

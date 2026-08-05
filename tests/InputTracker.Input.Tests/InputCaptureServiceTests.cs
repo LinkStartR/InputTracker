@@ -94,23 +94,96 @@ public sealed class InputCaptureServiceTests
     {
         var factory = new FakeHostFactory();
         await using var service = new InputCaptureService(new ThrowingSink(), null, factory);
-        var fault = new TaskCompletionSource<InputCaptureStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fault = new TaskCompletionSource<(InputCaptureStatus Status, DiagnosticsSnapshot Diagnostics)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         service.StatusChanged += (_, status) =>
         {
             if (status.State == InputCaptureState.IntegrityFault)
             {
-                fault.TrySetResult(status);
+                fault.TrySetResult((status, service.Diagnostics));
             }
         };
         await service.StartAsync();
 
         Assert.True(factory.Host.Inject(Mouse(1)));
-        InputCaptureStatus status = await fault.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        (InputCaptureStatus status, DiagnosticsSnapshot diagnostics) =
+            await fault.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(InputCaptureState.IntegrityFault, status.State);
         Assert.Contains("sink failed", status.Error);
-        Assert.False(service.Diagnostics.IngressOpen);
+        Assert.False(diagnostics.IngressOpen);
+        Assert.False(diagnostics.RawInputRegistered);
+        Assert.Equal(1, diagnostics.SuccessfulUnregistrations);
         Assert.True(factory.Host.StopAfterFaultCalled);
+    }
+
+    [Fact]
+    public async Task NativeSinkFailureIsPublishedOnlyAfterUnregistrationCompletes()
+    {
+        await using var service = new InputCaptureService(new BoundaryThrowingSink());
+        var fault = new TaskCompletionSource<(InputCaptureStatus Status, DiagnosticsSnapshot Diagnostics)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        service.StatusChanged += (_, status) =>
+        {
+            if (status.State == InputCaptureState.IntegrityFault)
+            {
+                fault.TrySetResult((status, service.Diagnostics));
+            }
+        };
+        await service.StartAsync();
+
+        await Assert.ThrowsAsync<IOException>(async () =>
+            await service.SetPauseReasonAsync(PauseReason.User, true));
+        (InputCaptureStatus status, DiagnosticsSnapshot diagnostics) =
+            await fault.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(InputCaptureState.IntegrityFault, status.State);
+        Assert.Contains("sink failed", status.Error);
+        Assert.False(diagnostics.IngressOpen);
+        Assert.False(diagnostics.RawInputRegistered);
+        Assert.Equal(1, diagnostics.SuccessfulUnregistrations);
+    }
+
+    [Fact]
+    public async Task StopAttemptsWorkerCompletionAndDestroyWhenUnregistrationFails()
+    {
+        var factory = new FakeHostFactory();
+        await using var service = new InputCaptureService(new CountingSink(), null, factory);
+        await service.StartAsync();
+        factory.Host.PrepareStopError = new IOException("unregister failed");
+
+        IOException error = await Assert.ThrowsAsync<IOException>(async () => await service.StopAsync());
+
+        Assert.Equal("unregister failed", error.Message);
+        Assert.False(service.Diagnostics.IngressOpen);
+        Assert.True(factory.Host.PrepareStopCalled);
+        Assert.True(factory.Host.Destroyed);
+        Assert.Equal(InputCaptureState.IntegrityFault, service.CurrentStatus.State);
+        Assert.Contains("unregister failed", service.CurrentStatus.Error);
+        factory.Host.PrepareStopError = null;
+    }
+
+    [Fact]
+    public async Task StopDuringWorkerFaultDoesNotEnqueueAnUnreadBarrier()
+    {
+        var factory = new FakeHostFactory();
+        await using var service = new InputCaptureService(new ThrowingSink(), null, factory);
+        factory.Host.DelayStopAfterFault = true;
+        await service.StartAsync();
+
+        Assert.True(factory.Host.Inject(Mouse(1)));
+        await factory.Host.StopAfterFaultEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Task stop = service.StopAsync().AsTask();
+        await factory.Host.PrepareStopEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(factory.Host.LastPrepareStopRequestedBarrier);
+
+        factory.Host.ReleaseStopAfterFault.TrySetResult(true);
+        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(factory.Host.Destroyed);
+        Assert.False(service.Diagnostics.IngressOpen);
+        Assert.False(service.Diagnostics.RawInputRegistered);
     }
 
     private static InputIngressEvent Mouse(long timestamp) =>
@@ -140,6 +213,14 @@ public sealed class InputCaptureServiceTests
             ValueTask.FromException(new IOException("sink failed"));
     }
 
+    private sealed class BoundaryThrowingSink : IInputEventSink
+    {
+        public ValueTask WriteAsync(CapturedInput input, CancellationToken cancellationToken) =>
+            input.Kind == CapturedInputKind.AggregationBoundary
+                ? ValueTask.FromException(new IOException("sink failed"))
+                : ValueTask.CompletedTask;
+    }
+
     private sealed class FakeHostFactory : IRawInputHostFactory
     {
         public FakeHost Host { get; private set; } = null!;
@@ -166,6 +247,16 @@ public sealed class InputCaptureServiceTests
         public bool Destroyed { get; private set; }
         public bool StopBarrierCompleted { get; private set; }
         public bool StopAfterFaultCalled { get; private set; }
+        public bool PrepareStopCalled { get; private set; }
+        public Exception? PrepareStopError { get; set; }
+        public bool DelayStopAfterFault { get; set; }
+        public bool LastPrepareStopRequestedBarrier { get; private set; }
+        public TaskCompletionSource<bool> StopAfterFaultEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> ReleaseStopAfterFault { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> PrepareStopEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ValueTask StartAsync(CancellationToken cancellationToken)
         {
@@ -191,6 +282,14 @@ public sealed class InputCaptureServiceTests
 
         public async ValueTask PrepareStopAsync(bool enqueueBarrier, CancellationToken cancellationToken)
         {
+            PrepareStopCalled = true;
+            LastPrepareStopRequestedBarrier = enqueueBarrier;
+            PrepareStopEntered.TrySetResult(true);
+            if (PrepareStopError is not null)
+            {
+                throw PrepareStopError;
+            }
+
             Unregister();
             if (enqueueBarrier)
             {
@@ -205,11 +304,16 @@ public sealed class InputCaptureServiceTests
             return ValueTask.CompletedTask;
         }
 
-        public void StopAfterFault()
+        public async ValueTask StopAfterFaultAsync(CancellationToken cancellationToken)
         {
             StopAfterFaultCalled = true;
             IngressOpen = false;
             Unregister();
+            StopAfterFaultEntered.TrySetResult(true);
+            if (DelayStopAfterFault)
+            {
+                await ReleaseStopAfterFault.Task.WaitAsync(cancellationToken);
+            }
         }
 
         public bool Inject(InputIngressEvent input)

@@ -9,6 +9,7 @@ public enum CollectionMode
     Collecting,
     Paused,
     IntegrityFault,
+    ControlUncertain,
     StartFailed,
     RejectedProgramDirectory
 }
@@ -47,6 +48,32 @@ public sealed class CollectionController : IDisposable
     public event EventHandler<CollectionSnapshot>? Changed;
 
     public CollectionSnapshot Current { get; private set; }
+
+    public void HandleCaptureControlException(string operation, Exception error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+        ArgumentNullException.ThrowIfNull(error);
+
+        InputCaptureStatus? status = _capture?.CurrentStatus;
+        if (status?.State is InputCaptureState.IntegrityFault or InputCaptureState.StartFailed)
+        {
+            Capture_StatusChanged(this, status);
+            return;
+        }
+
+        DiagnosticsSnapshot? diagnostics = _capture?.Diagnostics;
+        bool captureClosed = diagnostics is not null
+            && !diagnostics.IngressOpen
+            && !diagnostics.RawInputRegistered;
+        Set(captureClosed
+            ? new CollectionSnapshot(
+                CollectionMode.IntegrityFault,
+                "采集控制失败 · 入口已关闭",
+                $"{operation}失败；采集入口和 Raw Input 注册均已关闭。{error.Message}",
+                CanPause: false,
+                CanResume: false)
+            : Uncertain(operation, error.Message));
+    }
 
     public async Task PauseAsync()
     {
@@ -117,7 +144,7 @@ public sealed class CollectionController : IDisposable
         CanPause: true,
         CanResume: false);
 
-    private static CollectionSnapshot FromCapture(InputCaptureStatus status) => status.State switch
+    private CollectionSnapshot FromCapture(InputCaptureStatus status) => status.State switch
     {
         InputCaptureState.Starting => new CollectionSnapshot(
             CollectionMode.Starting,
@@ -137,12 +164,7 @@ public sealed class CollectionController : IDisposable
             $"采集已停止并完成暂停边界。暂停原因：{FormatReasons(status.PauseReasons)}。",
             CanPause: false,
             CanResume: (status.PauseReasons & PauseReason.User) != 0),
-        InputCaptureState.IntegrityFault => new CollectionSnapshot(
-            CollectionMode.IntegrityFault,
-            "完整性故障 · 已停止",
-            $"InputTracker 检测到无法保证事件完整性的故障，已停止采集。{status.Error}",
-            CanPause: false,
-            CanResume: false),
+        InputCaptureState.IntegrityFault => CaptureFault(status),
         InputCaptureState.StartFailed => new CollectionSnapshot(
             CollectionMode.StartFailed,
             "采集启动失败",
@@ -157,6 +179,29 @@ public sealed class CollectionController : IDisposable
             CanResume: false),
         _ => NotCollecting()
     };
+
+    private CollectionSnapshot CaptureFault(InputCaptureStatus status)
+    {
+        DiagnosticsSnapshot? diagnostics = _capture?.Diagnostics;
+        if (diagnostics is null || diagnostics.IngressOpen || diagnostics.RawInputRegistered)
+        {
+            return Uncertain("完整性故障后的采集控制", status.Error);
+        }
+
+        return new CollectionSnapshot(
+            CollectionMode.IntegrityFault,
+            "完整性故障 · 已停止",
+            $"InputTracker 检测到无法保证事件完整性的故障，已停止采集。{status.Error}",
+            CanPause: false,
+            CanResume: false);
+    }
+
+    private static CollectionSnapshot Uncertain(string operation, string? error) => new(
+        CollectionMode.ControlUncertain,
+        "采集状态不确定",
+        $"{operation}失败；采集可能仍在运行。请退出 InputTracker 以结束采集。{error}",
+        CanPause: false,
+        CanResume: false);
 
     private static string FormatReasons(PauseReason reasons)
     {
