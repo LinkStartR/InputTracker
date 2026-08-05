@@ -122,3 +122,12 @@
 - Git：`src/tests` 下无 `bin/obj`，`LICENSE` diff 为空。
 - 结果：普通用户、自包含、中文空格路径、单实例和无残留进程的自动烟测通过；可视托盘人工检查仍未执行。
 - 下一步：提交 bootstrap 功能单元，再由 C2 创建正式 TRX/路径/进程判卷与 `scripts/verify.ps1`。
+
+## 2026-08-05 Bootstrap 功能单元提交
+
+- 分支：`codex/bootstrap`。
+- 提交：`2f8beb1 feat: add bootstrap Windows desktop shell`。
+- staged 复核：23 个意图文件、727 行新增/4 行删除；`LICENSE`、`.tools`、`bin/obj`、`tests/Acceptance/**`、`scripts/verify.ps1` 命中 0。
+- 命令输出：`git commit` → `[codex/bootstrap 2f8beb1]`，退出码 0。
+- 结果：任务 1 功能实现成为独立可回滚提交；完整任务 1 仍等待 C2 判卷、反向验证、托盘人工检查、push 和 draft PR。
+- 下一步：C2 从 `2f8beb1` 的 `codex/bootstrap-acceptance` worker 分支实现验收；主任务审查后集成。

@@ -10,6 +10,7 @@
 - 诚实状态：bootstrap 尚无 Raw Input，恢复后显示“未采集”，不伪称正在采集。
 - 发布：`dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true`。
 - 构建产物：`bin/obj/publish` 统一重定向到被 Git 忽略的 `.tools/build` 与 `.tools/obj`。
+- 忽略规则：只跟踪 `.tools/.gitignore` 本身，SDK、构建、验证和烟测产物全部忽略。
 - 自动烟测：发布产物支持 `--self-check`（目录探针）和 `--hold-smoke`（持有单实例 5 秒）；仅用于无界面验收，不启动采集。
 
 所有运行数据、配置、日志和备份的后续实现必须继续以程序目录为根。唯一允许的目录外写入是用户主动启用的 Startup 快捷方式，该功能尚未实现。
