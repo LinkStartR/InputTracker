@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "minimumTotalTests": 11,
-  "minimumAcceptanceTests": 5,
-  "minimumGateCount": 11,
+  "minimumTotalTests": 45,
+  "minimumAcceptanceTests": 12,
+  "minimumGateCount": 23,
   "requiredGateIds": [
     "local-sdk-10",
     "restore",
@@ -14,6 +14,18 @@
     "unicode-space-self-check",
     "single-instance",
     "green-path-boundary",
-    "no-residual-process"
+    "no-residual-process",
+    "inputcore-bootstrap-regression",
+    "inputcore-production-pipeline-million",
+    "inputcore-overflow-integrity-fault",
+    "inputcore-sink-failure-integrity-fault",
+    "inputcore-pause-reason-barrier",
+    "inputcore-keyboard-public-schema",
+    "inputcore-forbidden-api-source-policy",
+    "inputcore-mouse-full-fidelity",
+    "inputcore-device-generation-isolation",
+    "inputcore-device-change-lifecycle",
+    "inputcore-hardware-runbook-present",
+    "inputcore-performance-schema-present"
   ]
 }

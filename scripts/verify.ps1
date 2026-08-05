@@ -1,9 +1,11 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('Bootstrap')]
+    [ValidateSet('Bootstrap', 'InputCore')]
     [string]$Stage = 'Bootstrap',
 
-    [string]$InjectedDataPath
+    [string]$InjectedDataPath,
+
+    [switch]$InjectInputCoreOutOfOrder
 )
 
 Set-StrictMode -Version Latest
@@ -47,6 +49,7 @@ $script:evidence = [ordered]@{
     commands = @()
     gates = @()
     testSummary = $null
+    inputCore = $null
     error = $null
 }
 
@@ -205,6 +208,68 @@ function Get-DirectoryState {
     )
 }
 
+function Get-InputCoreReport {
+    param(
+        [Parameter(Mandatory)] [string]$Directory,
+        [Parameter(Mandatory)] [string]$Name
+    )
+
+    $path = Join-Path $Directory "$Name.json"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "InputCore 验收证据不存在：$path"
+    }
+
+    return Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+}
+
+function Assert-InputCorePerformanceSchema {
+    param([Parameter(Mandatory)] [string]$SchemaPath)
+
+    $schema = Get-Content -LiteralPath $SchemaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $requiredTopLevel = @(
+        'commit', 'windows', 'dotnet', 'cpu', 'logicalProcessorCount', 'devices', 'durationSeconds',
+        'pollingRateEvidence', 'foregroundBackgroundPlan', 'pipeline', 'averageCpuPercent',
+        'peakWorkingSetBytes', 'uiLatency', 'diskGrowth', 'hardwareTerminalStatus', 'releaseEligible'
+    )
+    foreach ($field in $requiredTopLevel) {
+        if (@($schema.required) -notcontains $field) {
+            throw "性能证据 schema 缺少必填字段：$field"
+        }
+    }
+    if ([int]$schema.properties.logicalProcessorCount.minimum -lt 1 -or
+        [int]$schema.properties.durationSeconds.minimum -lt 1800 -or
+        [int]$schema.properties.pollingRateEvidence.properties.reportedHz.minimum -lt 1000 -or
+        [double]$schema.properties.averageCpuPercent.maximum -gt 3 -or
+        [int64]$schema.properties.peakWorkingSetBytes.maximum -gt 209715200 -or
+        [double]$schema.properties.uiLatency.properties.maximumMilliseconds.maximum -gt 200) {
+        throw '性能证据 schema 放宽了 InputCore 阈值。'
+    }
+    if (@($schema.properties.devices.items.required) -notcontains 'deviceKind' -or
+        @($schema.properties.devices.items.properties.deviceKind.enum) -notcontains 'Keyboard' -or
+        @($schema.properties.devices.items.properties.deviceKind.enum) -notcontains 'Mouse') {
+        throw '性能证据 schema 未要求 Keyboard/Mouse deviceKind。'
+    }
+    $kindConstraints = @($schema.properties.devices.allOf)
+    $keyboardConstraint = @($kindConstraints | Where-Object {
+        $_.contains.properties.deviceKind.const -eq 'Keyboard' -and [int]$_.minContains -ge 2
+    })
+    $mouseConstraint = @($kindConstraints | Where-Object {
+        $_.contains.properties.deviceKind.const -eq 'Mouse' -and [int]$_.minContains -ge 2
+    })
+    if ($keyboardConstraint.Count -ne 1 -or $mouseConstraint.Count -ne 1) {
+        throw '性能证据 schema 必须至少要求 2 Keyboard 和 2 Mouse。'
+    }
+    if (@($schema.properties.diskGrowth.properties.status.enum) -notcontains 'not-applicable-until-storage' -or
+        @($schema.properties.diskGrowth.allOf[0].then.required) -notcontains 'reason') {
+        throw '性能证据 schema 未限制 Storage 前的 diskGrowth not-applicable 原因。'
+    }
+    if (@($schema.allOf[0].then.properties.releaseEligible.const) -notcontains $false) {
+        throw '性能证据 schema 未保证 hardwareTerminalStatus=not-run 时 releaseEligible=false。'
+    }
+
+    return $schema
+}
+
 function Get-ApplicationMutexName {
     param([Parameter(Mandatory)] [string]$ApplicationDirectory)
 
@@ -273,15 +338,42 @@ try {
     }
 
     $requiredGateIds = @($baseline.requiredGateIds | ForEach-Object { [string]$_ })
-    $initialGateIds = @(
+    $bootstrapGateIds = @(
         'local-sdk-10', 'restore', 'build', 'tests-no-skip', 'acceptance-test-count',
         'publish-self-contained', 'manifest-as-invoker', 'unicode-space-self-check',
         'single-instance', 'green-path-boundary', 'no-residual-process'
     )
-    foreach ($gateId in $initialGateIds) {
+    $inputCoreGateIds = @(
+        'inputcore-bootstrap-regression', 'inputcore-production-pipeline-million',
+        'inputcore-overflow-integrity-fault', 'inputcore-sink-failure-integrity-fault',
+        'inputcore-pause-reason-barrier', 'inputcore-keyboard-public-schema',
+        'inputcore-forbidden-api-source-policy', 'inputcore-mouse-full-fidelity',
+        'inputcore-device-generation-isolation', 'inputcore-device-change-lifecycle',
+        'inputcore-hardware-runbook-present', 'inputcore-performance-schema-present'
+    )
+    foreach ($gateId in $bootstrapGateIds) {
         if ($requiredGateIds -notcontains $gateId) {
             throw "验收基线缺少不可移除 gate：$gateId"
         }
+    }
+    if ($Stage -eq 'InputCore') {
+        foreach ($gateId in $inputCoreGateIds) {
+            if ($requiredGateIds -notcontains $gateId) {
+                throw "InputCore 验收基线缺少不可移除 gate：$gateId"
+            }
+        }
+    }
+    $requiredGateIdsForStage = if ($Stage -eq 'InputCore') {
+        @($bootstrapGateIds + $inputCoreGateIds)
+    }
+    else {
+        $bootstrapGateIds
+    }
+    $minimumGateCountForStage = if ($Stage -eq 'InputCore') {
+        [int]$baseline.minimumGateCount
+    }
+    else {
+        $bootstrapGateIds.Count
     }
 
     foreach ($revision in @('HEAD', 'HEAD^')) {
@@ -337,17 +429,47 @@ try {
     $trxDirectory = Join-Path $evidenceDirectory 'trx'
     New-Item -ItemType Directory -Path $trxDirectory -Force | Out-Null
     $testProjects = @(
-        [ordered]@{ Name = 'InputTracker.App.Tests'; Path = 'tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj' },
-        [ordered]@{ Name = 'InputTracker.AcceptanceTests'; Path = 'tests\Acceptance\InputTracker.AcceptanceTests.csproj' }
+        Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'tests') -Recurse -Filter '*.csproj' |
+            Where-Object { Select-String -LiteralPath $_.FullName -Pattern '<IsTestProject>true</IsTestProject>' -Quiet } |
+            Sort-Object FullName |
+            ForEach-Object {
+                [ordered]@{
+                    Name = $_.BaseName
+                    Path = Get-RelativePath -BasePath $repositoryRoot -Path $_.FullName
+                }
+            }
     )
+    if ($testProjects.Count -eq 0) {
+        throw '未发现 IsTestProject=true 的测试项目。'
+    }
 
-    foreach ($testProject in $testProjects) {
-        $projectPath = Join-Path $repositoryRoot $testProject.Path
-        $null = Invoke-CheckedCommand -Name ("test-" + $testProject.Name) -FilePath $dotnetPath -Arguments @(
-            'test', $projectPath, '-c', 'Release', '--no-build', '--no-restore',
-            '--logger', "trx;LogFileName=$($testProject.Name).trx",
-            '--results-directory', $trxDirectory
-        )
+    $inputCoreEvidenceDirectory = Join-Path $evidenceDirectory 'input-core'
+    $inputCoreEnvironment = @{}
+    if ($Stage -eq 'InputCore') {
+        New-Item -ItemType Directory -Path $inputCoreEvidenceDirectory -Force | Out-Null
+        foreach ($name in @('INPUTTRACKER_INPUTCORE_EVIDENCE_DIRECTORY', 'INPUTTRACKER_INPUTCORE_INJECTION')) {
+            $inputCoreEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        }
+        [Environment]::SetEnvironmentVariable('INPUTTRACKER_INPUTCORE_EVIDENCE_DIRECTORY', $inputCoreEvidenceDirectory, 'Process')
+        [Environment]::SetEnvironmentVariable(
+            'INPUTTRACKER_INPUTCORE_INJECTION',
+            $(if ($InjectInputCoreOutOfOrder) { 'out-of-order' } else { $null }),
+            'Process')
+    }
+    try {
+        foreach ($testProject in $testProjects) {
+            $projectPath = Join-Path $repositoryRoot $testProject.Path
+            $null = Invoke-CheckedCommand -Name ("test-" + $testProject.Name) -FilePath $dotnetPath -Arguments @(
+                'test', $projectPath, '-c', 'Release', '--no-build', '--no-restore',
+                '--logger', "trx;LogFileName=$($testProject.Name).trx",
+                '--results-directory', $trxDirectory
+            )
+        }
+    }
+    finally {
+        foreach ($name in $inputCoreEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $inputCoreEnvironment[$name], 'Process')
+        }
     }
 
     $totalTests = 0
@@ -379,8 +501,8 @@ try {
         $totalTests += $projectTotal
         $failedTests += $projectFailed
         $skippedTests += $projectSkipped
-        if ($testProject.Name -eq 'InputTracker.AcceptanceTests') {
-            $acceptanceTests = $projectTotal
+        if ($testProject.Path.StartsWith('tests\Acceptance\', [StringComparison]::OrdinalIgnoreCase)) {
+            $acceptanceTests += $projectTotal
         }
     }
 
@@ -402,6 +524,109 @@ try {
     }
     Add-Gate -Id 'tests-no-skip' -Details "total=$totalTests, failed=0, skipped=0"
     Add-Gate -Id 'acceptance-test-count' -Details "acceptance=$acceptanceTests"
+
+    if ($Stage -eq 'InputCore') {
+        $pipeline = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'pipeline'
+        $outOfOrder = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'out-of-order'
+        $overflow = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'overflow'
+        $sinkFailure = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'sink-failure'
+        $pauseBarrier = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'pause-barrier'
+        $privacy = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'privacy'
+        $mouseDevice = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'mouse-device'
+        $runbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\input-core-hardware-runbook.md'
+        $performanceSchemaPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\input-core-performance-evidence.schema.json'
+
+        if ([int64]$pipeline.produced -ne 1000000 -or
+            [int64]$pipeline.accepted -ne 1000000 -or
+            [int64]$pipeline.dequeued -ne 1000000 -or
+            [int64]$pipeline.sinkAcknowledged -ne 1000000 -or
+            [int64]$pipeline.overflow -ne 0 -or
+            [int64]$pipeline.parseErrors -ne 0 -or
+            [int64]$pipeline.outOfOrder -ne 0) {
+            throw 'InputCore 百万事件生产管线计数不满足精确 1,000,000 与零错误要求。'
+        }
+        Add-Gate -Id 'inputcore-production-pipeline-million' -Details 'produced=accepted=dequeued=sinkAcknowledged=1000000; overflow=parseErrors=outOfOrder=0'
+
+        if ($InjectInputCoreOutOfOrder) {
+            if ($outOfOrder.injection -ne 'out-of-order' -or [int64]$outOfOrder.outOfOrder -lt 1) {
+                throw 'InputCore out-of-order 反向注入未被验收证据观察到。'
+            }
+            throw 'InputCore out-of-order 反向注入已按预期被判卷拒绝。'
+        }
+        if ($outOfOrder.injection -ne 'none' -or [int64]$outOfOrder.outOfOrder -ne 0 -or
+            [int64]$outOfOrder.produced -ne [int64]$outOfOrder.accepted -or
+            [int64]$outOfOrder.accepted -ne [int64]$outOfOrder.dequeued -or
+            [int64]$outOfOrder.dequeued -ne [int64]$outOfOrder.sinkAcknowledged) {
+            throw 'InputCore 无注入顺序证据不满足零 out-of-order 与四计数相等。'
+        }
+
+        if ($overflow.state -ne 'IntegrityFault' -or $overflow.ingressOpen -or $overflow.rawInputRegistered -or
+            [int64]$overflow.overflow -lt 1 -or [int64]$overflow.unregistrations -lt 1) {
+            throw 'InputCore 队列溢出未形成完整 IntegrityFault。'
+        }
+        Add-Gate -Id 'inputcore-overflow-integrity-fault' -Details 'overflow>=1; ingress/raw registration closed; unregister>=1'
+
+        if ($sinkFailure.state -ne 'IntegrityFault' -or $sinkFailure.ingressOpen -or $sinkFailure.rawInputRegistered -or
+            [int64]$sinkFailure.unregistrations -lt 1 -or -not $sinkFailure.stopAfterFault) {
+            throw 'InputCore sink 异常未形成完整 IntegrityFault。'
+        }
+        Add-Gate -Id 'inputcore-sink-failure-integrity-fault' -Details 'sink failure closes ingress/unregisters/stops host'
+
+        if ([int64]$pauseBarrier.completedPauseBarriers -lt 1 -or
+            [int64]$pauseBarrier.boundaryAccepted -ne [int64]$pauseBarrier.boundaryDequeued -or
+            [int64]$pauseBarrier.boundaryDequeued -ne [int64]$pauseBarrier.boundaryAcknowledged -or
+            $pauseBarrier.reasonsAfterUnlock -ne 'User' -or -not $pauseBarrier.resumedOnlyAfterLastReason) {
+            throw 'InputCore pause reason 叠加或 barrier 排空不满足要求。'
+        }
+        Add-Gate -Id 'inputcore-pause-reason-barrier' -Details 'pause barrier drained and resumes only after final reason removal'
+
+        $keyboardFields = @($privacy.publicKeyboardFields | ForEach-Object { [string]$_ } | Sort-Object)
+        $expectedKeyboardFields = @('DeviceId', 'MakeCode', 'Prefix', 'Timestamp', 'Transition' | Sort-Object)
+        if (($keyboardFields -join '|') -ne ($expectedKeyboardFields -join '|') -or
+            $privacy.interopAllowlist -ne 'src/InputTracker.Input/Win32/RawInputInterop.cs') {
+            throw 'InputCore 键盘公共 schema 或 interop allowlist 不满足精确隐私边界。'
+        }
+        Add-Gate -Id 'inputcore-keyboard-public-schema' -Details 'physical-only keyboard schema and exact RawInputInterop allowlist'
+        if ([int64]$privacy.forbiddenCallsFound -ne 0) {
+            throw 'InputCore 源码隐私策略检测到禁止的键盘/焦点 API。'
+        }
+        Add-Gate -Id 'inputcore-forbidden-api-source-policy' -Details 'forbidden keyboard/focus API count=0 outside exact interop allowlist'
+
+        if (-not $mouseDevice.relative -or -not $mouseDevice.absolute -or -not $mouseDevice.left -or
+            -not $mouseDevice.right -or -not $mouseDevice.middle -or -not $mouseDevice.x1 -or
+            -not $mouseDevice.x2 -or -not $mouseDevice.signedButtonData -or
+            [int64]$mouseDevice.verticalWheel -ne -120 -or [int64]$mouseDevice.horizontalWheel -ne -120) {
+            throw 'InputCore 鼠标全字段保真证据不完整。'
+        }
+        Add-Gate -Id 'inputcore-mouse-full-fidelity' -Details 'relative/absolute motion, buttons and signed vertical/horizontal wheels preserved'
+        if ([int64]$mouseDevice.firstRuntimeId -eq [int64]$mouseDevice.reusedRuntimeId -or
+            [int64]$mouseDevice.firstGeneration -ne 1 -or [int64]$mouseDevice.reusedGeneration -ne 2 -or
+            -not $mouseDevice.unattributed) {
+            throw 'InputCore 设备句柄复用或未归属设备隔离证据不满足要求。'
+        }
+        Add-Gate -Id 'inputcore-device-generation-isolation' -Details 'reused hDevice receives a new runtime id; hDevice=0 remains unattributed'
+        Add-Gate -Id 'inputcore-device-change-lifecycle' -Details 'arrival/remove/re-arrival is represented by generations 1 then 2'
+
+        if (-not (Test-Path -LiteralPath $runbookPath -PathType Leaf)) {
+            throw "InputCore 硬件终验 runbook 不存在：$runbookPath"
+        }
+        Add-Gate -Id 'inputcore-hardware-runbook-present' -Details 'manual two-keyboard/two-mouse foreground/background terminal runbook is present'
+        $null = Assert-InputCorePerformanceSchema -SchemaPath $performanceSchemaPath
+        Add-Gate -Id 'inputcore-performance-schema-present' -Details '30-minute 1000Hz schema enforces device kinds, thresholds and terminal status'
+
+        $script:evidence.inputCore = [ordered]@{
+            pipeline = $pipeline
+            outOfOrder = $outOfOrder
+            integrityFaults = [ordered]@{ overflow = $overflow; sinkFailure = $sinkFailure }
+            pauseBarrier = $pauseBarrier
+            privacy = $privacy
+            mouseDevice = $mouseDevice
+            hardwareTerminalStatus = 'not-run'
+            releaseEligible = $false
+            hardwareRunbook = Get-RelativePath -BasePath $repositoryRoot -Path $runbookPath
+            performanceSchema = Get-RelativePath -BasePath $repositoryRoot -Path $performanceSchemaPath
+        }
+    }
 
     $null = Invoke-CheckedCommand -Name 'publish' -FilePath $dotnetPath -Arguments @(
         'publish', (Join-Path $repositoryRoot 'src\InputTracker.App\InputTracker.App.csproj'),
@@ -498,14 +723,24 @@ try {
         }
     }
 
+    if ($Stage -eq 'InputCore') {
+        $passedGateIdsBeforeRegression = @($script:evidence.gates | Where-Object { $_.passed } | ForEach-Object { [string]$_.id })
+        foreach ($gateId in $bootstrapGateIds) {
+            if ($passedGateIdsBeforeRegression -notcontains $gateId) {
+                throw "InputCore 不允许绕过 Bootstrap gate：$gateId"
+            }
+        }
+        Add-Gate -Id 'inputcore-bootstrap-regression' -Details 'all Bootstrap gates passed before InputCore result is accepted'
+    }
+
     $passedGateIds = @($script:evidence.gates | Where-Object { $_.passed } | ForEach-Object { [string]$_.id })
-    foreach ($gateId in $requiredGateIds) {
+    foreach ($gateId in $requiredGateIdsForStage) {
         if ($passedGateIds -notcontains $gateId) {
             throw "验证结果缺少必需 gate：$gateId"
         }
     }
-    if ($passedGateIds.Count -lt [int]$baseline.minimumGateCount) {
-        throw "通过 gate 数 $($passedGateIds.Count) 低于基线 $($baseline.minimumGateCount)。"
+    if ($passedGateIds.Count -lt $minimumGateCountForStage) {
+        throw "通过 gate 数 $($passedGateIds.Count) 低于当前阶段基线 $minimumGateCountForStage。"
     }
 
     $script:evidence.status = 'passed'

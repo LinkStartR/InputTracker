@@ -294,3 +294,20 @@
 - 持久化风险：当前 sink 为逐事件 await；Storage 可以在暂停、移除、停止 boundary 强制落盘，但若把 `SinkAcknowledged` 定义为抵抗突然断电的逐事件持久确认，则需要批量 durable-ack 契约，进入 Storage 技术尖峰前不得静默假设。
 - 处置：已向可定位的 C4 线程下发最小兼容修补，只允许保证 descriptor-before-first-event 并增加普通测试；不得碰 Acceptance、判卷脚本、依赖或 Storage。
 - 下一步：C2 完成 InputCore 阶段判卷；C4 返回独立兼容提交后由主任务审查、集成并重跑统一命令。
+
+## 2026-08-05 Input Core Acceptance 判卷授权
+
+- 分支/基线：`codex/input-core-acceptance@99690ce`；C2 仅维护 `tests/Acceptance/**`、`scripts/verify.ps1`、验收计划与本记录。
+- 例外：为让 Acceptance 直接执行真实内部 `BoundedInputQueue`、`InputWorker` 与 host seam，按主任务明确授权在 `src/InputTracker.Input/Properties/AssemblyInfo.cs` 精确追加 `InternalsVisibleTo("InputTracker.AcceptanceTests")`，并让 Acceptance 项目引用 Input；未公开运行时注入 API、未添加环境变量旁路、未改生产逻辑。
+- 目标：追加无 skip 的百万计数、IntegrityFault、pause barrier、隐私 allowlist、鼠标/设备代次、硬件 runbook/schema 与 `verify.ps1 -Stage InputCore`；Bootstrap gate 和基线单调性必须回归。
+
+## 2026-08-05 Input Core Acceptance 判卷结果
+
+- 范围：新增 7 个无 skip 的 InputCore Acceptance tests；基线升至 `minimumTotalTests=45`、`minimumAcceptanceTests=12`、`minimumGateCount=23`，所有既有 Bootstrap gate 均保留。
+- 唯一产品侧可见性例外：`src/InputTracker.Input/Properties/AssemblyInfo.cs` 精确追加 `InternalsVisibleTo("InputTracker.AcceptanceTests")`，让验收项目能直接驱动真实内部 queue/worker/host seam；未公开运行时注入 API、未添加环境变量生产旁路、未修改生产逻辑。
+- 自动判卷：`verify.ps1` 动态发现 3 个 `IsTestProject=true` 项目；InputCore 检验百万事件 `produced=accepted=dequeued=sinkAcknowledged=1,000,000`，以及 overflow/sink IntegrityFault、pause barrier、精确 interop allowlist、鼠标全字段和设备代次。InputCore 自动证据明确写入 `hardwareTerminalStatus=not-run`、`releaseEligible=false`。
+- 性能 schema：强制 SDK/runtime、logical processor count、每台设备的 `deviceKind`/interfaceId/hardwareSummary/identityConfidence、至少 2 Keyboard 与 2 Mouse、1000Hz 依据、前后台场景、30 分钟时长、CPU/working set/UI latency 阈值和 Storage 前不可伪填为 0 的 diskGrowth 状态。
+- 反向验证：`verify.ps1 -Stage InputCore -InjectInputCoreOutOfOrder` 按预期退出 1，证据观察到 `outOfOrder=1`；移除注入后 `verify.ps1 -Stage InputCore` 退出 0，`total=45`、`acceptance=12`、`failed=0`、`skipped=0`、`gates=23`，证据位于 ignored `.tools/verification/20260805-170122-714/verification.json`。
+- Bootstrap 回归：`verify.ps1 -Stage Bootstrap` 退出 0，`total=45`、`acceptance=12`、`failed=0`、`skipped=0`、`gates=11`；程序目录外 `-InjectedDataPath C:\InputTracker-outside` 按预期退出 1。
+- 统一命令：本地 `.tools/dotnet` SDK `10.0.302` 的 restore、Release build（0 warnings / 0 errors）、solution test（Input 23 + App 10 + Acceptance 12，合计 45 passed / 0 failed / 0 skipped）和 self-contained win-x64 publish 均退出 0。
+- 未验证：真实两键盘两鼠标、前后台 2 小时、1000Hz 鼠标连续 30 分钟仍是硬件终验；自动化和真实 User32 seam 测试不冒充该结论。
