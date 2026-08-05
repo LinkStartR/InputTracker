@@ -32,3 +32,9 @@
 - 限制：权限规则要求启动 GUI 时使用受控执行，该桌面调用者实测为 `Administrator`；默认非管理员沙箱不允许直接打开 GUI。隔离桌面的全屏截图为黑屏，WPF `PrintWindow` 仅得到空白客户区，不能作为视觉证据。
 - 影响：尚不能声称普通用户完整可视流程“不弹 UAC”或提交可读截图；自动门槛、CI、单实例和状态控制链不受影响。
 - 处置：该缺口不阻塞已审查且 CI 全绿的 Bootstrap 代码经 PR 合并，但始终阻塞最终/现场验收与发布完成声明；保留 `tests/Acceptance/Manual/bootstrap-checklist.md`，等待可操作的普通用户桌面现场补拍，不以管理员截图或 mock 冒充。
+
+## B-006：Storage 的 durable acknowledgement 语义待技术尖峰定案
+
+- 证据：当前 `IInputEventSink.WriteAsync` 为逐事件串行确认，Input Core 在返回后增加 `SinkAcknowledged`；Storage 设计同时要求 1000Hz 低开销、崩溃可恢复和不丢原始鼠标轨迹。
+- 不确定点：若把每个 `SinkAcknowledged` 定义为已经抵抗突然断电的逐事件 `fsync`，现有单事件接口可能无法满足 CPU/延迟门槛；若仅在块或暂停/移除/停止 boundary 强制落盘，则必须明确进程异常退出与突然断电的不同保证，不能伪称逐事件耐久。
+- 处置：Storage 技术尖峰必须分别测量追加日志、批量提交和 boundary flush，记录 accepted/ack/durable 计数及崩溃点恢复；在证据定案前不放宽“不丢事件”，不吞掉未持久事件，也不阻塞 Input Core 判卷和设备描述兼容修补。
