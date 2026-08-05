@@ -260,3 +260,13 @@
 - 提交前受影响项目复核：确定性 boundary sink 的 Input 测试 23 passed / 0 failed / 0 skipped；新增 `ControlUncertain` 诊断分支后的 App 测试 10 passed / 0 failed / 0 skipped。
 - 高频验收边界：当前热路径仅逐个 `WM_INPUT` 调用 `GetRawInputData`，没有 `GetRawInputBuffer` buffered drain；本阶段不声称已验证 1000Hz，是否加入 buffered drain 由 B-003 的真实 1000Hz/30 分钟终验决定。
 - 下一步：提交本聚焦修复；从该提交重新执行统一五命令并记录最终输出。
+
+## 2026-08-05 Input Core 主分支集成复核
+
+- 分支/提交：`codex/input-core` 按序集成为 `7f5fda8`（核心）、`9c633d0`（App 接入）、`cb4c2da`（故障收口）；未 push。
+- C1 只读复核：范围仅含 Input Core、最小 App 接入、普通测试和进度/阻塞文档；Acceptance、verify、LICENSE、依赖、权限、注册表、服务、网络及隐私禁止项均未越界；测试属性 `11→27→28→34`。
+- 首次主工作区 restore：沙箱拒绝读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs`，5 项目报 `MSB4184`，退出码 1；未改代码或系统配置。
+- 受控重试：restore 5 项目退出码 0；Release build 5 项目成功，0 warnings / 0 errors；solution 测试 Input 23、App 10、Acceptance 5，共 38 passed / 0 failed / 0 skipped，退出码 0。
+- worker 验证证据：Bootstrap verify `.tools/verification/20260805-161811-975/verification.json` 为 passed；其脚本当前只统计 App+Acceptance 15 项，Input 测试由上述 solution 命令实际执行，C2 的 InputCore stage 将修复动态发现缺口。
+- 结果：三个已审查实现提交已进入主任务分支，硬件终验 B-003 仍未解除，不把自动化或 User32 注册测试冒充真实两键盘两鼠标/1000Hz 结论。
+- 下一步：集成 C4 最终五命令记录后，授权 C2 基于稳定 API 实现 `-Stage InputCore`、Acceptance 与红→绿反向验证。
