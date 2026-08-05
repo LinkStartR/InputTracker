@@ -340,3 +340,13 @@
 - self-contained publish 第 2 次：按任务原参数 `./.tools/dotnet/dotnet.exe publish InputTracker.sln -c Release -r win-x64 --self-contained true` 重跑，完成 5 项目 RID restore，App 与 Input 生成 win-x64 publish 目录，退出 0。
 - 未验证：B-003 两键盘两鼠标前后台连续 2 小时、1000Hz 鼠标 30 分钟与 B-005 普通用户/UAC 现场证据仍未执行；当前自动证据继续明确 `hardwareTerminalStatus=not-run`、`releaseEligible=false`。
 - 下一步：由固定 C1 线程只读复核 `main@1fc6177..d3551d3`，通过后提交本记录、push `codex/input-core` 并创建 draft PR；禁止直接推 main。
+
+## 2026-08-05 C1 Input Core 集成分支只读审查
+
+- 审查范围：`main@1fc6177..d3551d3`，并复核审查期间新增且仅含进度文档的 `511e414`；C1 未修改文件、未执行 Git 写操作或 GitHub 操作。
+- 输出：整体 42 文件、4579 行新增、55 行删除；`git diff --check` 退出码 0，工作树干净，`origin/main...HEAD` 为 `0 13`，远端尚无 `codex/input-core`。
+- 边界：`LICENSE` 未变；`.tools` 运行产物与 `bin/obj` 未跟踪；无新增 NuGet 包；未发现注册表、服务、网络、文字、窗口标题、前台窗口或进程采集 API；Raw Input 仅使用必要的 user32/kernel32。
+- 测试单调性：测试属性从 `main@1fc6177` 的 11 增至 `d3551d3` 的 46；`03985a4` 的 C2 独占文件归属正确，`d3551d3` 的 descriptor-before-first-event 有普通测试与 Acceptance 覆盖。
+- 冲突说明：当前 `git ls-files -u` 为空，`PROGRESS.md` 同时保留 Input Core、Storage 与 Acceptance 记录；因历史为线性 cherry-pick、无 merge commit，不能仅凭最终历史严格证明过去所有冲突都只发生在 `PROGRESS.md`，但当前未发现代码冲突残留。
+- 结论：允许推送当前完整 HEAD；建议 PR 标题 `Input Core: add Raw Input capture and acceptance gates`，正文必须明确真实多设备、1000Hz 与现场证据仍未通过。
+- 下一步：提交本审查记录，执行 `git push -u origin codex/input-core`，创建 draft PR，等待 CI 与 PR 状态复核。

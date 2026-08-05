@@ -4,11 +4,11 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：Bootstrap PR #1 已合并为 `main@1fc6177`；Input Core 实现、Acceptance 与设备描述兼容修补已集成并完成组合红→绿，等待 C1 独立审查与 draft PR。
+- 当前阶段：Bootstrap PR #1 已合并为 `main@1fc6177`；Input Core 实现、Acceptance、兼容修补、组合红→绿和 C1 独立审查均完成，准备 push 与 draft PR。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 审查中 | Git 状态、分支、PR | PR #1 已合并；正在只读复核 `1fc6177..d3551d3` | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 复核通过后才 push Input Core 并建 draft PR；真实硬件仍待验 |
+| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 本阶段审查完成 | Git 状态、分支、PR | `1fc6177..d3551d3` 边界通过；`511e414` 仅进度文档 | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 允许推送；LICENSE/依赖/权限/隐私边界干净，真实硬件仍待验 |
 | C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | 本阶段完成 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | worker `25d3e11`；主分支集成 `03985a4` | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | 51 total / 12 Acceptance / 23 gates / 0 skip；硬件状态 not-run，releaseEligible=false |
 | C3 | Bootstrap | 最小 WPF、CI、单实例、托盘暂停 | 已集成 | `src/**`, 常规 `tests/**`, `.github/**`, solution/Directory 文件 | PR #1 已合并，merge `1fc6177` | 是：`019fd04e-0c87-71e0-b2e1-bfa363a691df` | gpt-5.6-sol / xhigh | 首个架构与权限边界 | 自动/CI/受控桌面状态链通过；普通用户可视启动/UAC/截图仍为 B-005 |
 | C4 | Input Core | Raw Input、多设备、有界队列 | 自动化完成，待 PR | 输入模块及普通测试 | worker `b4efeb4`；主分支最终 `d3551d3` | 是：`019fd04e-0c7c-7c22-9135-1b53679805f1` | sol / high | 并发、设备身份、不丢事件 | descriptor-before-first-event、幂等 arrival 与代次复用已通过；真实硬件仍为 B-003 |
