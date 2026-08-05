@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.App", "src\Inp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.App.Tests", "tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj", "{07C39054-B2E6-43EF-A664-4284792E63FC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.AcceptanceTests", "tests\Acceptance\InputTracker.AcceptanceTests.csproj", "{A241C2D8-7443-4CBB-A7AB-D4E3D51E8951}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,5 +23,9 @@ Global
 		{07C39054-B2E6-43EF-A664-4284792E63FC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{07C39054-B2E6-43EF-A664-4284792E63FC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{07C39054-B2E6-43EF-A664-4284792E63FC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A241C2D8-7443-4CBB-A7AB-D4E3D51E8951}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A241C2D8-7443-4CBB-A7AB-D4E3D51E8951}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A241C2D8-7443-4CBB-A7AB-D4E3D51E8951}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A241C2D8-7443-4CBB-A7AB-D4E3D51E8951}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

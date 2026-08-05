@@ -14,6 +14,20 @@
 
 建立 1,000,000 事件管线测试，要求丢失 0、顺序错误 0；测试数只增加，不允许 skip/todo、删除测试、放宽断言、吞异常或修改阈值来过关。
 
+## Bootstrap 阶段
+
+执行 `scripts/verify.ps1 -Stage Bootstrap`。该阶段必须使用仓库本地 .NET 10 SDK，并验证：
+
+- Release 构建与 win-x64 self-contained 发布成功，所有构建和验证证据位于被忽略的 `.tools`。
+- TRX 中测试总数不少于基线，失败数和跳过数均为 0，Bootstrap gate 不少于基线且必需 gate 无缺失。
+- manifest 使用 `asInvoker` 且 `uiAccess=false`，绿色输出不落入源码目录的 `bin` 或 `obj`。
+- 发布产物在带中文和空格的可写目录执行 `--self-check` 返回 0，不产生程序目录外运行写入。
+- 同目录 `--hold-smoke` 持有实例期间，第二个 `--self-check` 返回 2；两个进程最终均退出，无残留进程。
+
+`-InjectedDataPath` 只用于安全反向验证。传入发布目录外路径时，验证器必须明确失败并写入非零结果；它不得修改产品代码或当前工作树。
+
+普通用户、UAC、可视托盘暂停和恢复按 `tests/Acceptance/Manual/bootstrap-checklist.md` 人工验收。真实多设备、性能、统计、恢复和最终视觉在对应后续阶段到达前保持未验，不得因 Bootstrap 全绿而标记为通过。
+
 ## 反向验证
 
 分别临时破坏聚合期望、轨迹块校验、绿色路径规则，保存非零退出码和关键失败输出；恢复原状后运行全套命令并保存全绿输出。临时破坏不得提交。
