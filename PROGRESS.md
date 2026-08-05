@@ -210,3 +210,13 @@
 - 判卷规划：C4 API 稳定后由 C2 独占新增 5 组 Acceptance、硬件 runbook、性能 evidence schema、动态测试项目发现及 `-Stage InputCore`；不预建 skip/todo 测试。
 - 反向验证规划：仅在 Acceptance 注入器使用一次 out-of-order 变异，判卷必须因 `outOfOrder>0` 退出 1；移除注入后重跑全绿，生产代码和工作树不留变异。
 - 下一步：C4 完成稳定 API 和普通测试；主任务审查集成后再授权 C2 落地判卷，先回归 Bootstrap 后执行 InputCore 红→绿。
+
+## 2026-08-05 C1 Input Core 核心提交边界复核
+
+- 分支/提交：C4 worker `30814c0 feat: add raw input capture core`，父提交 `0a31520`；C1 本轮只读，未改文件或执行 Git 写操作。
+- 精确范围：20 个文件、2529 行新增、0 删除；仅 `InputTracker.sln`、`PROGRESS.md`、`src/InputTracker.Input/**`、`tests/InputTracker.Input.Tests/**`。
+- 排除项：`tests/Acceptance/**`、`scripts/verify.ps1`、`LICENSE`、`.github/**`、`.tools/**`、`bin/obj` 均未进入提交；未提交的 8 个 App 接入文件亦未混入。
+- 依赖/权限：核心项目无 `PackageReference`；测试复用既有锁版三包；仅使用 Raw Input 所需 `user32.dll`/`kernel32.dll`，未发现注册表、服务、网络、文件写入、Startup 或提权配置。
+- 测试单调性：父提交共有 11 个测试属性，提交后为 27 个，新增 16 个且既有测试未删除；`git diff --check` 通过。
+- 结论：核心提交边界适合主任务 cherry-pick；`PROGRESS.md` 因主分支新增 C2 记录可能需由主任务解决上下文冲突，集成后必须重跑 restore/build/test。
+- 下一步：等待 C4 独立提交 App 接入及完整五命令结果；主任务做代码正确性审查后按顺序集成，不把核心提交单独视为产品接入完成。
