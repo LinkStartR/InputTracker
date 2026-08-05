@@ -29,4 +29,4 @@
 - 已通过：非管理员 `CodexSandboxOffline` 从中文空格绿色目录执行 `--self-check` 退出 0；manifest 为 `asInvoker` / `uiAccess=false`；受控桌面真实 UI Automation 验证窗口可见、暂停/恢复状态和托盘 tooltip 同步，退出后残留进程 0。
 - 限制：权限规则要求启动 GUI 时使用受控执行，该桌面调用者实测为 `Administrator`；默认非管理员沙箱不允许直接打开 GUI。隔离桌面的全屏截图为黑屏，WPF `PrintWindow` 仅得到空白客户区，不能作为视觉证据。
 - 影响：尚不能声称普通用户完整可视流程“不弹 UAC”或提交可读截图；自动门槛、CI、单实例和状态控制链不受影响。
-- 处置：PR 保持 draft 并保留 `tests/Acceptance/Manual/bootstrap-checklist.md`；等待可操作的普通用户桌面现场补拍，不以管理员截图或 mock 冒充。
+- 处置：该缺口不阻塞已审查且 CI 全绿的 Bootstrap 代码经 PR 合并，但始终阻塞最终/现场验收与发布完成声明；保留 `tests/Acceptance/Manual/bootstrap-checklist.md`，等待可操作的普通用户桌面现场补拍，不以管理员截图或 mock 冒充。
