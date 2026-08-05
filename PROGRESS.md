@@ -386,3 +386,14 @@
 - 新分支：确认无现有本地 `codex/storage-stats` 后，从最新 `main@f6136c3` 执行 `git switch -c codex/storage-stats`，退出码 0，工作树干净。
 - 结论：Input Core 自动化阶段完成并经已审查 PR 进入 main；B-003 真实多设备/1000Hz 与 B-005 普通用户现场证据仍保留，不因合并解除。
 - 下一步：先执行 Storage durable-ack/SQLite/轨迹块技术尖峰并固定契约，再实现任务 3；C2 仅在稳定 API 后追加 Storage 阶段 Acceptance，禁止预建 skip/todo。
+
+## 2026-08-05 C2 Storage Stats 验收只读设计
+
+- 分支/状态：主任务 `codex/storage-stats@6f31d84`；C2 本轮只读，未建分支、未改文件、未提交/push，也未运行功能或硬件验收。
+- durable 语义：`SinkAcknowledged` 仅表示 Storage sink 接收，不等于 fsync；`durableWatermark` 必须由 C5 定义为块与 manifest/index 协议已持久化的最高连续序号，最终 flush 后百万事件才要求达到终点。
+- 崩溃边界：进程 kill 只证明恢复完整 durable prefix、无 gap/dup；非 durable tail 必须精确报告且不得伪称保证。突然断电证据必须标记 physical / storage-layer simulation / not-run，无物理证据不得令 `releaseEligible=true`。
+- Gate 规划：Storage 阶段保留 Bootstrap+InputCore 全部 gate，并追加百万 final flush、durable watermark、进程恢复、块完整性、迁移、四周期/DST/时区、隐私、设备置信度、CSV/PNG、备份恢复、范围删除、磁盘增长和两类注入边界等 19 个 gate；baseline 仍只增不减。
+- 时间验收：半开区间 `[start,end)`、ISO 周一开周；日/周/月/年覆盖 Pacific 23h 春跳/25h 秋回的两个本地 01:30，以及 China Standard Time 与 UTC，期望与观测不得重漏。
+- 红→绿：仅在 Acceptance 临时副本翻转已提交轨迹块一位，或修改 Acceptance expected fixture；verify 必须 exit 1，恢复后全绿。禁止改生产工作树、阈值或提交 mutation。
+- API 前置：C5 稳定提供 writer/flush/watermark/reopen/recovery、fixed clock/timezone seam、仅测试可见 fault points、manifest/block/SQLite 迁移及导出/备份/删除的可观察行为，并定案 B-006 后，C2 才落无 skip 的 Storage Acceptance 与 `verify -Stage Storage`。
+- 下一步：等待 C5 durability 尖峰结果；API 未稳定前不创建空测试、skip 或 todo。
