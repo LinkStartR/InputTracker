@@ -1,0 +1,12 @@
+<Application x:Class="InputTracker.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2563EB" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFDFB" />
+        <SolidColorBrush x:Key="CardBrush" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="TextBrush" Color="#FF172033" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#FF526071" />
+    </Application.Resources>
+</Application>
