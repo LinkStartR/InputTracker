@@ -213,12 +213,24 @@ internal sealed class InputWorker
         {
             case IngressEventKind.DeviceArrived:
             {
+                if (input.DeviceHandle == 0)
+                {
+                    break;
+                }
+
                 RawDeviceMetadata metadata = _deviceInfo.Query(input.DeviceHandle, input.DeviceKind);
-                InputDeviceDescriptor descriptor = _devices.Arrive(input.DeviceHandle, metadata);
-                await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
-                    DeviceChangeKind.Arrived,
-                    descriptor,
-                    input.Timestamp))).ConfigureAwait(false);
+                InputDeviceDescriptor descriptor = _devices.Arrive(
+                    input.DeviceHandle,
+                    metadata,
+                    out bool created);
+                if (created)
+                {
+                    await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+                        DeviceChangeKind.Arrived,
+                        descriptor,
+                        input.Timestamp))).ConfigureAwait(false);
+                }
+
                 break;
             }
             case IngressEventKind.DeviceRemoved:
@@ -236,7 +248,10 @@ internal sealed class InputWorker
             }
             case IngressEventKind.Keyboard:
             {
-                InputDeviceDescriptor descriptor = Resolve(input.DeviceHandle, RawDeviceKind.Keyboard);
+                InputDeviceDescriptor descriptor = await ResolveAsync(
+                    input.DeviceHandle,
+                    RawDeviceKind.Keyboard,
+                    input.Timestamp).ConfigureAwait(false);
                 var pressed = new PressedKey(descriptor.RuntimeId, input.MakeCode, input.KeyPrefix);
                 bool isTransition = input.KeyTransition == PhysicalKeyTransition.Down
                     ? _pressedKeys.Add(pressed)
@@ -255,7 +270,10 @@ internal sealed class InputWorker
             }
             case IngressEventKind.Mouse:
             {
-                InputDeviceDescriptor descriptor = Resolve(input.DeviceHandle, RawDeviceKind.Mouse);
+                InputDeviceDescriptor descriptor = await ResolveAsync(
+                    input.DeviceHandle,
+                    RawDeviceKind.Mouse,
+                    input.Timestamp).ConfigureAwait(false);
                 await WriteAsync(CapturedInput.FromMouse(new MouseRawEvent(
                     descriptor.RuntimeId,
                     input.DeltaX,
@@ -284,8 +302,25 @@ internal sealed class InputWorker
         }
     }
 
-    private InputDeviceDescriptor Resolve(nint handle, RawDeviceKind kind) =>
-        _devices.Resolve(handle, () => _deviceInfo.Query(handle, kind));
+    private async ValueTask<InputDeviceDescriptor> ResolveAsync(
+        nint handle,
+        RawDeviceKind kind,
+        long timestamp)
+    {
+        InputDeviceDescriptor descriptor = _devices.Resolve(
+            handle,
+            () => _deviceInfo.Query(handle, kind),
+            out bool created);
+        if (created)
+        {
+            await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+                DeviceChangeKind.Arrived,
+                descriptor,
+                timestamp))).ConfigureAwait(false);
+        }
+
+        return descriptor;
+    }
 
     private async ValueTask WriteBoundaryForDeviceAsync(
         RuntimeDeviceId deviceId,

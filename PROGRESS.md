@@ -311,3 +311,18 @@
 - Bootstrap 回归：`verify.ps1 -Stage Bootstrap` 退出 0，`total=45`、`acceptance=12`、`failed=0`、`skipped=0`、`gates=11`；程序目录外 `-InjectedDataPath C:\InputTracker-outside` 按预期退出 1。
 - 统一命令：本地 `.tools/dotnet` SDK `10.0.302` 的 restore、Release build（0 warnings / 0 errors）、solution test（Input 23 + App 10 + Acceptance 12，合计 45 passed / 0 failed / 0 skipped）和 self-contained win-x64 publish 均退出 0。
 - 未验证：真实两键盘两鼠标、前后台 2 小时、1000Hz 鼠标连续 30 分钟仍是硬件终验；自动化和真实 User32 seam 测试不冒充该结论。
+
+## 2026-08-05 Input Core 隐式设备到达兼容修补
+
+- 分支/提交：`codex/input-core-work@add8d40`；本项待独立提交，未 push。
+- 契约：保留既有 `RawDeviceRegistry.Resolve(...) -> InputDeviceDescriptor` 与 `Arrive(...)` 签名，新增带 `out bool created` overload；独立 Acceptance 可继续按旧签名编译，worker 使用新契约判断是否发送到达事件。
+- 顺序：非零未知 hDevice 的首个 Keyboard/Mouse 输入前，worker 先以同一 timestamp 向 sink 写入并确认包含接口路径、硬件摘要与置信度的 `DeviceChange.Arrived`；确认完成后才写首输入。
+- 幂等：显式到达后输入不重复 Arrived；隐式到达后迟到的显式到达同样不换 runtime id、不增加 generation；Removal 后同句柄再出现仍创建新 generation/runtime id。
+- 零句柄：隐式输入保持 `Unattributed`，显式到达直接忽略，均不查询硬件或伪造设备描述。
+- 测试覆盖：未知 Keyboard/Mouse 首输入 ack 顺序、显式到达无重复、隐式后迟到显式到达、零句柄、Removal 后隐式再现。
+- Input 测试第 1 次：编译退出码 1，公开 Theory 暴露 internal `IngressEventKind` 触发 `CS0051`；改为公开 `int` 参数并在测试内转换，未扩大产品 API。
+- Input 测试第 2 次：29 passed / 0 failed，出现 2 条 xUnit2031；按分析器建议改为 predicate overload，未放宽断言。
+- 最终 Input 测试：退出码 0，29 passed / 0 failed / 0 skipped，无警告。
+- 最终 solution 测试：退出码 0；Input 29、App 10、Acceptance 5，合计 44 passed / 0 failed / 0 skipped。
+- 边界：仅修改 Input registry、worker、普通 Input 测试和本进度记录；未修改 App/Storage、`tests/Acceptance/**`、`scripts/verify.ps1`、依赖、权限、隐私字段或阈值。
+- 下一步：提交独立兼容修补并回报主任务，不 push。
