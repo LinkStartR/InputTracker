@@ -10,4 +10,7 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InputTracker.Input\InputTracker.Input.csproj" />
+  </ItemGroup>
 </Project>

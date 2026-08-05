@@ -1,4 +1,5 @@
 using System.Windows;
+using InputTracker.Input;
 
 namespace InputTracker;
 
@@ -6,8 +7,10 @@ public partial class App : System.Windows.Application
 {
     private SingleInstanceGuard? _singleInstance;
     private TrayIconController? _trayIcon;
+    private InputCaptureService? _capture;
+    private CollectionController? _collection;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
@@ -45,11 +48,12 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var collection = new CollectionController(directory);
-        var window = new MainWindow(collection, directory);
+        _capture = directory.IsWritable ? new InputCaptureService(new InputCoreSink()) : null;
+        _collection = new CollectionController(directory, _capture);
+        var window = new MainWindow(_collection, directory);
 
         _trayIcon = new TrayIconController(
-            collection,
+            _collection,
             showWindow: () => ShowWindow(window),
             exitApplication: () => Shutdown(0));
 
@@ -57,10 +61,24 @@ public partial class App : System.Windows.Application
         window.ExitRequested += (_, _) => Shutdown(0);
         MainWindow = window;
         window.Show();
+
+        if (_capture is not null)
+        {
+            try
+            {
+                await _capture.StartAsync();
+            }
+            catch
+            {
+                // InputCaptureService publishes an honest StartFailed state for the UI.
+            }
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _capture?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        _collection?.Dispose();
         _trayIcon?.Dispose();
         _singleInstance?.Dispose();
         base.OnExit(e);

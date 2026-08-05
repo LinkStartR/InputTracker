@@ -234,3 +234,15 @@
 - 未验证：真实两键盘两鼠标、前后台 2 小时及 1000Hz 鼠标 30 分钟仍为 B-003；自动测试和真实 User32 注册不冒充物理硬件终验。
 - 结果：核心契约、Win32 入口、有界管线、设备隔离、暂停 barrier、overflow/sink failure 的 IntegrityFault 和公开诊断已完成并自动验证。
 - 下一步：提交本核心单元；随后提交 App 最小生命周期接入，再运行统一五命令和 Bootstrap 回归。
+
+## 2026-08-05 Input Core App 生命周期接入
+
+- 分支/提交：核心单元已提交为 `30814c0 feat: add raw input capture core`；本 App 接入项待提交，未 push。
+- 接入：App 在程序目录可写时创建真实 `InputCaptureService`，窗口显示后异步启动；退出时按 Input Core 的注销、barrier、worker、隐藏窗口顺序释放。程序目录拒绝、自检和 hold-smoke 不启动采集。
+- 状态：窗口和托盘诚实区分“正在启动、采集中、已暂停、完整性故障、启动失败”；明确 Input Core 阶段事件尚未持久化，不把实时汇总冒充 Storage。
+- 控制：窗口与托盘通过 `PauseReason.User` 异步暂停/恢复；`SessionLocked` 或 `SystemSuspend` 仍存在时，用户恢复不会重新注册采集。
+- sink：App 当前 sink 只做线程安全计数，不保存事件对象、键盘顺序、文字、窗口或进程；后续由 Storage Stats 替换持久化实现。
+- build：`dotnet build InputTracker.sln -c Release --no-restore` 退出码 0，5 项目成功，0 warnings / 0 errors。
+- test：`InputTracker.App.Tests` 共 7 passed、0 failed、0 skipped；新增状态映射、用户暂停原因和 IntegrityFault 可见性测试。
+- 结果：Input Core 已最小接入真实 App 生命周期，Bootstrap 原有目录 fail-closed、单实例和自检路径保持不采集。
+- 下一步：提交 App 接入单元；随后运行完整 solution 测试、Bootstrap 判卷回归和 self-contained publish。

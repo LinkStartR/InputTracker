@@ -31,8 +31,8 @@ public partial class MainWindow : Window
         ResumeButton.IsEnabled = snapshot.CanResume;
     }
 
-    private void PauseButton_Click(object sender, RoutedEventArgs e) => _collection.Pause();
-    private void ResumeButton_Click(object sender, RoutedEventArgs e) => _collection.Resume();
+    private async void PauseButton_Click(object sender, RoutedEventArgs e) => await _collection.PauseAsync();
+    private async void ResumeButton_Click(object sender, RoutedEventArgs e) => await _collection.ResumeAsync();
     private void HideButton_Click(object sender, RoutedEventArgs e) => MinimizeToTrayRequested?.Invoke(this, EventArgs.Empty);
     private void ExitButton_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
 

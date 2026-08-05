@@ -15,8 +15,8 @@ public sealed class TrayIconController : IDisposable
         Action exitApplication)
     {
         _collection = collection;
-        _pauseItem = new System.Windows.Forms.ToolStripMenuItem("暂停", null, (_, _) => _collection.Pause());
-        _resumeItem = new System.Windows.Forms.ToolStripMenuItem("恢复", null, (_, _) => _collection.Resume());
+        _pauseItem = new System.Windows.Forms.ToolStripMenuItem("暂停", null, async (_, _) => await _collection.PauseAsync());
+        _resumeItem = new System.Windows.Forms.ToolStripMenuItem("恢复", null, async (_, _) => await _collection.ResumeAsync());
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("打开 InputTracker", null, (_, _) => showWindow());
@@ -52,6 +52,9 @@ public sealed class TrayIconController : IDisposable
         _notifyIcon.Text = snapshot.Mode switch
         {
             CollectionMode.Paused => "InputTracker - 已暂停",
+            CollectionMode.Collecting => "InputTracker - 采集中",
+            CollectionMode.IntegrityFault => "InputTracker - 完整性故障，采集已停止",
+            CollectionMode.StartFailed => "InputTracker - 采集启动失败",
             CollectionMode.RejectedProgramDirectory => "InputTracker - 目录不可写，采集已拒绝",
             _ => "InputTracker - 未采集"
         };
