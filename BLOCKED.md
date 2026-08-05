@@ -33,8 +33,17 @@
 - 影响：尚不能声称普通用户完整可视流程“不弹 UAC”或提交可读截图；自动门槛、CI、单实例和状态控制链不受影响。
 - 处置：该缺口不阻塞已审查且 CI 全绿的 Bootstrap 代码经 PR 合并，但始终阻塞最终/现场验收与发布完成声明；保留 `tests/Acceptance/Manual/bootstrap-checklist.md`，等待可操作的普通用户桌面现场补拍，不以管理员截图或 mock 冒充。
 
-## B-006：Storage 的 durable acknowledgement 语义待技术尖峰定案
+## B-006：Storage 的 durable acknowledgement 语义（契约层已解除）
 
 - 证据：当前 `IInputEventSink.WriteAsync` 为逐事件串行确认，Input Core 在返回后增加 `SinkAcknowledged`；Storage 设计同时要求 1000Hz 低开销、崩溃可恢复和不丢原始鼠标轨迹。
 - 不确定点：若把每个 `SinkAcknowledged` 定义为已经抵抗突然断电的逐事件 `fsync`，现有单事件接口可能无法满足 CPU/延迟门槛；若仅在块或暂停/移除/停止 boundary 强制落盘，则必须明确进程异常退出与突然断电的不同保证，不能伪称逐事件耐久。
-- 处置：Storage 技术尖峰必须分别测量追加日志、批量提交和 boundary flush，记录 accepted/ack/durable 计数及崩溃点恢复；在证据定案前不放宽“不丢事件”，不吞掉未持久事件，也不阻塞 Input Core 判卷和设备描述兼容修补。
+- 尖峰证据：真实文件系统/SQLite 运行覆盖 A/B/C 的 100,000 mixed 与 C 的 30,000 mouse 等价负载，最终 4m25s 退出码 0；四组均满足 accepted=sinkAcknowledged=sqliteCommitted=powerDurable=recovered，lost=0、corrupt=0。A 仅 379.99 events/s，B 为 101442.24 events/s，C mixed 为 113509.86 events/s。
+- 定案：`SinkAcknowledged` 仅表示进入当前聚合事务或完整追加 CRC spool，不等于 fsync；键盘选 B 有界批事务，鼠标选 C spool，并且只在 `Flush(true)` 后提交 SQLite 目录水位，二者都完成后才推进 `PowerDurable`。
+- 未解除范围：物理突然断电与真实 1000Hz/30分钟硬件仍为 `not-run`，`releaseEligible=false`；不得用本契约层尖峰冒充终验。
+
+## B-007：native SQLite 3.49.1 命中 WAL-reset 已知风险范围
+
+- 证据：锁版依赖为 `Microsoft.Data.Sqlite` / `Microsoft.Data.Sqlite.Core 10.0.10` 与 `SQLitePCLRaw 2.1.11`；尖峰实际执行 `SELECT sqlite_version()` 返回 `3.49.1`。
+- 风险：SQLite 官方说明 WAL-reset corruption bug 影响 3.7.0–3.51.2，修复于 3.51.3+，并回移到 3.44.6 / 3.50.7。`3.49.1` 不在修复线，不能声称风险消失。
+- 当前规避：产品坚持唯一 writer/checkpointer 连接且 `Pooling=false`，避开已知的“至少两个连接在不同线程/进程同时写或 checkpoint”触发前提；这只是规避触发条件，不是修复 native 库。
+- 阻塞范围：在生产发布或引入第二连接/外部 checkpoint 前，必须获得任务授权升级到命中官方修复线的 native 依赖并重跑迁移/恢复/尖峰，或形成明确的审查风险接受决定；本里程碑不得静默更换已授权包。

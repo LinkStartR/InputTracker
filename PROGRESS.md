@@ -397,3 +397,106 @@
 - 红→绿：仅在 Acceptance 临时副本翻转已提交轨迹块一位，或修改 Acceptance expected fixture；verify 必须 exit 1，恢复后全绿。禁止改生产工作树、阈值或提交 mutation。
 - API 前置：C5 稳定提供 writer/flush/watermark/reopen/recovery、fixed clock/timezone seam、仅测试可见 fault points、manifest/block/SQLite 迁移及导出/备份/删除的可观察行为，并定案 B-006 后，C2 才落无 skip 的 Storage Acceptance 与 `verify -Stage Storage`。
 - 下一步：等待 C5 durability 尖峰结果；API 未稳定前不创建空测试、skip 或 todo。
+
+# 2026-08-05 Storage durability 第一小块首次 restore 阻塞
+
+- 分支/提交：`codex/storage-stats-work@f6136c3` 加未提交第一小块；未 push。
+- 范围：仅锁定 `Microsoft.Data.Sqlite 10.0.10`，新增 Storage/普通测试项目、程序目录 layout、SQLite WAL/FULL/foreign keys/secure delete/busy timeout、v1 migration、校准段和隐私 schema tests；未触碰 Acceptance、verify、App/Input/UI/portable。
+- 首次 restore：仓库本地 `.tools/dotnet` 因沙箱拒绝读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 报 `MSB4184`，退出码 1；与既有环境门一致，不是编译或 NuGet 结论。
+- 受控重试：按权限流程请求相同 restore 的沙箱外执行，但 Codex 当前用量额度阻止审批，命令未执行；未改 TFM、SDK 探测或 NuGet 配置绕过。
+- 当前状态：尚无有效 restore/build 结果，依赖图和 `select sqlite_version()` 尚未产生；按任务卡暂停 spool/recovery 实现，等待同一命令获得受控执行能力。
+
+## 2026-08-05 Storage durability 第一小块有效构建与首轮测试红
+
+- 主任务代跑 restore：`./.tools/dotnet/dotnet.exe restore InputTracker.sln` 退出码 0；7 项目恢复，Storage 与 Storage.Tests 的 `Microsoft.Data.Sqlite 10.0.10` 均成功。
+- 主任务代跑 build：`./.tools/dotnet/dotnet.exe build InputTracker.sln -c Release --no-restore` 退出码 0；7 项目生成，0 warnings / 0 errors，用时 5.51 秒。
+- 主任务代跑 Storage tests 首轮：退出码 1；5 total，3 passed / 2 failed / 0 skipped。
+- 失败：`FutureSchemaVersionFailsClosed`、`MigrationChecksumMismatchFailsClosed` 的 fail-closed 断言完成后，临时目录清理因测试手工 SQLite 连接默认 `Pooling=true` 仍持有数据库文件而报 `IOException`；产品连接已为 `Pooling=false`。
+- 修复：仅把两处测试准备连接改为 `Pooling=False`，不改 future/checksum 断言、产品 schema 或迁移行为；待重编译重跑后记录绿色结果。
+
+## 2026-08-05 Storage migration 与 spool 红→绿
+
+- migration 测试修复后，主任务代跑 Storage.Tests build 退出码 0，0 warnings / 0 errors，用时 1.15 秒；Storage tests 5 passed / 0 failed / 0 skipped，用时 295ms。
+- 依赖图：`Microsoft.Data.Sqlite` / `Microsoft.Data.Sqlite.Core` 均为 `10.0.10`；`SQLitePCLRaw.bundle_e_sqlite3`、`core`、`lib.e_sqlite3`、`provider.e_sqlite3` 均为 `2.1.11`。
+- spool/recovery 首次真实编译退出码 1，0 warnings / 2 errors：`MouseSpool.cs(151)` 的实例属性 `string Path` 遮蔽 `System.IO.Path`，导致 `GetFullPath` 与 `GetDirectoryName` 无法解析。
+- 修复仅在该行显式限定 `System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path))`，未改 spool 格式、CRC、恢复协议或断言。
+- 主任务代跑相同 Storage.Tests build 退出码 0，0 warnings / 0 errors，用时 1.64 秒；Storage tests 10 passed / 0 failed / 0 skipped，用时 244ms。
+- 当前覆盖：CRC32C 截断尾精确恢复、CRC 损坏 fail-closed、sink ack 与 boundary power durable 区分、批事务提交前回滚/提交后重开存活，以及 `Flush(true)` 先于 SQLite durable watermark。
+- 下一步：运行 A/B/C 三策略真实文件系统/SQLite 尖峰，写入 ignored `.tools/storage-spike/**` JSON，并以实际 `SELECT sqlite_version()` 定案 B-006 与 native WAL 风险。
+
+## 2026-08-05 Storage durability spike 首轮红
+
+- benchmark 小块的受控 build 已进入真实编译并通过，随后按原参数运行 `Category=StorageSpike`。
+- 首轮真实尖峰退出码 1，用时 4m15s，1 total / 1 failed；A 路径已完整执行 100,000 次 `synchronous=FULL` 逐事件 autocommit，未降低负载冒充通过。
+- 失败为 `DurabilitySpikeTests.cs:165` 的 `NullReferenceException`：A 的计数仍累加 `pending`，循环尾误入仅适用于批事务的 `transaction!.Commit()`，而 autocommit 的 transaction 按设计为 null。
+- 最小修复仅将尾提交条件限定为 `batchSize > 1 && pending > 0`；100,000 事件、B 的 1024 batch、FULL 同步、断言与 durability 语义均未改变。
+- 下一步：重编译并按同一命令重跑尖峰；只有 JSON 计数、实际 native SQLite 版本和恢复结果全部核对后才定案 B-006。
+
+## 2026-08-05 Storage durability spike 最终绿与 B-006 决策
+
+- 最终 benchmark build：退出码 0，0 warnings / 0 errors，用时 1.40 秒。
+- 最终 `Category=StorageSpike`：退出码 0，1 passed / 0 failed / 0 skipped，用时 4m25s；证据位于 ignored `.tools/storage-spike/20260805-103129-485-26432/storage-durability-spike.json`。
+- 环境：.NET runtime `10.0.10`，16 logical processors；`SELECT sqlite_version()` 实测 native SQLite `3.49.1`；`powerTestKind=storage-layer-contract`、`hardwareTerminalStatus=not-run`、`releaseEligible=false`。
+- A autocommit mixed 100k：五项 accepted/ack/sqliteCommitted/powerDurable/recovered 均 100000，lost/corrupt=0；379.99 events/s，p50/p95=2459.8/3383.6us，13.025 bytes/event，263163.76ms。
+- B batch1024 mixed 100k：五项均 100000，lost/corrupt=0；101442.24 events/s，p50/p95=6.7/8.1us，13.025 bytes/event，985.78ms。
+- C mixed 100k：五项均 100000，spoolAppended=50000，lost/corrupt=0；113509.86 events/s，p50/p95=5.3/10.5us，22.369 bytes/event，880.98ms，boundary flush=12ms。
+- C mouse 30k 等价负载：五项均 30000，spoolAppended=30000，lost/corrupt=0；192173.91 events/s，p50/p95=3.3/3.5us，45.229 bytes/event，156.11ms，boundary flush=7ms。
+- B-006 契约层定案：A 不作为生产默认；键盘使用 B 有界批量聚合，鼠标使用 C CRC spool，boundary 必须先 `Flush(true)` 再提交 SQLite 目录水位；普通 sink ack 不等于 fsync，物理断电与真实硬件终验仍未运行。
+- native 风险：SQLite `3.49.1` 命中官方 WAL-reset 受影响范围；唯一 writer/checkpointer 连接加 `Pooling=false` 仅规避已知触发条件，风险未消失，已新增 B-007，未静默换包。
+- 下一步：请求主任务代跑全 solution restore/build/test、单独 Storage tests 与 self-contained publish；全部绿后再做白名单/Git 边界复核并提交，不 push。
+
+## 2026-08-05 Storage durable watermark 发布 seam 修正
+
+- 提交前数据正确性 gate 发现：writer 的旧 `FlushBoundary()` 在文件 `Flush(true)` 后、SQLite 目录 commit 前就返回公开 `SpoolDurableWatermark` 并推进 `PowerDurable`；若目录 commit 失败，调用者可见值可能领先 catalog，违反 B-006。
+- 最小分层：writer 只向同程序集协调器返回 internal `SpoolFlushResult(fileFlushedCount, flushedLength)`，不再暴露或推进最终 `PowerDurable`；只有 `StorageDatabase.CommitSpoolBoundary` 在 SQLite commit 成功后才构造并返回公开 `SpoolDurableWatermark`。
+- 新增真实 SQLite 外键失败 seam：文件 flush 成功后以未注册设备令目录事务失败；断言 spool 仍可恢复 1 条、catalog 为 0、调用者未取得最终 watermark。现有 commit 成功测试继续断言 catalog 与公开 `PowerDurable` 同为 1。
+- benchmark 仍通过 `StorageDatabase.CommitSpoolBoundary` 读取最终水位，100,000/30,000、1024、FULL 和全部计数断言未改变。
+- 下一步：先代跑 Storage.Tests build 与排除 `Category=StorageSpike` 的普通测试；小块全绿后再决定是否重跑 4m 尖峰，暂不提交。
+
+## 2026-08-05 Storage durable seam 普通测试首轮红
+
+- seam 分层后的 Storage.Tests build 退出码 0，0 warnings / 0 errors，用时 1.59 秒。
+- 排除 spike 的普通测试退出码 1：11 total，10 passed / 1 failed / 0 skipped；失败为 `FileFlushBeforeDirectoryFailureDoesNotPublishFinalPowerDurability` 的 `IOException`。
+- 根因：测试在 writer 仍持有写句柄时立即用新句柄执行 recovery；现有 `FileShare.Read` 正确拒绝与活跃写入并发恢复。模拟 SQLite 失败后的进程退出/重开必须先关闭 writer。
+- 修复仅在测试中显式调用幂等 `writer.Dispose()` 后再 Recover；未放宽产品 FileShare、恢复校验、目录事务或 durable 断言。
+- 下一步：重编译并重跑相同 11 个普通测试，保留本轮 10/11 红证据。
+
+## 2026-08-05 Storage durable seam 普通测试最终绿
+
+- 修复后的 Storage.Tests build 退出码 0，0 warnings / 0 errors，用时 1.46 秒。
+- 排除 spike 的普通测试退出码 0：11 passed / 0 failed / 0 skipped，用时 306ms。
+- 语义 gate 证明：文件 flush 成功但 catalog commit 失败时，调用者未取得最终 watermark；关闭 writer 后 spool 合法前缀可恢复，catalog 仍为空。成功路径只在 SQLite commit 后返回 `SpoolDurableWatermark`。
+- 先前 4m25s JSON 仍可作为同负载性能参考，但公开 watermark 构造点已经改变，因此不再视为最终源码快照证据；必须按相同 100,000/30,000、1024、FULL 参数只重跑一次最终 spike。
+- 下一步：等待最终源码 spike；随后再请求全 solution test 与 self-contained publish，暂不提交。
+
+## 2026-08-05 Storage durable seam 最终源码 spike
+
+- 最终语义分层源码的 `Category=StorageSpike` 退出码 0：1 passed / 0 failed / 0 skipped，用时 4m00s；权威 ignored JSON 为 `.tools/storage-spike/20260805-104501-272-18816/storage-durability-spike.json`。
+- 环境仍为 native SQLite `3.49.1`，`hardwareTerminalStatus=not-run`、`releaseEligible=false`；B-007 不因本次绿色回归解除。
+- A mixed 100k：五项计数均 100000，lost/corrupt=0；419.71 events/s，p50/p95=2426.1/2997.3us，13.025 bytes/event。
+- B batch1024 mixed 100k：五项计数均 100000，lost/corrupt=0；96621.58 events/s，p50/p95=6.9/8.4us，13.025 bytes/event。
+- C mixed 100k：五项计数均 100000，spoolAppended=50000，lost/corrupt=0；114469.09 events/s，p50/p95=5.2/10.6us，22.369 bytes/event，boundary flush=11ms。
+- C mouse 30k 等价负载：五项计数均 30000，spoolAppended=30000，lost/corrupt=0；185268.10 events/s，p50/p95=3.3/3.5us，45.229 bytes/event，boundary flush=10ms。
+- 结论：writer/file-flush 与 DB/post-commit watermark 分层后，B 键盘聚合 + C 鼠标 spool 契约的计数、恢复与性能结论保持成立；旧 4m25 JSON 仅保留为历史证据。
+- 下一步：全 solution restore/build/test 与 self-contained publish；全部通过后做白名单、diff、测试数与 Git 状态复核，再提交独立 commit，不 push。
+
+## 2026-08-05 Storage durability 最终统一回归
+
+- `./.tools/dotnet/dotnet.exe restore InputTracker.sln`：退出码 0，7 项目均已是最新，用时 2.2 秒。
+- `./.tools/dotnet/dotnet.exe build InputTracker.sln -c Release --no-restore`：退出码 0，7 项目生成，0 warnings / 0 errors，用时 1.43 秒。
+- `./.tools/dotnet/dotnet.exe test InputTracker.sln -c Release --no-build --no-restore`：退出码 0；Input 29 + App 10 + Acceptance 12 + Storage 12 = 63 passed / 0 failed / 0 skipped，用时 4m30s。
+- 全 solution test 的 spike JSON：`.tools/storage-spike/20260805-105247-814-27492/storage-durability-spike.json`；A/B/C 四组 accepted=sinkAcknowledged=sqliteCommitted=powerDurable=recovered，lost=0、corrupt=0。
+- `./.tools/dotnet/dotnet.exe publish InputTracker.sln -c Release -r win-x64 --self-contained true`：退出码 0，7 项目完成 RID restore，App/Input/Storage 生成 win-x64 self-contained 目录，用时 6.1 秒。
+- 最高可用判卷 `scripts/verify.ps1 -Stage InputCore`：退出码 0，`total=63`、`acceptance=12`、`failed=0`、`skipped=0`、`gates=23`；证据 `.tools/verification/20260805-185825-472/verification.json`。这只证明 Bootstrap/InputCore 未回归，Storage 正式 Acceptance gates 尚待 C2 基于稳定 API 落地。
+- 判卷动态 Storage spike JSON：`.tools/storage-spike/20260805-105850-430-6940/storage-durability-spike.json`；四组计数继续闭合且 lost/corrupt=0，A=374.15、B=101652.95、C mixed=114491.47、C mouse30k=207908.85 events/s。
+- 边界复核：`git diff --check` 退出码 0；变更仅在任务白名单，`.tools` 运行证据保持 ignored；产品 Storage 源码隐私禁止词/API 扫描无命中。
+- 下一步：等待固定 C1 Git/GitHub 角色的独立只读白名单、依赖、隐私与测试单调性审查结论；审查前不 stage、不提交、不 push。
+
+## 2026-08-05 C1 Storage durability 里程碑独立审查
+
+- C1 只读审查批准提交：19 个意图文件全部位于 Storage 任务白名单；Acceptance/verify、App/Input/UI/portable、LICENSE 与 `.github` 均未修改。
+- 依赖边界：仅新增任务授权的 `Microsoft.Data.Sqlite 10.0.10`；传递依赖与 native SQLite `3.49.1` 已记录，B-007 未弱化。
+- 隐私与语义：键盘 schema 只含聚合 allowlist；durable watermark 只在文件 flush 与 SQLite 目录 commit 均成功后公开，失败 seam 不发布最终水位。
+- 测试单调性：测试属性由 46 增至 58，统一实际运行 63 passed / 0 failed / 0 skipped；未删除、skip 或弱化既有测试。
+- 发布阻塞：native WAL 风险、物理突然断电与真实多设备/1000Hz 硬件仍明确阻塞最终发布，不因本里程碑提交解除。
+- 处置：仅暂存审查批准的 19 个文件，执行 cached diff/name 复核后提交 `feat: add storage durability foundation`；不 push、不建 PR、不开始下一切片。
