@@ -270,3 +270,18 @@
 - worker 验证证据：Bootstrap verify `.tools/verification/20260805-161811-975/verification.json` 为 passed；其脚本当前只统计 App+Acceptance 15 项，Input 测试由上述 solution 命令实际执行，C2 的 InputCore stage 将修复动态发现缺口。
 - 结果：三个已审查实现提交已进入主任务分支，硬件终验 B-003 仍未解除，不把自动化或 User32 注册测试冒充真实两键盘两鼠标/1000Hz 结论。
 - 下一步：集成 C4 最终五命令记录后，授权 C2 基于稳定 API 实现 `-Stage InputCore`、Acceptance 与红→绿反向验证。
+
+## 2026-08-05 Input Core 统一五命令终验
+
+- 分支/提交：`codex/input-core-work@a5aa404`；聚焦修复为独立提交 `fix: synchronize input fault shutdown`，未 amend `30814c0`/`1fa152a`，未 push。
+- `./.tools/dotnet/dotnet.exe restore InputTracker.sln`：退出码 0，5 个项目均为最新，无新增 NuGet。
+- `./.tools/dotnet/dotnet.exe build InputTracker.sln -c Release`：退出码 0，Input、App、两组普通测试与 Acceptance 全部生成成功，0 warnings / 0 errors。
+- `./.tools/dotnet/dotnet.exe test InputTracker.sln -c Release --no-build`：退出码 0；Input 23、App 10、Acceptance 5，合计 38 passed / 0 failed / 0 skipped。
+- 百万事件：本轮普通测试执行生产 `BoundedInputQueue` + worker 的 4 设备混合 1,000,000 事件断言，`produced=accepted=dequeued=sinkAcknowledged=1,000,000`，`overflow=parseErrors=outOfOrder=0`；sink 仅做计数与滚动 hash，不保存百万对象，不冒充硬件验收。
+- `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage Bootstrap`：退出码 0；SDK `10.0.302`，build 0 warnings / 0 errors，既有判卷范围 `total=15`（App 10 + Acceptance 5）、`acceptance=5`、`failed=0`、`skipped=0`、`gates=11`；Input 23 项由上一条全 solution 测试覆盖。
+- 判卷证据：ignored `.tools/verification/20260805-161811-975/verification.json`，状态 `VERIFY PASSED`；未提交运行产物或 `.tools/dotnet` junction。
+- `./.tools/dotnet/dotnet.exe publish InputTracker.sln -c Release -r win-x64 --self-contained true`：退出码 0；App 与 Input 发布到 ignored `.tools/build/**/win-x64/publish/`。
+- 边界检查：未修改 `tests/Acceptance/**`、`scripts/verify.ps1`、`LICENSE`、`.github`；无新依赖、管理员权限、驱动、服务、遥测或运行时网络。
+- 未验证：B-003 的真实两键盘两鼠标前后台 2 小时与 1000Hz 鼠标 30 分钟仍未执行；当前仅逐 `WM_INPUT` 使用 `GetRawInputData`，是否需要 `GetRawInputBuffer` buffered drain 等待真实终验数据决定。
+- 结果：Input Core 自动化实现、故障收口、App 最小接入和 Bootstrap 回归均通过；代码可交主任务集成，但最终硬件验收仍保持阻塞。
+- 下一步：提交本纯验证记录并回报主任务；不 push、不创建 PR。
