@@ -185,3 +185,16 @@
 - 理由：非管理员中文空格目录自检、`asInvoker/uiAccess=false`、真实窗口/托盘暂停恢复和无残留进程已形成互补证据；继续阻塞只会卡住 Input Core，不能增加当前环境可验证性。
 - 约束：合并不等于产品最终验收；B-005 必须继续保留。转 Ready 或更新 head 后重新核对 head SHA、`CLEAN` 与 checks，并且只能经 PR 合并。
 - 下一步：修正 B-005 与线程索引中的 draft 表述，提交并推送；等待新 head CI 全绿后转 Ready 并合并 PR #1。
+
+## 2026-08-05 Bootstrap PR 合并与 Input Core 启动
+
+- Bootstrap 最终 head：`codex/bootstrap@3bb0e97`；更新后的两项 `CI / windows` 均为 `SUCCESS`，GitHub 报告 `MERGEABLE/CLEAN`。
+- PR：`https://github.com/LinkStartR/InputTracker/pull/1` 已从 draft 转 Ready，并按 expected head 经 PR 合并；结果 `merged=true`，merge commit=`1fc617728ab22f03ac9c0339cddc8501886669f1`。
+- 命令：`git fetch origin main`、`git switch main`、`git merge --ff-only origin/main`、`git switch -c codex/input-core` 均退出码 0。
+- 分支：`codex/input-core` 从最新 `main@1fc6177` 创建；`git status --short --branch` 输出 `## codex/input-core`，工作树干净。
+- C4 只读评审：建议独立 `InputTracker.Input` 类库、单一 Win32 消息线程、单写单读有界 `Channel<T>`、后台工作线程；回调仅做 Raw Input 读取、最小规范化和 `TryWrite`。
+- 数据正确性：有界且非阻塞的入口无法对任意过载数学保证永不丢；支持负载内须证明零丢失，`TryWrite` 失败必须立即进入 `IntegrityFault` 并停采，禁止静默丢弃或继续伪报完整。
+- 设备边界：`hDevice` 仅为本次进程句柄；接口路径和硬件信息只作为可解释身份线索，长期重插映射及置信提示由 Storage Stats 承接，不伪称无序列号设备永久唯一。
+- 隐私边界：键盘公共事件仅含运行时设备 ID、物理扫描码、E0/E1、按下/抬起及聚合所需时间戳；禁止字符、键名、窗口、进程、焦点和持久化逐键顺序。
+- 阻塞保留：B-003、B-005 继续阻塞最终现场验收，但不阻塞 Input Core 自动化实现；本阶段不新增依赖、权限、驱动或服务。
+- 下一步：在隔离 worker 分支实现 Raw Input、设备生命周期、有界管线和百万事件零丢失/零乱序普通测试；主任务审查后集成到 `codex/input-core`，再交 C2 增加阶段判卷。
