@@ -326,3 +326,17 @@
 - 最终 solution 测试：退出码 0；Input 29、App 10、Acceptance 5，合计 44 passed / 0 failed / 0 skipped。
 - 边界：仅修改 Input registry、worker、普通 Input 测试和本进度记录；未修改 App/Storage、`tests/Acceptance/**`、`scripts/verify.ps1`、依赖、权限、隐私字段或阈值。
 - 下一步：提交独立兼容修补并回报主任务，不 push。
+
+## 2026-08-05 Input Core 组合集成与红→绿复核
+
+- 分支/提交：主任务 `codex/input-core@d3551d3`；C2 `25d3e11` 集成为 `03985a4`，C4 `b4efeb4` 集成为 `d3551d3`。两次 cherry-pick 均仅在 `PROGRESS.md` 冲突，主任务保留双方完整记录后继续；功能、测试与判卷文件无冲突。
+- `./.tools/dotnet/dotnet.exe restore InputTracker.sln`：退出码 0；5 项目恢复完成或已是最新。
+- `./.tools/dotnet/dotnet.exe build InputTracker.sln -c Release --no-restore`：退出码 0；5 项目成功，0 warnings / 0 errors。
+- `./.tools/dotnet/dotnet.exe test InputTracker.sln -c Release --no-build --no-restore`：退出码 0；Input 29、App 10、Acceptance 12，共 51 passed / 0 failed / 0 skipped。
+- 组合判卷：`scripts/verify.ps1 -Stage InputCore` 退出码 0；`total=51`、`acceptance=12`、`failed=0`、`skipped=0`、`gates=23`，最终证据 `.tools/verification/20260805-172008-554/verification.json`。
+- 乱序红→绿：`-Stage InputCore -InjectInputCoreOutOfOrder` 在 `.tools/verification/20260805-171748-522` 观察到乱序并明确退出 1；移除注入后 `.tools/verification/20260805-171829-815/verification.json` 为 51/12、23 gates 全绿，退出 0。
+- 绿色路径红→绿：`-Stage Bootstrap -InjectedDataPath C:\InputTracker-outside` 明确输出“越出程序目录”并退出 1；未修改工作树后用正式 InputCore 判卷复跑为 `.tools/verification/20260805-172008-554/verification.json`，退出 0。
+- self-contained publish 第 1 次：额外使用任务书未要求的 `--no-restore`，Input 项目缺少 win-x64 assets target，报 `NETSDK1047` 并退出 1；未改代码或阈值。
+- self-contained publish 第 2 次：按任务原参数 `./.tools/dotnet/dotnet.exe publish InputTracker.sln -c Release -r win-x64 --self-contained true` 重跑，完成 5 项目 RID restore，App 与 Input 生成 win-x64 publish 目录，退出 0。
+- 未验证：B-003 两键盘两鼠标前后台连续 2 小时、1000Hz 鼠标 30 分钟与 B-005 普通用户/UAC 现场证据仍未执行；当前自动证据继续明确 `hardwareTerminalStatus=not-run`、`releaseEligible=false`。
+- 下一步：由固定 C1 线程只读复核 `main@1fc6177..d3551d3`，通过后提交本记录、push `codex/input-core` 并创建 draft PR；禁止直接推 main。
