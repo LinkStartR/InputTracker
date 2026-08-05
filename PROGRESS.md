@@ -376,3 +376,13 @@
 - 新 CI：push run `30993971924` 的 `windows` 为 pass，用时 1m08s；pull_request run `30993976154` 的 `windows` 为 pass，用时 1m22s。
 - PR 状态：`gh pr view 2` 返回 head=`acf2fc2`、base=`1fc6177`、`isDraft=true`、`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，两个 status check 均 `SUCCESS`，无 review decision。
 - 下一步：提交并推送本结果记录，等待该文档提交触发的最后一轮 CI；若仍全绿且无 review thread，将 PR #2 转为 ready 并按主任务合并顺序合并到 main。
+
+## 2026-08-05 Input Core PR #2 合并与 Storage 分支建立
+
+- 最后 CI：结果记录提交 `281e4ae` 触发 push run `30994198402` 与 pull_request run `30994201711`，`windows` 均 pass，用时 1m05s / 1m13s。
+- 合并前状态：PR #2 head=`281e4ae`、base=`main@1fc6177`、`MERGEABLE/CLEAN`，两个 status checks 均 `SUCCESS`，0 reviews、0 review threads。
+- GitHub：PR #2 从 draft 转为 ready 后，以 expected head `281e4ae` 和 merge method `merge` 成功合并；GitHub 返回 merge SHA `f6136c31ff35461adadf3766f5e8e25e88a638e7`。
+- 本地同步：`git fetch origin` 取得 `main 1fc6177..f6136c3`；`git switch main` 后 `git merge --ff-only origin/main` 成功快进 18 commits，未直接推 main。
+- 新分支：确认无现有本地 `codex/storage-stats` 后，从最新 `main@f6136c3` 执行 `git switch -c codex/storage-stats`，退出码 0，工作树干净。
+- 结论：Input Core 自动化阶段完成并经已审查 PR 进入 main；B-003 真实多设备/1000Hz 与 B-005 普通用户现场证据仍保留，不因合并解除。
+- 下一步：先执行 Storage durable-ack/SQLite/轨迹块技术尖峰并固定契约，再实现任务 3；C2 仅在稳定 API 后追加 Storage 阶段 Acceptance，禁止预建 skip/todo。
