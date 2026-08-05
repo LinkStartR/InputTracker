@@ -367,3 +367,12 @@
 - 根因：CI 的非 RID restore/build 不能满足随后 solution 级 win-x64 publish 的 `--no-build` 前置条件；与组合验证中额外 `--no-restore` 的首次失败属于同一 RID assets 边界，不是产品采集逻辑或测试失败。
 - 修复：仅删除 `.github/workflows/ci.yml` Publish 步骤的 `--no-build`，使 CI 与任务书原命令一致并允许 publish 自行执行必要 RID restore/build；未改产品代码、依赖、测试、断言或阈值。
 - 下一步：运行本地原 publish 命令与 diff 检查，提交推送后等待新的 push/PR 两次 CI；旧失败 run 不重跑，因为新提交会自然触发新检查。
+
+## 2026-08-05 Input Core PR #2 CI 修复结果
+
+- 分支/提交：CI 修复与记录提交为 `acf2fc2 ci: restore RID assets before publish`，push 退出码 0，远端从 `b2ee5ea` 前进到 `acf2fc2`。
+- 本地复核：`./.tools/dotnet/dotnet.exe publish InputTracker.sln -c Release -r win-x64 --self-contained true` 退出码 0；Input 与 App 均生成 win-x64 publish 目录，`git diff --check` 退出码 0。
+- C1 只读复核：确认 workflow 唯一功能变更为删除 publish 的 `--no-build`；`tests/**`、`scripts/verify.ps1`、产品代码、依赖、权限、隐私和阈值均无变化，允许提交推送。
+- 新 CI：push run `30993971924` 的 `windows` 为 pass，用时 1m08s；pull_request run `30993976154` 的 `windows` 为 pass，用时 1m22s。
+- PR 状态：`gh pr view 2` 返回 head=`acf2fc2`、base=`1fc6177`、`isDraft=true`、`mergeable=MERGEABLE`、`mergeStateStatus=CLEAN`，两个 status check 均 `SUCCESS`，无 review decision。
+- 下一步：提交并推送本结果记录，等待该文档提交触发的最后一轮 CI；若仍全绿且无 review thread，将 PR #2 转为 ready 并按主任务合并顺序合并到 main。
