@@ -4,13 +4,13 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：任务 0 收尾；C1/C2/C3 已下发任务卡，C4-C7 等待依赖。
+- 当前阶段：Bootstrap 自动验收已集成并全绿；等待 C1 最终复查、push、draft PR 与人工托盘检查，C4-C7 等待依赖。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 常驻 | Git 状态、分支、PR | `codex/bootstrap`，`6fb492b` | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 已核验任务 0 提交；后续提交前复查 |
-| C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | 进行中 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | worker `codex/bootstrap-acceptance@2f8beb1` | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | 独占实现 bootstrap 判卷 |
-| C3 | Bootstrap | 最小 WPF、CI、单实例、托盘暂停 | 待审查 | `src/**`, 常规 `tests/**`, `.github/**`, solution/Directory 文件 | `codex/bootstrap@2f8beb1` | 是：`019fd04e-0c87-71e0-b2e1-bfa363a691df` | gpt-5.6-sol / xhigh | 首个架构与权限边界 | 子任务停在授权点，主任务接管并提交；C3 后续只读审查 |
+| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 常驻 | Git 状态、分支、PR | `codex/bootstrap@739e16a` | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 已核验任务 0；等待 Bootstrap 最终 staged 复查与 PR 协调 |
+| C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | 常驻 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | worker `7c44525`，主分支集成 `739e16a` | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | Bootstrap：11 passed、0 skipped、11 gates；绿色路径反向验证按预期退出 1 |
+| C3 | Bootstrap | 最小 WPF、CI、单实例、托盘暂停 | 自动验收通过 | `src/**`, 常规 `tests/**`, `.github/**`, solution/Directory 文件 | `codex/bootstrap@739e16a` | 是：`019fd04e-0c87-71e0-b2e1-bfa363a691df` | gpt-5.6-sol / xhigh | 首个架构与权限边界 | 自动门槛通过；普通用户可视托盘/UAC/截图仍待人工执行 |
 | C4 | Input Core | Raw Input、多设备、有界队列 | 待命 | 输入模块及单元/集成测试 | `codex/input-core` | 是：`019fd04e-0c7c-7c22-9135-1b53679805f1` | sol / high | 并发、设备身份、不丢事件 | 依赖 bootstrap PR 合并 |
 | C5 | Storage Stats | 轨迹块、SQLite、统计、导出、恢复删除 | 待命 | 存储统计模块及测试 | `codex/storage-stats` | 是：`019fd04e-21df-7482-a248-99deb1617a5f` | terra / high | 数据安全、迁移、时区 | 依赖 input-core PR 合并 |
 | C6 | UI | 页面、筛选、热力图、轨迹回放、主题 | 待命 | WPF UI 与视觉证据 | `codex/ui` | 是：`019fd04e-238f-7c11-b854-4b0e4298228f` | terra / high | 跨页面状态与缩放矩阵 | 依赖 storage-stats PR 合并 |
