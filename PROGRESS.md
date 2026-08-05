@@ -350,3 +350,11 @@
 - 冲突说明：当前 `git ls-files -u` 为空，`PROGRESS.md` 同时保留 Input Core、Storage 与 Acceptance 记录；因历史为线性 cherry-pick、无 merge commit，不能仅凭最终历史严格证明过去所有冲突都只发生在 `PROGRESS.md`，但当前未发现代码冲突残留。
 - 结论：允许推送当前完整 HEAD；建议 PR 标题 `Input Core: add Raw Input capture and acceptance gates`，正文必须明确真实多设备、1000Hz 与现场证据仍未通过。
 - 下一步：提交本审查记录，执行 `git push -u origin codex/input-core`，创建 draft PR，等待 CI 与 PR 状态复核。
+
+## 2026-08-05 Input Core 推送与 draft PR
+
+- 分支/提交：`codex/input-core@ea4496d`；`git push -u origin codex/input-core` 退出码 0，首次创建远端同名分支并设置 upstream；未直接推送 `main`。
+- PR：GitHub 创建 draft PR #2 `Input Core: add Raw Input capture and acceptance gates`，base=`main@1fc6177`，head=`codex/input-core@ea4496d`，URL `https://github.com/LinkStartR/InputTracker/pull/2`。
+- PR 输出：14 commits、42 changed files、4603 additions、55 deletions；创建时 GitHub 返回 `state=open`、`draft=true`、`mergeable=false`，该字段可能仍在异步计算，不能据此宣称可合并。
+- PR 声明：正文列出 51/12/23/0 的自动验证与两类红→绿，同时明确两键盘两鼠标 2 小时、1000Hz 30 分钟和普通用户/UAC 现场证据未完成，`releaseEligible=false`。
+- 下一步：提交并推送本 PR 记录；等待 GitHub CI 和 mergeability 稳定，检查审查线程后再决定是否可从 draft 转为 ready。Storage 分支不得在 Input Core PR 合并前开始实现。
