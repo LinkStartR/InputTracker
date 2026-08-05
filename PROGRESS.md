@@ -198,3 +198,15 @@
 - 隐私边界：键盘公共事件仅含运行时设备 ID、物理扫描码、E0/E1、按下/抬起及聚合所需时间戳；禁止字符、键名、窗口、进程、焦点和持久化逐键顺序。
 - 阻塞保留：B-003、B-005 继续阻塞最终现场验收，但不阻塞 Input Core 自动化实现；本阶段不新增依赖、权限、驱动或服务。
 - 下一步：在隔离 worker 分支实现 Raw Input、设备生命周期、有界管线和百万事件零丢失/零乱序普通测试；主任务审查后集成到 `codex/input-core`，再交 C2 增加阶段判卷。
+
+## 2026-08-05 C2 Input Core 判卷只读设计
+
+- 分支/提交：主工作区 `codex/input-core@0a31520`；C2 本轮只读，未建分支、改文件、提交或推送。
+- 基线：Bootstrap 的 `total>=11`、`acceptance>=5`、`gates>=11` 必须原样回归；Input Core 仅追加测试、gate 和基线下限，不得删减。
+- 自动判定：生产队列/worker 的百万事件精确计数、overflow/sink 异常 `IntegrityFault`、暂停原因叠加与 barrier、键盘公共 schema、鼠标全量字段、设备代次隔离与插拔生命周期。
+- 证据契约：C4 需暴露只读 diagnostics/state snapshot 与可替换 sink/registration seam，使判卷能区分“真正关入口并注销”与“只改 UI 文案”。
+- 隐私例外边界：`RAWKEYBOARD` 的 `VKey/Message` 仅可存在于唯一 private interop 布局文件并列入精确 allowlist；normalizer、公共 DTO 和产品调用不得传出或使用。
+- 硬件边界：自动测试注入已规范化事件，不是 Raw Input 物理验收；InputCore 阶段证据必须明确 `hardwareTerminalStatus=not-run`、`releaseEligible=false`，B-003 不解除。
+- 判卷规划：C4 API 稳定后由 C2 独占新增 5 组 Acceptance、硬件 runbook、性能 evidence schema、动态测试项目发现及 `-Stage InputCore`；不预建 skip/todo 测试。
+- 反向验证规划：仅在 Acceptance 注入器使用一次 out-of-order 变异，判卷必须因 `outOfOrder>0` 退出 1；移除注入后重跑全绿，生产代码和工作树不留变异。
+- 下一步：C4 完成稳定 API 和普通测试；主任务审查集成后再授权 C2 落地判卷，先回归 Bootstrap 后执行 InputCore 红→绿。
