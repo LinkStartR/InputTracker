@@ -625,3 +625,10 @@
 - 集成后快速 Release build raw exit 0：7 项目生成，0 warnings / 0 errors，MSBuild 4.41 秒；非 Spike Storage 回归 raw exit 0：45 passed / 0 failed / 0 skipped，996ms。
 - 结论：versioned mouse chunk、bounded builder、v2 catalog/migration、CRC32C/SHA-256 与 fail-closed recovery 已进入主任务分支；这不是最终 Storage、硬件或发布验收，B-003/B-005/B-007/B-008 与物理断电继续阻塞。
 - 下一步：从当前集成点开始独立实现 Storage 单 owner 写入/查询服务、设备观察、键盘日聚合、严格无抽样轨迹流与显式时区周期，优先打通首次可测试的真实 Input→Storage→UI 链路；C2 final Storage gate 等查询/导出/恢复/删除 API 稳定后落地。
+
+## 2026-08-09 GitHub 同步三次失败
+
+- 按 `github:yeet` 发布门槛核对：主工作树 clean，当前分支 `codex/storage-stats@40067f2`，远端为 `https://github.com/LinkStartR/InputTracker.git`；`gh 2.93.0` 已认证账号 `HorizonZhi`，相对 `origin/main` 为 7 笔已审查 Storage 提交。
+- 第一次 `git push -u origin codex/storage-stats` raw exit 1，54.4 秒后 HTTPS 连接被重置；第二次相同 push raw exit 1，21.4 秒后无法连接 GitHub 443；第三次只对该命令指定 HTTP/1.1，raw exit 1，21.4 秒后仍无法连接 GitHub 443。
+- 结果：连续三次同一外部阻断已写入 `BLOCKED.md` 顶部 B-009；本地提交与工作树未受影响，未创建远端分支或 draft PR，也未伪报成功。
+- 下一步：停止网络重试，继续不依赖 GitHub 的 Storage 写入/查询实现；外网恢复后从同一提交重试 push 并创建 draft PR。

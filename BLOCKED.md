@@ -1,5 +1,12 @@
 # BLOCKED
 
+## B-009：GitHub HTTPS 不可达，Storage 分支尚未 push / draft PR
+
+- 2026-08-09 在 `codex/storage-stats@40067f2`、push 前工作树 clean、`gh 2.93.0` 且账号 `HorizonZhi` 已认证的前提下，三次推送同一分支均失败；当前未提交内容仅为本阻塞记录与对应进度记录。
+- 第一次 `git push -u origin codex/storage-stats` raw exit 1，54.4 秒后报 `Recv failure: Connection was reset`；第二次同命令 raw exit 1，21.4 秒后报无法连接 `github.com:443`；第三次仅对单命令指定 HTTP/1.1，raw exit 1，21.4 秒后仍无法连接 `github.com:443`。
+- 影响：本地 7 笔 Storage 提交完整保留且已验证，但远端分支和 draft PR 尚未创建；禁止伪报 GitHub 同步完成。
+- 处置：停止继续刷网络，先做不依赖远端的 Storage 写入/查询切片；外网恢复后从同一 clean commit 重试 push，再按 `github:yeet` 流程创建 draft PR。该阻断不影响本地实现与测试。
+
 ## B-001：指定的 `main-child-workflow` Skill 不可用
 
 - 证据：可用 Skill 清单无此项；递归检查 `C:\Users\Administrator\.codex\skills` 亦无同名目录。
