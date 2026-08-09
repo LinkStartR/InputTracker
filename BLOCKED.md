@@ -61,3 +61,10 @@
 - 风险：若只凭 catalog 水位删除 spool，可能掩盖字段映射、范围、CRC/hash 或恢复差异；若长期保留全部副本，磁盘增长不可控。
 - 解除门槛：后续独立切片必须逐记录证明 spool 与已 durable chunk 在 device、calibration segment、sequence、monotonic timestamp、motion/virtual desktop、坐标、完整按钮位和双向 signed wheel 上完全等价，并证明 catalog 水位已提交且不存在 integrity fault。
 - 不可逆停点：任何清理前必须形成明确的保留期/范围/用户确认与断电恢复策略，并通过删除前后恢复测试和 C2 Acceptance seam。未达到门槛时只能报告重复占用，不得自动清理。
+
+## B-010：设备身份自动 merge / split 暂缓
+
+- 当前实现：Storage 只在接口指纹未变且硬件指纹一致时复用，或在具备 serial、且非 Bluetooth/RDP/virtual 的强身份跨接口复用；container 仅加强指纹，不能替代缺失 serial。其余情况保留歧义并创建独立持久 GUID，不伪称永久唯一。
+- 阻塞原因：两个历史 GUID 的 merge 会重写既有键盘聚合、mouse spool/chunk/catalog 外键与查询语义；split 同样需要可审计的记录归属规则。当前没有真实多设备证据、用户确认或可逆重写协议。
+- 当前处置：强身份若已映射到多个设备则 fail closed；不自动 merge、split、删除、移动或覆盖任何用户 spool/chunk/tmp/corrupt 文件。
+- 解除门槛：独立迁移设计、冲突预览、备份/回滚、逐记录归属证明、真实重复设备/重插测试及 C2 Acceptance seam 全部通过后，才可在用户明确确认下实施。

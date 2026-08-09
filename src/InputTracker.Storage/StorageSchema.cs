@@ -5,7 +5,7 @@ namespace InputTracker.Storage;
 
 internal static class StorageSchema
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public const string Version1Sql = """
         CREATE TABLE schema_migrations (
@@ -99,4 +99,39 @@ internal static class StorageSchema
 
     public static string Version2Checksum { get; } = Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(Version2Sql)));
+
+    public const string Version3Sql = """
+        ALTER TABLE devices ADD COLUMN identity_ambiguity INTEGER NOT NULL DEFAULT 1
+            CHECK (identity_ambiguity >= 0);
+        ALTER TABLE devices ADD COLUMN last_seen_utc_us INTEGER;
+
+        ALTER TABLE keyboard_daily ADD COLUMN make_code INTEGER
+            GENERATED ALWAYS AS (physical_key & 65535) VIRTUAL;
+        ALTER TABLE keyboard_daily ADD COLUMN is_e0 INTEGER
+            GENERATED ALWAYS AS ((physical_key >> 16) & 1) VIRTUAL;
+        ALTER TABLE keyboard_daily ADD COLUMN is_e1 INTEGER
+            GENERATED ALWAYS AS ((physical_key >> 17) & 1) VIRTUAL;
+
+        CREATE TABLE device_identity_mappings (
+            interface_fingerprint BLOB PRIMARY KEY CHECK (length(interface_fingerprint) = 32),
+            device_id TEXT NOT NULL REFERENCES devices(device_id),
+            kind INTEGER NOT NULL,
+            hardware_fingerprint BLOB NOT NULL CHECK (length(hardware_fingerprint) = 32),
+            stable_hardware_fingerprint BLOB CHECK (
+                stable_hardware_fingerprint IS NULL OR length(stable_hardware_fingerprint) = 32),
+            first_seen_utc_us INTEGER NOT NULL,
+            last_seen_utc_us INTEGER NOT NULL CHECK (last_seen_utc_us >= first_seen_utc_us)
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE INDEX device_identity_stable_hardware
+            ON device_identity_mappings(stable_hardware_fingerprint)
+            WHERE stable_hardware_fingerprint IS NOT NULL;
+        CREATE INDEX device_identity_device
+            ON device_identity_mappings(device_id);
+
+        PRAGMA user_version = 3;
+        """;
+
+    public static string Version3Checksum { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(Version3Sql)));
 }

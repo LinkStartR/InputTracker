@@ -675,3 +675,76 @@
 - 用户对已给出的完整首次流程回复“都OK”：启动与状态/隐私披露、标题栏关闭到托盘、托盘重开、暂停/恢复、窗口/托盘退出及退出后无残留均按用户现场反馈通过。
 - 证据边界：这是用户对清单的整体确认，主任务未远程目击、未取得截图或逐步日志；只记为首次桌面行为通过，不扩张为普通用户/UAC、Windows 注销/关机、视觉矩阵、Storage、统计、设备隔离或硬件性能验收。
 - 下一步：保留该 UI 提交和测试包；继续完成 Storage A 数据正确性修复，再生成首个带真实持久化与统计的测试包。
+## 2026-08-09 Storage service 第一检查点待代跑
+
+- 分支证据：从 detached `6a6a5ea232b04372c1539643b4f4a173a0138afc` 创建 `codex/storage-service-work`；创建后 `git status` 为 clean，HEAD 未变化。
+- 白名单增量：仅修改 `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**`、`docs/storage/**`、`PROGRESS.md`、`BLOCKED.md`；未触碰 App/Input 产品、Acceptance、`scripts/verify.ps1`、solution、依赖、`.github` 或 LICENSE。
+- contracts/schema：新增 Storage-native device/health/watermark/IntegrityFault/query DTO；产品程序集不引用 Input；schema current version 升为 v3，新增 checksum migration、hashed interface+hardware mapping、identity ambiguity/last-seen，并从既有 packed physical key 只读暴露 makeCode/E0/E1。
+- 设备映射：必须具备 serial 且非 Bluetooth/RDP/virtual 才可跨接口复用持久 GUID；container 仅加强指纹、不能替代缺失 serial；弱身份只复用未变接口；接口与硬件冲突 fail closed；raw interface/hardware/serial/container 不写 SQLite；alias 不参与身份匹配。
+- 暂缓边界：自动 merge/split 会重写既有历史，已新增 B-010；B-003/B-005/B-007/B-008/B-009、物理突然断电与真实硬件 `not-run` 均保持不变，未删除/移动/覆盖任何 spool/chunk/tmp/corrupt 文件。
+- 静态检查：`git diff --check` exit 0，仅有 Git 提示 LF 将按工作树配置转 CRLF；当前尚未 build/test，不伪报绿色，也未开始 ingestion/query。
+- 请求主任务首跑：`./.tools/dotnet/dotnet.exe build tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-restore`。
+- build 绿后请求主任务续跑：`./.tools/dotnet/dotnet.exe test tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-build --no-restore --filter "Category!=StorageSpike"`；两者全绿后本线程才继续 ingestion/query。完成前不 stage/commit/push。
+
+### 第一检查点代跑前置红证据
+
+- 首次 build 命令 raw exit 1，尚未进入 dotnet/MSBuild：新 worktree 缺少 `.tools/dotnet`。已确认 `.tools/.gitignore:1:*` 覆盖该目录，主任务随后创建 ignored junction，指向主仓库已有的本地 SDK；未新增跟踪依赖或修改项目文件。
+- junction 建立后，原 build 命令 raw exit 1：`NETSDK1004`，缺少 `.tools/obj/InputTracker.Storage.Tests/project.assets.json`；0 warnings / 1 error，MSBuild 0.52 秒。该红证据属于新 worktree 尚未 restore，未指向 Storage 源码错误，因此本线程不据此修改源码。
+- 当前动作：主任务正在执行目标项目 restore，完成后将原样重跑 `./.tools/dotnet/dotnet.exe build tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-restore`；结果尚未回报，不伪报绿色，也不开始 ingestion/query。
+
+### 第一检查点代跑红→绿完成
+
+- 前置红复核：`build --no-restore` raw exit 1，`NETSDK1004`，缺少 `.tools\obj\InputTracker.Storage.Tests\project.assets.json`，0 warnings / 1 error；未据此修改源码。
+- 目标 restore raw exit 0，wall 2.9 秒；`InputTracker.Input` 1.2 秒、`InputTracker.Storage` 1.23 秒、`InputTracker.Storage.Tests` 1.24 秒。
+- 冻结源码后重跑 `.\.tools\dotnet\dotnet.exe build tests\InputTracker.Storage.Tests\InputTracker.Storage.Tests.csproj -c Release --no-restore`：raw exit 0，wall 4.1 秒，MSBuild 3.72 秒，0 warnings / 0 errors。
+- 随后运行 `.\.tools\dotnet\dotnet.exe test tests\InputTracker.Storage.Tests\InputTracker.Storage.Tests.csproj -c Release --no-build --no-restore --filter "Category!=StorageSpike"`：raw exit 0，wall 2.9 秒；60 passed / 0 failed / 0 skipped / 60 total，测试持续 1 秒。
+- 结论：第一检查点已形成明确的环境前置红→restore→同一冻结源码 build/test 全绿证据；当前继续静态自审，暂不开始 ingestion/query，不 stage/commit/push。
+
+### 第一检查点静态自审窄修待复跑
+
+- 静态审查发现既有数据库/测试编码为 mouse `kind=0`、keyboard `kind=1`、旧 confidence `0`；新增 contract 曾把 `0` 命名为 `Unknown` 并把 mouse 设为 `2`，会使 `ListDevices` 错读已存在的 mouse 行。该问题未被只使用新 keyboard observation 的首轮测试覆盖。
+- 窄修只调整 `StorageDeviceKind` 为 mouse `0` / keyboard `1`，并为 `StorageDeviceIdentityConfidence` 增加 legacy `Unknown=0`；新增真实 SQLite 回归同时读取旧式 mouse/keyboard 行，文档冻结该数值兼容约定。未修改 schema、映射算法、durability/chunk 或 ingestion/query。
+- 同一轮静态审查还发现仅有 container、没有 serial 时曾可跨接口复用，违反“无序列不伪称永久唯一”；现已收紧为 serial 必需，container 只加强指纹，并新增无 serial/container-only 回归。
+- 因首轮 60 项绿色早于本轮窄修，只能保留为修前红→绿快照，不能充当当前源码的最终绿色。请求主任务在当前源码上重跑同一 Release build 与非 `StorageSpike` tests；预期测试总数增至 62。完成前不 stage/commit/push。
+
+### 第一检查点源码冻结可复跑
+
+- 两处窄修完成后，产品与测试源码现已冻结：保留既有 kind 编码 mouse `0` / keyboard `1` 与 legacy confidence `Unknown=0`；跨接口永久复用必须具备 serial，container 不能替代缺失 serial，Bluetooth/RDP/virtual 仍为 transient/ambiguous。
+- 静态检查：`git diff --check` exit 0，仅有工作树 CRLF 提示；`git status --short` 共 10 个意图文件，10/10 均位于授权白名单，白名单外 0；新增 contracts/catalog 中未发现 Input 引用、VKey/message/window/process、网络、注册表、服务或遥测字段。
+- B-010 已与实现同步：不自动 merge/split；多 GUID 强身份冲突 fail closed；不删除、移动、覆盖 spool/chunk/tmp/corrupt；解除仍需独立迁移、预览、备份/回滚、归属证明、真实设备与 C2 Acceptance seam。
+- 冻结信号：主任务现在可以在当前源码上重跑 Release build 与预期 62 项非 `StorageSpike` tests。复跑结果回报前不再修改源码、不进入 ingestion/query、不 stage/commit/push。
+
+### 第一检查点窄修后冻结复跑全绿
+
+- 当前冻结源码 Release build raw exit 0，wall 1.6 秒，MSBuild 1.23 秒，0 warnings / 0 errors。
+- 当前冻结源码非 `StorageSpike` tests raw exit 0，wall 2.6 秒；62 passed / 0 failed / 0 skipped / 62 total，测试持续 1 秒。
+- 结论：kind 数值兼容与“无 serial 不跨接口永久复用”两处窄修已在同一冻结源码上完成 build/test 复跑闭环；第一检查点当前权威快照为 build 0w/0e、nonSpike 62/0/0。产品与测试继续冻结，C2 正在只读审阅；审阅和主任务放行前不进入 ingestion/query，不 stage/commit/push。
+
+### 下一切片待放行计划
+
+- 下一最小切片只实现 Storage 单 owner ingestion 与生命周期边界，不同时展开查询：一个 `StorageService` 独占现有 `StorageDatabase` writer/checkpointer（继续 `Pooling=false`），公开 health、durable watermark、IntegrityFault，并在 pause/session lock/suspend/device/calibration/stop 边界完成封口或 fail closed。
+- 键盘侧只维护运行时 open-hold 状态并提交现有日聚合：makeCode/E0/E1、重复 down/up、跨午夜、显式 Windows 时区与 DST、crash-open hold 策略分别新增普通测试；不持久化文字、VKey/message、顺序、精确事件时间、窗口或进程。
+- 鼠标侧接现有 spool/builder/catalog 全字段无抽样路径；设备/校准/暂停/停止边界封口，只有 file flush 与 SQLite catalog commit 都成功后推进公开水位，任何 commit 失败立即停止接受并进入 IntegrityFault；不清理或改写既有 spool/chunk/tmp/corrupt。
+- 该 ingestion 切片 build/nonSpike 全绿并经 C2 只读复核后，再开独立 read-query 切片实现显式 Windows 时区 day/week/month/year 半开区间、逐设备键盘聚合及按设备+UTC 范围的 calibration-mapped mouse 流式读取。当前仅规划，等待主任务明确放行，不创建文件、不改源码。
+
+### C2 第一检查点提交前四项窄硬化
+
+- C2 固定快照允许后续进入 ingestion/query，但要求首个相关提交前补齐四项数据正确性证据；主任务将其前移为第一检查点最后一次窄硬化。本轮只修改 Storage catalog、普通 Storage tests、Storage 文档与进度，不进入 ingestion/query，不改 schema SQL，不 stage/commit/push。
+- v2 legacy 数据：新增真实 v2 数据库，预置 device 与含 press/hold/packed physical_key 的 `keyboard_daily` 行；迁移 v3 后验证原行、makeCode/E0/E1 generated 列及计数/时长完整，再调用新 `UpsertKeyboardDaily` 同 key 累加并断言仍为单行。
+- reopen 身份：新增 device mapping 与 alias 关闭数据库后重开、换接口但强 serial 仍复用同一持久 GUID 且 alias 保留的真实 SQLite/FS 回归。
+- corrupt device fail closed：统一 `ReadDevice` 出口严格拒绝未定义 kind、未定义 confidence 和任何未知 ambiguity bit；三个真实数据库 theory case 直接写入非法值后均要求 `ListDevices` 抛出受控 `InvalidDataException`，不重建旧表、不静默修复用户数据。
+- privacy DB/WAL：扩展扫描到开放连接下的 SQLite database/WAL/SHM，禁止 raw interface、HardwareIds、serial、ContainerId 出现；同时证明用户输入 alias 作为可见元数据原样持久化，但不参与 identity fingerprint/matching。
+- 测试单调性：新增 v2 legacy migration/upsert、reopen mapping/alias、三类 corrupt enum/flags 共 5 个 nonSpike case；现有用例不删除、不 skip，预期 nonSpike 总数由 62 增至 67。完成静态自审后冻结，请主任务代跑同一 Release build 与 67 项 nonSpike tests。
+
+### C2 四项窄硬化源码冻结可代跑
+
+- 静态自审完成：`StorageDeviceInfo` 仅由统一 `ReadDevice(SqliteDataReader)` 出口构造，非法 kind/confidence/ambiguity 均在返回任何设备列表或单设备结果前 fail closed；v2 seed 明确断言迁移后 schema v3、原聚合单行完整、generated make/E0/E1 正确及新 Upsert 同 key 不分裂。
+- privacy/reopen 边界完成：关闭并 reopen 后强 serial 换接口复用同 GUID 且 alias 保留；开放连接下扫描 SQLite database/WAL/SHM，不允许 raw interface/HardwareIds/serial/ContainerId，且证明 alias 是按用户输入原样持久化的可见元数据。
+- 静态检查：`git diff --check` exit 0，仅有 CRLF 工作树提示；10/10 意图文件均在授权白名单，白名单外 0；新增/修改测试无 skip/TODO/NotImplemented，产品无 Input、网络、注册表或遥测引用。
+- 冻结信号：产品、测试和 Storage 文档现已冻结；预期非 `StorageSpike` 为 67 passed / 0 failed / 0 skipped。请求主任务依次代跑 `.\.tools\dotnet\dotnet.exe build tests\InputTracker.Storage.Tests\InputTracker.Storage.Tests.csproj -c Release --no-restore`，再跑 `.\.tools\dotnet\dotnet.exe test tests\InputTracker.Storage.Tests\InputTracker.Storage.Tests.csproj -c Release --no-build --no-restore --filter "Category!=StorageSpike"`。结果回报前不再改源码、不进入 ingestion/query、不 stage/commit/push。
+
+### C2 四项窄硬化冻结复跑权威全绿
+
+- 当前冻结源码 Release build raw exit 0，wall 1.6 秒，MSBuild 1.14 秒，0 warnings / 0 errors。
+- 当前冻结源码非 `StorageSpike` tests raw exit 0，wall 2.9 秒；67 passed / 0 failed / 0 skipped / 67 total，测试持续 1 秒。
+- 结论：v2 legacy migration/upsert、reopen mapping/alias、三类 corrupt device fail-closed 与 DB/WAL privacy 四项窄硬化已在同一冻结源码上完成权威 build/test 闭环。继续保持产品、测试与 Storage 文档冻结，不进入 ingestion/query，不 stage/commit/push，等待主任务最终白名单复核与提交指令。

@@ -13,7 +13,7 @@ public sealed class StorageDatabaseTests
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
         Assert.StartsWith(directory.Path, database.Layout.DatabasePath, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(2, database.SchemaVersion);
+        Assert.Equal(3, database.SchemaVersion);
         Assert.Equal("wal", database.JournalMode, ignoreCase: true);
         Assert.Equal(2, database.Synchronous);
         Assert.True(database.ForeignKeysEnabled);
@@ -31,7 +31,7 @@ public sealed class StorageDatabaseTests
         {
             connection.Open();
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 3;";
+            command.CommandText = "PRAGMA user_version = 4;";
             command.ExecuteNonQuery();
         }
 
@@ -59,7 +59,7 @@ public sealed class StorageDatabaseTests
     }
 
     [Fact]
-    public void VersionOneDatabaseMigratesToVersionTwoWithRecordedChecksum()
+    public void VersionOneDatabaseMigratesToCurrentVersionWithRecordedChecksums()
     {
         using var directory = new TemporaryDirectory();
         StorageLayout layout = StorageLayout.Create(directory.Path);
@@ -79,11 +79,136 @@ public sealed class StorageDatabaseTests
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
-        Assert.Equal(2, database.SchemaVersion);
+        Assert.Equal(3, database.SchemaVersion);
         using SqliteCommand checksum = database.Connection.CreateCommand();
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 2;";
         Assert.Equal(StorageSchema.Version2Checksum, (string)checksum.ExecuteScalar()!);
+        checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 3;";
+        Assert.Equal(StorageSchema.Version3Checksum, (string)checksum.ExecuteScalar()!);
         Assert.Contains("mouse_chunks", database.ReadSchemaColumns().Keys);
+        Assert.Contains("device_identity_mappings", database.ReadSchemaColumns().Keys);
+    }
+
+    [Fact]
+    public void VersionTwoDatabaseMigratesToVersionThreeWithoutReplacingExistingTables()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = StorageSchema.Version1Sql;
+            command.ExecuteNonQuery();
+            command.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (1, 'initial-storage-schema', $checksum, 1);
+                """;
+            command.Parameters.AddWithValue("$checksum", StorageSchema.Version1Checksum);
+            command.ExecuteNonQuery();
+            command.Parameters.Clear();
+            command.CommandText = StorageSchema.Version2Sql;
+            command.ExecuteNonQuery();
+            command.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (2, 'mouse-chunk-catalog', $checksum, 2);
+                """;
+            command.Parameters.AddWithValue("$checksum", StorageSchema.Version2Checksum);
+            command.ExecuteNonQuery();
+        }
+
+        using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
+
+        Assert.Equal(3, database.SchemaVersion);
+        Assert.Contains("device_identity_mappings", database.ReadSchemaColumns().Keys);
+        using SqliteCommand checksum = database.Connection.CreateCommand();
+        checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 3;";
+        Assert.Equal(StorageSchema.Version3Checksum, (string)checksum.ExecuteScalar()!);
+    }
+
+    [Fact]
+    public void VersionTwoLegacyKeyboardAggregateMigratesAndUpsertsWithoutRowSplit()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid deviceId = Guid.NewGuid();
+        const int physicalKey = 30 | (1 << 16);
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = StorageSchema.Version1Sql;
+            command.ExecuteNonQuery();
+            command.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (1, 'initial-storage-schema', $checksum, 1);
+                """;
+            command.Parameters.AddWithValue("$checksum", StorageSchema.Version1Checksum);
+            command.ExecuteNonQuery();
+            command.Parameters.Clear();
+            command.CommandText = StorageSchema.Version2Sql;
+            command.ExecuteNonQuery();
+            command.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (2, 'mouse-chunk-catalog', $checksum, 2);
+                """;
+            command.Parameters.AddWithValue("$checksum", StorageSchema.Version2Checksum);
+            command.ExecuteNonQuery();
+            command.Parameters.Clear();
+            command.CommandText = """
+                INSERT INTO devices(device_id, kind, identity_confidence, created_utc_us)
+                VALUES ($device, 1, 0, 3);
+                INSERT INTO keyboard_daily(
+                    device_id, physical_key, capture_local_date, time_zone_id, press_count, hold_duration_us)
+                VALUES ($device, $key, '2026-11-01', 'Pacific Standard Time', 4, 5000);
+                """;
+            command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            command.Parameters.AddWithValue("$key", physicalKey);
+            command.ExecuteNonQuery();
+        }
+
+        using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
+        Assert.Equal(3, database.SchemaVersion);
+        using (SqliteCommand migrated = database.Connection.CreateCommand())
+        {
+            migrated.CommandText = """
+                SELECT make_code, is_e0, is_e1, press_count, hold_duration_us
+                FROM keyboard_daily
+                WHERE device_id = $device;
+                """;
+            migrated.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            using SqliteDataReader reader = migrated.ExecuteReader();
+            Assert.True(reader.Read());
+            Assert.Equal(30, reader.GetInt32(0));
+            Assert.Equal(1, reader.GetInt32(1));
+            Assert.Equal(0, reader.GetInt32(2));
+            Assert.Equal(4, reader.GetInt64(3));
+            Assert.Equal(5000, reader.GetInt64(4));
+            Assert.False(reader.Read());
+        }
+
+        database.UpsertKeyboardDaily(
+            deviceId,
+            makeCode: 30,
+            isE0: true,
+            isE1: false,
+            captureLocalDate: new DateOnly(2026, 11, 1),
+            timeZoneId: "Pacific Standard Time",
+            pressCount: 2,
+            holdDurationMicroseconds: 3000);
+
+        using SqliteCommand accumulated = database.Connection.CreateCommand();
+        accumulated.CommandText = """
+            SELECT COUNT(*), SUM(press_count), SUM(hold_duration_us)
+            FROM keyboard_daily
+            WHERE device_id = $device AND make_code = 30 AND is_e0 = 1 AND is_e1 = 0;
+            """;
+        accumulated.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        using SqliteDataReader accumulatedReader = accumulated.ExecuteReader();
+        Assert.True(accumulatedReader.Read());
+        Assert.Equal(1, accumulatedReader.GetInt64(0));
+        Assert.Equal(6, accumulatedReader.GetInt64(1));
+        Assert.Equal(8000, accumulatedReader.GetInt64(2));
     }
 
     [Fact]
@@ -102,6 +227,25 @@ public sealed class StorageDatabaseTests
 
         InvalidDataException error = Assert.Throws<InvalidDataException>(() => StorageDatabase.Open(layout, new FakeClock()));
         Assert.Contains("migration 2", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("checksum", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void VersionThreeChecksumMismatchFailsClosed()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "UPDATE schema_migrations SET checksum = 'tampered' WHERE version = 3;";
+            command.ExecuteNonQuery();
+        }
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => StorageDatabase.Open(layout, new FakeClock()));
+        Assert.Contains("migration 3", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("checksum", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 

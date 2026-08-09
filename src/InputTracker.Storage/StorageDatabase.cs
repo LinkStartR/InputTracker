@@ -99,14 +99,32 @@ public sealed class StorageDatabase : IDisposable
         command.ExecuteNonQuery();
     }
 
+    public StorageDeviceResolution ObserveDevice(
+        StorageDeviceObservation observation,
+        long observedUtcMicroseconds) =>
+        StorageDeviceCatalog.Observe(this, observation, observedUtcMicroseconds);
+
+    public IReadOnlyList<StorageDeviceInfo> ListDevices() => StorageDeviceCatalog.ReadAll(this);
+
+    public StorageDeviceInfo SetDeviceAlias(Guid deviceId, string? alias) =>
+        StorageDeviceCatalog.SetAlias(this, deviceId, alias);
+
     public void UpsertKeyboardDaily(
         Guid deviceId,
-        int physicalKey,
+        ushort makeCode,
+        bool isE0,
+        bool isE1,
         DateOnly captureLocalDate,
         string timeZoneId,
         long pressCount,
         long holdDurationMicroseconds)
     {
+        if (isE0 && isE1)
+        {
+            throw new ArgumentException("A physical key cannot use both E0 and E1 prefixes.");
+        }
+
+        int physicalKey = makeCode | (isE0 ? 1 << 16 : 0) | (isE1 ? 1 << 17 : 0);
         using SqliteCommand command = _connection.CreateCommand();
         command.CommandText = """
             INSERT INTO keyboard_daily(
@@ -270,6 +288,24 @@ public sealed class StorageDatabase : IDisposable
         }
 
         VerifyMigrationChecksum(connection, 2, StorageSchema.Version2Checksum);
+        if (version == 2)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Execute(connection, StorageSchema.Version3Sql, transaction);
+            using SqliteCommand record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (3, 'storage-service-contracts', $checksum, $applied);
+                """;
+            record.Parameters.AddWithValue("$checksum", StorageSchema.Version3Checksum);
+            record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
+            record.ExecuteNonQuery();
+            transaction.Commit();
+            version = 3;
+        }
+
+        VerifyMigrationChecksum(connection, 3, StorageSchema.Version3Checksum);
     }
 
     private static void VerifyMigrationChecksum(SqliteConnection connection, int version, string expected)
