@@ -632,3 +632,11 @@
 - 第一次 `git push -u origin codex/storage-stats` raw exit 1，54.4 秒后 HTTPS 连接被重置；第二次相同 push raw exit 1，21.4 秒后无法连接 GitHub 443；第三次只对该命令指定 HTTP/1.1，raw exit 1，21.4 秒后仍无法连接 GitHub 443。
 - 结果：连续三次同一外部阻断已写入 `BLOCKED.md` 顶部 B-009；本地提交与工作树未受影响，未创建远端分支或 draft PR，也未伪报成功。
 - 下一步：停止网络重试，继续不依赖 GitHub 的 Storage 写入/查询实现；外网恢复后从同一提交重试 push 并创建 draft PR。
+
+## 2026-08-09 Storage Service 替代线程启动
+
+- 原 C5 `Storage Stats`（`019fd04e-21df-7482-a248-99deb1617a5f`）在 chunk 完成后接收下一切片时连续三次 systemError，第三次连只读 Git 探针都未执行；确认旧 worktree 仍 clean 且停在 `codex/storage-chunks-work@ae21717`，未污染新切片。
+- 主任务创建同项目替代线程 `Storage Service`（`019fe6b9-dc32-7fd0-9c36-b8b2514a67af`），worktree `C:\Users\Administrator\.codex\worktrees\51f2\InputTracker 20260704` 已在界面可见且可定位；推荐 `terra/high`，环境使用可用默认模型与 high 思考。
+- 分支原始结果：创建前 detached `6a6a5ea`、工作树 clean；`git switch -c codex/storage-service-work` 成功，创建后分支为 `codex/storage-service-work`、HEAD `6a6a5ea232b04372c1539643b4f4a173a0138afc`、工作树 clean。
+- 范围：仅 Storage 产品/普通测试/docs 与 PROGRESS/BLOCKED；第一检查点为 storage-native contracts、schema v3 与设备映射，禁止重做 durability/chunk、App/Input/Acceptance/verify/依赖变更。
+- 下一步：替代线程完成第一检查点后请求主任务代跑 build 与非 Spike tests；绿后继续单 owner ingestion、四周期键盘聚合和严格无抽样鼠标查询。
