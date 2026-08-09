@@ -163,6 +163,24 @@ public sealed class StorageDatabase : IDisposable
             flush.FlushedLength);
     }
 
+    public MouseChunkDurableWatermark CommitMouseChunk(
+        Guid chunkId,
+        Guid deviceId,
+        long calibrationSegmentId,
+        IReadOnlyList<MouseSpoolRecord> records,
+        long createdUtcMicroseconds) => MouseChunkCatalog.Commit(
+            this,
+            chunkId,
+            deviceId,
+            calibrationSegmentId,
+            records,
+            createdUtcMicroseconds);
+
+    public IReadOnlyList<MouseChunkCatalogEntry> ReadMouseChunkCatalog() => MouseChunkCatalog.ReadAll(this);
+
+    public MouseChunkRecoveryReport RecoverMouseChunks(long recoveredUtcMicroseconds) =>
+        MouseChunkCatalog.Recover(this, recoveredUtcMicroseconds);
+
     internal SqliteConnection Connection => _connection;
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> ReadSchemaColumns()
@@ -230,13 +248,36 @@ public sealed class StorageDatabase : IDisposable
             record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
             record.ExecuteNonQuery();
             transaction.Commit();
-            return;
+            version = 1;
         }
 
-        string actual = Scalar<string>(connection, "SELECT checksum FROM schema_migrations WHERE version = 1;");
-        if (!string.Equals(actual, StorageSchema.Version1Checksum, StringComparison.Ordinal))
+        VerifyMigrationChecksum(connection, 1, StorageSchema.Version1Checksum);
+        if (version == 1)
         {
-            throw new InvalidDataException("Storage schema migration 1 checksum does not match the compiled migration.");
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Execute(connection, StorageSchema.Version2Sql, transaction);
+            using SqliteCommand record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (2, 'mouse-chunk-catalog', $checksum, $applied);
+                """;
+            record.Parameters.AddWithValue("$checksum", StorageSchema.Version2Checksum);
+            record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
+            record.ExecuteNonQuery();
+            transaction.Commit();
+            version = 2;
+        }
+
+        VerifyMigrationChecksum(connection, 2, StorageSchema.Version2Checksum);
+    }
+
+    private static void VerifyMigrationChecksum(SqliteConnection connection, int version, string expected)
+    {
+        string actual = Scalar<string>(connection, $"SELECT checksum FROM schema_migrations WHERE version = {version};");
+        if (!string.Equals(actual, expected, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"Storage schema migration {version} checksum does not match the compiled migration.");
         }
     }
 

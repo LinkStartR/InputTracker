@@ -13,6 +13,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\InputTracker.Input\InputTracker.Input.csproj" />
     <ProjectReference Include="..\..\src\InputTracker.Storage\InputTracker.Storage.csproj" />
   </ItemGroup>
 </Project>

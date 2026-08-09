@@ -5,7 +5,7 @@ namespace InputTracker.Storage.Tests;
 public sealed class StorageDatabaseTests
 {
     [Fact]
-    public void OpenCreatesProgramLocalWalDatabaseAndVersionOneSchema()
+    public void OpenCreatesProgramLocalWalDatabaseAndCurrentSchema()
     {
         using var directory = new TemporaryDirectory();
         StorageLayout layout = StorageLayout.Create(directory.Path);
@@ -13,7 +13,7 @@ public sealed class StorageDatabaseTests
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
         Assert.StartsWith(directory.Path, database.Layout.DatabasePath, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, database.SchemaVersion);
+        Assert.Equal(2, database.SchemaVersion);
         Assert.Equal("wal", database.JournalMode, ignoreCase: true);
         Assert.Equal(2, database.Synchronous);
         Assert.True(database.ForeignKeysEnabled);
@@ -31,7 +31,7 @@ public sealed class StorageDatabaseTests
         {
             connection.Open();
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 2;";
+            command.CommandText = "PRAGMA user_version = 3;";
             command.ExecuteNonQuery();
         }
 
@@ -59,6 +59,76 @@ public sealed class StorageDatabaseTests
     }
 
     [Fact]
+    public void VersionOneDatabaseMigratesToVersionTwoWithRecordedChecksum()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = StorageSchema.Version1Sql;
+            command.ExecuteNonQuery();
+            command.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (1, 'initial-storage-schema', $checksum, 1);
+                """;
+            command.Parameters.AddWithValue("$checksum", StorageSchema.Version1Checksum);
+            command.ExecuteNonQuery();
+        }
+
+        using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
+
+        Assert.Equal(2, database.SchemaVersion);
+        using SqliteCommand checksum = database.Connection.CreateCommand();
+        checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 2;";
+        Assert.Equal(StorageSchema.Version2Checksum, (string)checksum.ExecuteScalar()!);
+        Assert.Contains("mouse_chunks", database.ReadSchemaColumns().Keys);
+    }
+
+    [Fact]
+    public void VersionTwoChecksumMismatchFailsClosed()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "UPDATE schema_migrations SET checksum = 'tampered' WHERE version = 2;";
+            command.ExecuteNonQuery();
+        }
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => StorageDatabase.Open(layout, new FakeClock()));
+        Assert.Contains("migration 2", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("checksum", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MouseChunkSchemaContainsOnlyStorageIdentityRangeAndIntegrityFields()
+    {
+        using var directory = new TemporaryDirectory();
+        using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
+
+        IReadOnlyList<string> columns = database.ReadSchemaColumns()["mouse_chunks"];
+
+        Assert.Equal(
+            [
+                "chunk_id", "device_id", "calibration_segment_id", "relative_path",
+                "first_sequence", "last_sequence", "first_monotonic_timestamp", "last_monotonic_timestamp",
+                "event_count", "canonical_length", "compressed_length", "file_length",
+                "compressed_crc32c", "canonical_sha256", "created_utc_us", "recovered"
+            ],
+            columns);
+        string joined = string.Join('|', columns);
+        foreach (string forbidden in new[] { "interface", "alias", "window", "process", "keyboard", "physical_key", "time_zone_id" })
+        {
+            Assert.DoesNotContain(forbidden, joined, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void KeyboardSchemaContainsOnlyAggregateFields()
     {
         using var directory = new TemporaryDirectory();
@@ -69,7 +139,7 @@ public sealed class StorageDatabaseTests
         Assert.Equal(
             ["device_id", "physical_key", "capture_local_date", "time_zone_id", "press_count", "hold_duration_us"],
             columns);
-        string schema = string.Join('|', database.ReadSchemaColumns().SelectMany(item => item.Value));
+        string schema = string.Join('|', columns);
         foreach (string forbidden in new[] { "text", "character", "vkey", "window", "process", "focus", "sequence", "key_down", "key_up", "event_timestamp" })
         {
             Assert.DoesNotContain(forbidden, schema, StringComparison.OrdinalIgnoreCase);

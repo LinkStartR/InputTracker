@@ -558,3 +558,61 @@
 - 单实例契约风险：当前 mutex 按程序目录分域，两个绿色副本可并行采集；后续必须明确保留该行为或改为用户级唯一，不能静默重复统计。
 - 当前全部真实锁屏/休眠、普通用户、Startup、ProcMon/网络与卸载残留检查为 not-run；B-003/B-005/B-007 未解除。
 - 下一步：在 UI 前置合并后，C7 从最新 main 开独立 portable 分支实现首次告知、系统暂停桥、Startup 窄能力和卸载说明。
+## 2026-08-05 Storage mouse chunk 第一小块
+
+- 新增 version 1 chunk contract、delta/zigzag/varint canonical payload、BCL Brotli、compressed CRC32C 与 canonical SHA-256，以及严格 reader；真实 FS 测试使用 Input Core 的 relative/absolute、virtual desktop、完整 10-bit button mask、Int32 坐标极值与 signed wheel 极值证明逐字段映射。
+- 主任务代跑目标 build 退出码 0：Input/Storage/Storage.Tests 成功，0 warnings / 0 errors，用时 4.73 秒；`MouseChunkCodecTests` 退出码 0：3 passed / 0 failed / 0 skipped，用时 67ms。
+- 只读收口发现 canonical decoder 接受 overlong varint，且初版 `CompressionLevel.SmallestSize` 不符合低后台 CPU 优先级。已最小修正为拒绝非最短 varint、增加端到端 fail-closed 文件测试，并改为 `CompressionLevel.Fastest`；事件数、字段和压缩格式标识不变。
+- 收口后沙箱目标 build 再次在 Windows SDK 探测时报既知 `MSB4184`（拒绝读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs`），未进入源码编译；已请求主任务代跑 4-test codec 小块，同时继续 schema v2/catalog/recovery。
+- 主任务代跑收口后目标 build 退出码 0：Input/Storage/Storage.Tests 成功，0 warnings / 0 errors，用时 1.79 秒；`MouseChunkCodecTests` 退出码 0：4 passed / 0 failed / 0 skipped，用时 65ms。canonical 唯一编码与 `Fastest` 低 CPU 策略已进入绿基线。
+
+## 2026-08-09 Storage mouse chunk catalog 首轮编译红
+
+- 主任务目标 build 已进入真实编译并退出码 1：0 warnings / 1 error，用时 3.21 秒；`MouseChunkCatalog.cs(339,13)` 报 `CS1739`，具名参数 `recovered` 与 record 构造参数 `Recovered` 大小写不符。
+- 最小修复仅把该具名参数改为 `Recovered: true`；未改变 schema、catalog、recovery 或断言语义。继续完成路径 containment、区间重叠、独立 orphan 恢复与 bounded sealer 后再请求代跑。
+
+## 2026-08-09 Storage mouse chunk 第二检查点绿
+
+- 沙箱目标 build 仍仅在 Windows SDK 探测时报既知 `MSB4184`，未进入源码编译；主任务按相同源码快照代跑目标 build 退出码 0，Input/Storage/Storage.Tests 三项目生成，0 warnings / 0 errors，MSBuild 2.55 秒（外层 2.9 秒）。
+- `FullyQualifiedName~MouseChunk` 定向测试退出码 0：26 passed / 0 failed / 0 skipped，测试持续 871ms（外层 2.5 秒）。该绿快照覆盖 codec、路径 containment、commit/recovery 区间与 FK、独立 orphan 恢复、DB 失败后补索引、catalog 重叠、builder 边界、迁移 schema 方法；随后新增的精确 privacy 反射/source allowlist 尚待下一轮构建回归。
+- 后续只读预审契约已记录但不在本切片实现：Storage 继续不引用 Input，由 App adapter 映射 storage-native DTO；下一独立切片提供单 owner 串行写入/查询、设备观察、键盘 transition、完整鼠标与生命周期 boundary、health/watermark、范围聚合、严格顺序无抽样流、显式时区周期及 makeCode+prefix。UI 不得另开 checkpoint-capable 连接。
+
+## 2026-08-09 Storage privacy 精确范围首轮红
+
+- 主任务目标 build 退出码 0，0 warnings / 0 errors，MSBuild 1.23 秒；随后非 Spike Storage 回归退出码 1：43 total，41 passed / 2 failed / 0 skipped，测试 duration 1 秒、进程 wall 2.8 秒。两处均为新增隐私测试范围误报：键盘聚合测试扫描了新增且合法的 mouse sequence 列；SQL allowlist 把 SQLite `TEXT` 类型关键字当成名为 `Text` 的持久字段。
+- 最小修正不删除或放宽任何禁止项：键盘禁字段仍完整检查 `keyboard_daily` 的六列；chunk SQL 禁止项改为精确匹配“禁止列名 + SQLite 类型”，公共 contract 反射 allowlist 与产品源码 identifier 扫描保持不变。待重编译并重跑同一 43 项普通测试。
+- 同一命令红→绿：目标 build raw exit 0，Input/Storage/Storage.Tests 均生成，0 warnings / 0 errors，MSBuild 1.17 秒、进程 wall 1.6 秒；非 Spike Storage tests raw exit 0，43 passed / 0 failed / 0 skipped，test duration 796ms、进程 wall 2.1 秒。
+- 下一步：完成当前 chunk slice 的静态与白名单自审；不扩展 App 接线、统计查询、导出或删除，不 stage/commit/push。自审和必要窄修通过后等待主任务安排 C1 独立审查与全量 solution/verify/publish 回归。
+
+## 2026-08-09 Storage mouse chunk 冻结源码统一回归
+
+- `dotnet restore InputTracker.sln` raw exit 0：1 个项目实际还原、6 个项目已是最新，进程 wall 2.7 秒。
+- 首次 solution build 后发现 builder 仍有最后一处窄修，主任务主动终止随后运行的旧二进制全量 test；该次没有最终证据价值，不计为红或绿。源码冻结后重新 build raw exit 0：7 个项目生成，0 warnings / 0 errors，MSBuild 1.02 秒、进程 wall 1.4 秒。
+- 冻结源码的 full solution test raw exit 0：App 10 + Input 29 + Acceptance 12 + Storage 44 = 95 passed / 0 failed / 0 skipped；Storage 持续 6m38s，进程 wall 400.9 秒。
+- 最新 spike 证据为 `.tools/storage-spike/20260809-123522-798-26236/storage-durability-spike.json`，native SQLite `3.49.1`；四组 run 的 `accepted=sinkAcknowledged=sqliteCommitted=powerDurable=recovered`，分别为 100000 / 100000 / 100000 / 30000，且 `lost=0`、`corrupt=0`。`releaseEligible=false`、真实硬件与物理断电仍为 `not-run`。
+- `scripts/verify.ps1 -Stage InputCore` raw exit 0：SDK `10.0.302`，95 total / 12 acceptance / 0 failed / 0 skipped，23 gates，进程 wall 222.6 秒；证据为 `.tools/verification/20260809-204253-505/verification.json`。
+- solution `win-x64 --self-contained true` publish raw exit 0：7 个项目完成 RID restore，App/Input/Storage 均生成 publish 输出，进程 wall 4.1 秒。
+- 下一步：保持源码冻结与未暂存状态，完成只读静态/白名单自审，等待 C1/C2；不得因本次回归解除 B-007、过渡 spool 清理、物理断电或真实硬件阻塞。
+
+### 最终快照证据时序更正
+
+- 后续核对发现同秒竞态：当前测试源码已包含 `[Fact] RejectedRecordDoesNotMutateBufferedState`，源码 mtime 为 `12:33:35Z`，上一轮 build DLL mtime 为 `12:33:36Z`，但该 DLL 的 `--list-tests` 仅列出 44 项且缺少该测试。这证明编译开始读取源码时最后窄修尚未进入构建输入。
+- 因此，上述 solution 95 项与 verify 95 项只记录为旧 DLL 快照绿，不得冒充当前源码最终证据；publish 同样只证明该旧构建快照可发布。
+- `src/**` 与 `tests/**` 自此绝对冻结。最终证据必须重新 build，并先确认 `list-tests=45`、非 Spike 项为 44，再执行完整 solution test、InputCore verify 与 win-x64 self-contained publish。
+
+## 2026-08-09 Storage mouse chunk canonical SHA-256 独立反向验证
+
+- C1 已批准产品 slice；C2 只读审查指出既有 payload bit flip 会先命中 compressed CRC32C，尚未独立证明 footer canonical SHA-256 被篡改时 reader fail closed。
+- 仅在 `MouseChunkCodecTests.cs` 新增一个 `[Fact]`：保持 compressed payload 与其 CRC32C 原值不变，只翻转 footer canonical SHA-256 的一位，并断言 `MouseChunkReader.Read` 抛出 `InvalidDataException`。产品、helper、既有断言及其他测试文件均未修改。
+- 预期重新构建后非 Spike Storage 为 45 项、完整 Storage 为 46 项、solution 为 97 项。测试文件现已再次绝对冻结，等待主任务代跑构建与回归。
+
+## 2026-08-09 Storage mouse chunk 最终冻结快照回归
+
+- `InputTracker.Storage.Tests` 强制 `Rebuild` raw exit 0：0 warnings / 0 errors，1.34 秒；`MouseChunkCodecTests` 为 7 passed / 0 failed / 0 skipped，37ms。
+- full solution test raw exit 0：App 10 + Input 29 + Acceptance 12 + Storage 46 = 97 passed / 0 failed / 0 skipped；Storage 持续 4m14s，进程 wall 257.1 秒。
+- `scripts/verify.ps1 -Stage InputCore` raw exit 0：SDK `10.0.302`，97 total / 12 acceptance / 0 failed / 0 skipped，23 gates，进程 wall 239.8 秒；证据为 `.tools/verification/20260809-210244-080/verification.json`。
+- solution `win-x64 --self-contained true` publish raw exit 0：7 个项目完成 RID restore，App/Input/Storage 均生成 publish 输出，进程 wall 3.0 秒。
+- 最新 spike 证据为 `.tools/storage-spike/20260809-130306-146-2968/storage-durability-spike.json`：native SQLite `3.49.1`、`releaseEligible=false`、真实硬件 `not-run`；四组 run 计数分别为 100000 / 100000 / 100000 / 30000，且 `accepted=sinkAcknowledged=sqliteCommitted=powerDurable=recovered`、`lost=0`、`corrupt=0`。
+- 同秒增量 build 竞态已闭环：旧 DLL 缺少 `RejectedRecordDoesNotMutateBufferedState`，旧 solution/verify 95 项只作历史快照证据；强制 Rebuild 后先确认非 Spike 44 项，随后加入独立 canonical SHA-256 footer 测试，最终 Storage 46 / solution 97 项才是本 slice 的权威冻结快照。
+- C2 结论：本 slice 的单元验收充分，但不代表最终 Storage 验收。轨迹块非零红命令必须留待后续 C2 Storage Acceptance seam；当前不修改 `verify`/Acceptance，也不伪报该红→绿已经完成。
+- 下一步：保持所有产品与测试文件绝对冻结，不 stage/commit，等待最终提交指令；B-007、物理断电、真实硬件及过渡 spool 清理阻塞均保持不变。

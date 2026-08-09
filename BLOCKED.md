@@ -47,3 +47,10 @@
 - 风险：SQLite 官方说明 WAL-reset corruption bug 影响 3.7.0–3.51.2，修复于 3.51.3+，并回移到 3.44.6 / 3.50.7。`3.49.1` 不在修复线，不能声称风险消失。
 - 当前规避：产品坚持唯一 writer/checkpointer 连接且 `Pooling=false`，避开已知的“至少两个连接在不同线程/进程同时写或 checkpoint”触发前提；这只是规避触发条件，不是修复 native 库。
 - 阻塞范围：在生产发布或引入第二连接/外部 checkpoint 前，必须获得任务授权升级到命中官方修复线的 native 依赖并重跑迁移/恢复/尖峰，或形成明确的审查风险接受决定；本里程碑不得静默更换已授权包。
+
+## B-008：过渡 mouse spool 的等价校验与清理决策
+
+- 当前状态：正式 chunk 与已封口 CRC spool 可能同时保存同一批原始鼠标事件；本切片只新增无损编码、原子 catalog 与恢复，不删除、移动、覆盖任何 spool、chunk、tmp 或损坏文件。
+- 风险：若只凭 catalog 水位删除 spool，可能掩盖字段映射、范围、CRC/hash 或恢复差异；若长期保留全部副本，磁盘增长不可控。
+- 解除门槛：后续独立切片必须逐记录证明 spool 与已 durable chunk 在 device、calibration segment、sequence、monotonic timestamp、motion/virtual desktop、坐标、完整按钮位和双向 signed wheel 上完全等价，并证明 catalog 水位已提交且不存在 integrity fault。
+- 不可逆停点：任何清理前必须形成明确的保留期/范围/用户确认与断电恢复策略，并通过删除前后恢复测试和 C2 Acceptance seam。未达到门槛时只能报告重复占用，不得自动清理。

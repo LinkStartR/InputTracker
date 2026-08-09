@@ -13,7 +13,7 @@ The production direction is strategy C: keyboard aggregates are committed in bou
 - The package lock is `Microsoft.Data.Sqlite 10.0.10`; no additional package was added. Compression, CRC, and hashing use the BCL or repository code.
 - Every product connection uses `Pooling=false`. One owner performs writes and checkpoints through one connection.
 - On open, the connection requires `journal_mode=WAL`, `synchronous=FULL`, `foreign_keys=ON`, `secure_delete=ON`, and a 5000ms busy timeout.
-- Schema v1 is applied in one transaction and recorded with a SHA-256 checksum. A future `user_version` or a checksum mismatch fails closed.
+- Schema v1 and the v2 mouse chunk catalog migration are each applied in a transaction and recorded with a SHA-256 checksum. A future `user_version` or either checksum mismatch fails closed.
 - Program data lives below the executable directory in `data/storage`; the database, spool, and future chunk directories do not escape that root.
 
 The final spike queried native SQLite `3.49.1`. That version is inside the officially reported WAL-reset affected range rather than a fixed line. The current single writer/checkpointer connection and `Pooling=false` avoid the known multi-connection concurrent writer/checkpoint trigger, but do not make the underlying version defect disappear. Production release remains blocked on an authorized native dependency update to a fixed line or an explicit reviewed risk decision.
@@ -60,7 +60,7 @@ Each record is exactly 44 little-endian bytes:
 
 Sequence must be contiguous. A complete record with a header, CRC, or sequence failure is corruption and recovery fails closed without truncating it. An incomplete final record is the only automatically repairable case: recovery retains and optionally fsyncs the complete valid prefix, truncates the tail, and reports exactly one lost record. Exceptions are propagated.
 
-This record spool is a durability foundation, not the final compressed trajectory block format. The next slice must add versioned block framing, incremental encoding, BCL compression, block checksum/hash, and an atomic manifest/index protocol on top of this contract.
+This record spool remains the append/durability foundation. The versioned compressed trajectory format, bounded sealer, checksum/hash, v2 catalog, atomic publication, and non-destructive recovery contract are now specified in `docs/storage/mouse-chunk-v1.md`. Transition spool cleanup remains blocked by B-008 until record-for-record equivalence is proven.
 
 ## Atomic ordering and crash seams
 

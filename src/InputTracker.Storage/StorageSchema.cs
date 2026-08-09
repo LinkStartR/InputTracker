@@ -5,7 +5,7 @@ namespace InputTracker.Storage;
 
 internal static class StorageSchema
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public const string Version1Sql = """
         CREATE TABLE schema_migrations (
@@ -68,4 +68,35 @@ internal static class StorageSchema
 
     public static string Version1Checksum { get; } = Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(Version1Sql)));
+
+    public const string Version2Sql = """
+        CREATE TABLE mouse_chunks (
+            chunk_id TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL REFERENCES devices(device_id),
+            calibration_segment_id INTEGER NOT NULL REFERENCES time_calibration_segments(segment_id),
+            relative_path TEXT NOT NULL UNIQUE,
+            first_sequence INTEGER NOT NULL CHECK (first_sequence > 0),
+            last_sequence INTEGER NOT NULL CHECK (last_sequence >= first_sequence),
+            first_monotonic_timestamp INTEGER NOT NULL CHECK (first_monotonic_timestamp >= 0),
+            last_monotonic_timestamp INTEGER NOT NULL CHECK (last_monotonic_timestamp >= first_monotonic_timestamp),
+            event_count INTEGER NOT NULL CHECK (
+                event_count > 0 AND event_count = last_sequence - first_sequence + 1),
+            canonical_length INTEGER NOT NULL CHECK (canonical_length > 0),
+            compressed_length INTEGER NOT NULL CHECK (compressed_length > 0),
+            file_length INTEGER NOT NULL CHECK (file_length > 0),
+            compressed_crc32c INTEGER NOT NULL CHECK (compressed_crc32c >= 0),
+            canonical_sha256 TEXT NOT NULL CHECK (length(canonical_sha256) = 64),
+            created_utc_us INTEGER NOT NULL,
+            recovered INTEGER NOT NULL CHECK (recovered IN (0, 1)),
+            UNIQUE(device_id, calibration_segment_id, first_sequence, last_sequence)
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE INDEX mouse_chunks_device_sequence
+            ON mouse_chunks(device_id, calibration_segment_id, first_sequence, last_sequence);
+
+        PRAGMA user_version = 2;
+        """;
+
+    public static string Version2Checksum { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(Version2Sql)));
 }
