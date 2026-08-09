@@ -616,3 +616,12 @@
 - 同秒增量 build 竞态已闭环：旧 DLL 缺少 `RejectedRecordDoesNotMutateBufferedState`，旧 solution/verify 95 项只作历史快照证据；强制 Rebuild 后先确认非 Spike 44 项，随后加入独立 canonical SHA-256 footer 测试，最终 Storage 46 / solution 97 项才是本 slice 的权威冻结快照。
 - C2 结论：本 slice 的单元验收充分，但不代表最终 Storage 验收。轨迹块非零红命令必须留待后续 C2 Storage Acceptance seam；当前不修改 `verify`/Acceptance，也不伪报该红→绿已经完成。
 - 下一步：保持所有产品与测试文件绝对冻结，不 stage/commit，等待最终提交指令；B-007、物理断电、真实硬件及过渡 spool 清理阻塞均保持不变。
+
+## 2026-08-09 Storage mouse chunk 主分支集成
+
+- C5 冻结切片提交为 `ae21717 feat: add versioned mouse chunk storage`：15 files changed / 2703 insertions / 11 deletions，工作树 clean，未 push/PR。
+- 主任务在 `codex/storage-stats@0e05ac0` 执行 `git cherry-pick ae21717` 首轮 raw exit 1；唯一冲突为 `PROGRESS.md` 的双方追加记录，产品、测试、schema 与格式文档均自动合并。
+- 冲突解决完整保留主分支的 Storage 检查点、UI/Portable 预审，以及 C5 的 chunk 红→绿、竞态更正与最终 97 项证据；`git diff --cached --check` exit 0、无未解决文件，`git cherry-pick --continue` exit 0，生成 `ff1c250 feat: add versioned mouse chunk storage`。
+- 集成后快速 Release build raw exit 0：7 项目生成，0 warnings / 0 errors，MSBuild 4.41 秒；非 Spike Storage 回归 raw exit 0：45 passed / 0 failed / 0 skipped，996ms。
+- 结论：versioned mouse chunk、bounded builder、v2 catalog/migration、CRC32C/SHA-256 与 fail-closed recovery 已进入主任务分支；这不是最终 Storage、硬件或发布验收，B-003/B-005/B-007/B-008 与物理断电继续阻塞。
+- 下一步：从当前集成点开始独立实现 Storage 单 owner 写入/查询服务、设备观察、键盘日聚合、严格无抽样轨迹流与显式时区周期，优先打通首次可测试的真实 Input→Storage→UI 链路；C2 final Storage gate 等查询/导出/恢复/删除 API 稳定后落地。
