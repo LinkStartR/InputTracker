@@ -648,3 +648,14 @@
 - 同时向既有可见 C6 `UI` 下发低耦合首测阻断修复：只纠正实际采集与过期隐私文案冲突、采集状态展示及关闭到托盘生命周期，不触碰 Input/Storage 核心，不用 mock 统计冒充真实链路。
 - `docs/codex/thread-index.md` 已更新 C8/C9 替换关系与 C6 状态；`git diff --cached --check` exit 0，提交 `7035db7 docs: register storage recovery and ui work`，提交后主工作树 clean。
 - 下一步：等待 C9 与 C6 各自冻结源码；主任务分别代跑目标 Release build/test，红则原样回传并最小修复，绿后交 C1/C2 只读审查再独立提交。GitHub B-009 仍有效，不重试 push。
+
+## 2026-08-10 UI 首个阻断修复提交
+
+- 分支/提交：`codex/ui@3c84012 fix: align UI privacy and shutdown behavior`；精确 11 个白名单文件，216 insertions / 7 deletions，提交后工作树 clean，未 push/PR；GitHub B-009 未解除，因此不重复联网。
+- 用户知情：隐私卡改为随 `CollectionSnapshot` 动态渲染；Collecting 才声明 Win32 Raw Input 正在后台接收，StartFailed/Rejected 明确未接收；所有状态明确本阶段 Storage 未接通、事件不会持久化，且未来键盘/鼠标边界不伪称当前已实现。
+- 关闭语义：普通标题栏关闭使用无副作用 `ShouldHideInsteadOfClose()`，先 `e.Cancel=true` 再隐藏到托盘；窗口/托盘显式退出和未取消的 `SessionEnding` 放行关闭并进入 `Shutdown`/既有 `OnExit` 清理；取消注销不会留下退出 latch。
+- 第一冻结快照：App.Tests Release build raw exit 0，3 projects、0 warnings / 0 errors、MSBuild 1.79s；test raw exit 0，12→16 passed / 0 failed / 0 skipped、31ms。
+- C2 发现真实 WPF 顺序风险：旧实现先调用 `Hide()`、后设置 `e.Cancel=true`，纯逻辑测试未暴露；未提交该快照。窄修为 policy 只查询、窗口事件按 Cancel→Hide 执行，并收紧取消 SessionEnding 的 latch。
+- 最终冻结快照：同一 build raw exit 0，3 projects、0 warnings / 0 errors、MSBuild 3.08s；同一 test raw exit 0，16 passed / 0 failed / 0 skipped、30ms；`git diff --cached --check` exit 0。C1/C2 最终只读复核均允许提交。
+- 未验证：真实标题栏关闭→托盘重开、窗口/托盘退出、注销/关机及取消注销、退出残留进程、普通用户/UAC、1440×900/1920×1080 与 100%/150% 浅深色截图、真实键鼠；本提交不是最终 UI 或硬件验收。
+- 下一步：首次人工测试先执行启动→标题栏关闭→托盘重开→暂停/恢复→托盘退出并查残留，再在可控环境测试注销/关机及取消注销；真实统计仍需 Storage A、鼠标 ingestion、查询与 App adapter 后续切片。
