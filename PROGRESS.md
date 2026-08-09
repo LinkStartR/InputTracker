@@ -640,3 +640,11 @@
 - 分支原始结果：创建前 detached `6a6a5ea`、工作树 clean；`git switch -c codex/storage-service-work` 成功，创建后分支为 `codex/storage-service-work`、HEAD `6a6a5ea232b04372c1539643b4f4a173a0138afc`、工作树 clean。
 - 范围：仅 Storage 产品/普通测试/docs 与 PROGRESS/BLOCKED；第一检查点为 storage-native contracts、schema v3 与设备映射，禁止重做 durability/chunk、App/Input/Acceptance/verify/依赖变更。
 - 下一步：替代线程完成第一检查点后请求主任务代跑 build 与非 Spike tests；绿后继续单 owner ingestion、四周期键盘聚合和严格无抽样鼠标查询。
+
+## 2026-08-09 Storage A 切片恢复与 UI 阻断修复并行启动
+
+- C8 在 `codex/storage-service-work@857671f` 实现 A 切片时发生一次 `systemError`；已确认未提交现场完整保留为 `StorageContracts.cs`、`StorageDatabase.cs` 与新增 `KeyboardAggregation.cs`，schema v4 草稿已撤销，未回滚或重做第一检查点。
+- 主任务从 C8 创建同目录恢复线程 C9 `019fe6fd-b748-7713-878a-37b8a43ce1b3`，标题仍为 `Storage Service`，已确认 active、可见且可定位；继续冻结 32 transitions / 64 rows / 250ms 主动 timer、`store_metadata` 水位、`SQLiteCommitted` 范围和 fail-closed 生命周期。
+- 同时向既有可见 C6 `UI` 下发低耦合首测阻断修复：只纠正实际采集与过期隐私文案冲突、采集状态展示及关闭到托盘生命周期，不触碰 Input/Storage 核心，不用 mock 统计冒充真实链路。
+- `docs/codex/thread-index.md` 已更新 C8/C9 替换关系与 C6 状态；`git diff --cached --check` exit 0，提交 `7035db7 docs: register storage recovery and ui work`，提交后主工作树 clean。
+- 下一步：等待 C9 与 C6 各自冻结源码；主任务分别代跑目标 Release build/test，红则原样回传并最小修复，绿后交 C1/C2 只读审查再独立提交。GitHub B-009 仍有效，不重试 push。
