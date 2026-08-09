@@ -55,7 +55,11 @@ public partial class App : System.Windows.Application
         _trayIcon = new TrayIconController(
             _collection,
             showWindow: () => ShowWindow(window),
-            exitApplication: () => Shutdown(0));
+            exitApplication: () =>
+            {
+                window.PrepareForExplicitExit();
+                Shutdown(0);
+            });
 
         window.MinimizeToTrayRequested += (_, _) => window.Hide();
         window.ExitRequested += (_, _) => Shutdown(0);
@@ -82,6 +86,22 @@ public partial class App : System.Windows.Application
         _trayIcon?.Dispose();
         _singleInstance?.Dispose();
         base.OnExit(e);
+    }
+
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        base.OnSessionEnding(e);
+        if (e.Cancel)
+        {
+            return;
+        }
+
+        if (MainWindow is MainWindow window)
+        {
+            window.PrepareForSessionEnding();
+        }
+
+        Shutdown(0);
     }
 
     private static void ShowWindow(Window window)

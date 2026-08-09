@@ -155,13 +155,13 @@ public sealed class CollectionController : IDisposable
         InputCaptureState.Running => new CollectionSnapshot(
             CollectionMode.Collecting,
             "采集中",
-            "Raw Input 后台采集核心正在运行。当前 Input Core 阶段仅做实时管线验证，事件尚未持久化。",
+            "Win32 Raw Input 正在后台接收物理键盘和鼠标事件。Storage 尚未接通，当前事件尚未持久化。",
             CanPause: true,
             CanResume: false),
         InputCaptureState.Paused => new CollectionSnapshot(
             CollectionMode.Paused,
             "已暂停",
-            $"采集已停止并完成暂停边界。暂停原因：{FormatReasons(status.PauseReasons)}。",
+            $"后台输入接收已停止并完成暂停边界。暂停原因：{FormatReasons(status.PauseReasons)}。",
             CanPause: false,
             CanResume: (status.PauseReasons & PauseReason.User) != 0),
         InputCaptureState.IntegrityFault => CaptureFault(status),

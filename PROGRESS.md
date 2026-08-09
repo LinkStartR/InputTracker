@@ -917,3 +917,38 @@
 - SDK audit: Windows SDK `10.0.26100.0` headers confirmed all retained property keys; an initially considered nonexistent `DEVPKEY_Device_SerialNumber` and the unsafe InstanceId-tail inference were removed before final verification.
 - Boundaries: no dependency, permission, registry, service, driver, runtime network, Acceptance, verify, Storage, or App change. Real two-keyboard/two-mouse, Bluetooth/RDP/virtual, replug persistence, and 1000 Hz evidence remain B-003.
 - Next: independent Git/privacy review, then commit the Input-only slice. A later adapter must map `Indeterminate` to transient identity before passing raw observation directly to Storage hashing.
+## 2026-08-10 UI 首个独立阻断修复冻结
+
+- 分支/基线：UI 线程可定位；从本地最新已合并 `main@f6136c31ff35461adadf3766f5e8e25e88a638e7` 创建 `codex/ui`，未 reset、stage、commit、push 或建 PR。
+- 隐私披露：`MainWindow.xaml` 已删除与实际 `InputCaptureService.StartAsync()` 冲突的“当前 bootstrap 版本不采集任何输入”，改为明确当前后台接收物理键鼠、Storage 尚未接通且事件尚未持久化；键盘仅按设备、物理键、日期累计次数与时长且不保存文字/顺序/窗口/进程；鼠标原始轨迹将在 Storage 接通后按设备持久化并由用户主动按范围删除。
+- 状态文案：`CollectionController` 的 Running 明确为后台接收但尚未持久化，Paused 明确后台输入接收已停止；既有 `完整性故障 · 已停止`、`采集启动失败` 与状态不确定保护保持独立，未改 Input 控制逻辑。
+- 关闭语义：标题栏普通关闭通过 `Closing` 取消并发出隐藏到托盘请求；窗口按钮和托盘的显式退出先放行关闭，再调用 `Application.Shutdown(0)`，沿用 `OnExit` 释放 capture/controller/tray/mutex。
+- 普通测试：新增源码级隐私披露断言和纯逻辑 close policy 测试；扩展状态测试，覆盖采集中、已暂停、IntegrityFault 与启动失败文案。未修改 `tests/Acceptance/**` 或 `scripts/verify.ps1`。
+- 静态核验：`MainWindow.xaml` XML 解析成功；过期披露全 App 扫描无命中；变更全部位于 `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` 与本记录；`git diff --check` 退出码 0，仅有 Git 的 LF→CRLF 工作树提示。
+- 未运行：按任务限制，本线程未运行 build/test、GUI、截图或硬件采集，不声明 passed；退出后无残留仍需目标测试和后续 GUI/进程验收确认。
+- 请求主任务代跑：在本 UI worktree 使用 `E:\Projects\InputTracker 20260704\.tools\dotnet\dotnet.exe build tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release`，成功后运行同一路径的 `dotnet.exe test tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-build --no-restore`；源码现已冻结，等待实际输出后再决定是否进入 Git 审查。
+- 主任务权威代跑 build：冻结源码上 raw exit 0，3 projects 完成 restore/build，0 warnings / 0 errors；MSBuild elapsed 6.64s，外层 wall 约 67s。
+- 主任务权威代跑 test：冻结源码上 raw exit 0，12 passed / 0 failed / 0 skipped；test duration 36ms，outer wall 2.1s。
+- commit 前结论：目标 App build/test 已由主任务实际跑绿，源码继续冻结；这只证明普通编译与测试，不替代 GUI 关闭/托盘重开、退出残留、截图或硬件终验，以上仍为 not-run。当前允许进入 C1/C2 独立审查，不由 UI 线程 stage、commit 或 push。
+- 下一步 C1：只读复核白名单、完整 diff、未跟踪文件、依赖/Acceptance/verify 零变更及 commit 边界；通过后回报主任务是否可提交。
+- 下一步 C2：只读核对 12/0/0 的目标测试证据、状态与隐私断言未弱化，并保留 GUI、进程残留和真实硬件验收缺口；本切片不修改其独占文件。
+
+## 2026-08-10 UI 隐私状态与系统注销边界窄修
+
+- 分支/基线：`codex/ui@f6136c31ff35461adadf3766f5e8e25e88a638e7`；保持未 stage、未 commit、未 push，供 C1/C2 复核。
+- 隐私状态：隐私卡改由当前 `CollectionSnapshot` 渲染；只有 `Collecting` 声明 Win32 Raw Input 正在后台接收。`StartFailed` 与 `RejectedProgramDirectory` 明确当前未接收；所有状态明确本阶段 Storage 尚未接通、事件不会持久化，后续键盘/鼠标边界保持不变。
+- 系统注销：`App.OnSessionEnding` 在未取消的 Windows 注销/关机路径先通知窗口放行关闭，再调用 `Shutdown(0)`，确保进入既有 `OnExit` 受控释放；普通关闭隐藏及窗口/托盘显式退出语义未退步。
+- 主任务权威 build：`& 'E:\Projects\InputTracker 20260704\.tools\dotnet\dotnet.exe' build tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release`，raw exit 0；3 个项目生成，0 warnings / 0 errors；MSBuild 1.79s，工具 wall 2.2s。
+- 主任务权威 test：`& 'E:\Projects\InputTracker 20260704\.tools\dotnet\dotnet.exe' test tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-build --no-restore`，raw exit 0；16 passed / 0 failed / 0 skipped；test 31ms，工具 wall 1.6s。
+- 静态复核：`MainWindow.xaml` XML parse 成功，产品源码中过期静态隐私文案无命中，`git diff --check` 退出码 0。
+- 未验证：真实 GUI 的标题栏关闭/托盘重开/显式退出、Windows 注销/关机生命周期、退出后残留进程、普通用户/UAC、截图与真实硬件采集均为 not-run；16 个普通测试不能替代这些现场验收。
+- 下一步：由 C1/C2 对修正后的完整白名单与行为做只读复核；通过后由主任务提交该独立 UI 切片，不由 UI 线程 stage、commit、push。
+
+### C2 关闭顺序复核窄修
+
+- 红因：原 `TryHideInsteadOfClose(Action)` 在 `MainWindow` 设置 `CancelEventArgs.Cancel=true` 之前同步执行隐藏回调；若隐藏导致真实 `Closing` 重入或额外生命周期行为，普通关闭的“取消关闭后隐藏”契约缺少可靠顺序保证。C2 因此阻止提交，未用自动绿灯掩盖该边界。
+- 修复：关闭策略改为无副作用的 `ShouldHideInsteadOfClose()` 查询；普通 `Closing` 明确先设置 `e.Cancel=true`，再发出隐藏请求。显式退出和 session ending latch 都返回 false，不触发隐藏副作用。
+- session 收口：`OnSessionEnding` 先调用 base 允许既有订阅者取消；仅在 `e.Cancel=false` 后设置 session latch 并调用 `Shutdown(0)`，避免已取消注销后遗留放行状态。
+- 修后主任务权威 build：同一 App.Tests build 命令 raw exit 0；3 个项目生成，0 warnings / 0 errors；MSBuild 3.08s，工具 wall 3.5s。
+- 修后主任务权威 test：同一 App.Tests test 命令 raw exit 0；16 passed / 0 failed / 0 skipped；test 30ms，工具 wall 1.5s。
+- 未验证项不变：真实 GUI 重入/关闭顺序、托盘行为、Windows 注销/关机、残留进程、普通用户/UAC、截图和硬件均仍为 not-run；下一步仍为 C1/C2 只读复核后由主任务提交。

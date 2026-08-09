@@ -42,14 +42,19 @@ public sealed class CollectionControllerTests
             capture);
 
         Assert.Equal(CollectionMode.Collecting, controller.Current.Mode);
+        Assert.Equal("采集中", controller.Current.Label);
+        Assert.Contains("后台接收物理键盘和鼠标事件", controller.Current.Explanation);
         Assert.Contains("尚未持久化", controller.Current.Explanation);
 
         await controller.PauseAsync();
         Assert.Equal(PauseReason.User, capture.CurrentStatus.PauseReasons);
         Assert.Equal(CollectionMode.Paused, controller.Current.Mode);
+        Assert.Equal("已暂停", controller.Current.Label);
+        Assert.Contains("后台输入接收已停止", controller.Current.Explanation);
 
         capture.Publish(InputCaptureState.IntegrityFault, PauseReason.User, "queue overflow");
         Assert.Equal(CollectionMode.IntegrityFault, controller.Current.Mode);
+        Assert.Equal("完整性故障 · 已停止", controller.Current.Label);
         Assert.Contains("queue overflow", controller.Current.Explanation);
         Assert.False(controller.Current.CanResume);
     }
@@ -66,6 +71,8 @@ public sealed class CollectionControllerTests
         controller.HandleCaptureControlException("启动采集", new IOException("start failed"));
 
         Assert.Equal(CollectionMode.StartFailed, controller.Current.Mode);
+        Assert.Equal("采集启动失败", controller.Current.Label);
+        Assert.Contains("不会假装正在采集", controller.Current.Explanation);
         Assert.Contains("registration denied", controller.Current.Explanation);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
