@@ -659,3 +659,12 @@
 - 最终冻结快照：同一 build raw exit 0，3 projects、0 warnings / 0 errors、MSBuild 3.08s；同一 test raw exit 0，16 passed / 0 failed / 0 skipped、30ms；`git diff --cached --check` exit 0。C1/C2 最终只读复核均允许提交。
 - 未验证：真实标题栏关闭→托盘重开、窗口/托盘退出、注销/关机及取消注销、退出残留进程、普通用户/UAC、1440×900/1920×1080 与 100%/150% 浅深色截图、真实键鼠；本提交不是最终 UI 或硬件验收。
 - 下一步：首次人工测试先执行启动→标题栏关闭→托盘重开→暂停/恢复→托盘退出并查残留，再在可控环境测试注销/关机及取消注销；真实统计仍需 Storage A、鼠标 ingestion、查询与 App adapter 后续切片。
+
+## 2026-08-10 第一次桌面行为测试包
+
+- 来源：`codex/ui@3c84012`；仅包含 Bootstrap/Input Core 与本次 UI 状态/关闭修复，不含 Storage 接线、真实统计、热力图或轨迹回放，界面已明确不会持久化，禁止把该包当最终产品。
+- 发布命令：`E:\Projects\InputTracker 20260704\.tools\dotnet\dotnet.exe publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true -o .tools\first-test\ui-3c84012`，raw exit 0；Input/App 完成 win-x64 self-contained 输出。
+- 输出：`C:\Users\Administrator\.codex\worktrees\e91e\InputTracker 20260704\.tools\first-test\ui-3c84012\InputTracker.exe`；目录位于被忽略的 `.tools`，未进入 Git。
+- 非交互烟测：`Start-Process ... -ArgumentList '--self-check' -Wait -PassThru` 返回 `self_check_exit=0`；随后 `remaining_processes=0`。
+- 首次人工范围：启动、状态与隐私披露、标题栏关闭到托盘、托盘重开、暂停/恢复、窗口/托盘退出与残留进程；不要用它判定 Storage、统计、绿色目录外零写入、硬件隔离或视觉矩阵。
+- 下一步：用户可先执行本包人工流程并回报问题；实现继续修复 Storage A 的 timer/owner/64-row/frequency 四个数据阻断，之后才生成首个带真实统计的测试包。
