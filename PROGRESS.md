@@ -528,3 +528,33 @@
 - 风险门：先核对现有 spool record 是否覆盖 Input Core 全鼠标原始字段；不足则写 BLOCKED，不静默丢信息。native SQLite `3.49.1` 继续只允许唯一 writer/checkpointer 与 `Pooling=false`。
 - 线程：固定 C5 `Storage Stats`（`019fd04e-21df-7482-a248-99deb1617a5f`）已收到完整任务卡，推荐 `terra/high`，可见且可定位。
 - 下一步：C5 增量实现并回报精确代跑命令；完成真实 FS/SQLite 单测与统一回归后，由 C1 独立审查再提交，不 push。
+
+## 2026-08-09 Storage chunk 第二检查点红→绿
+
+- 断点恢复：主工作区 `codex/storage-stats@099e07e` clean；C5 工作区 `codex/storage-chunks-work@67955e6` 保留未提交增量，未重做 2026-08-05 已完成的 codec 绿基线。
+- 首次目标 build 进入源码编译后退出码 1：`MouseChunkCatalog.cs(339,13)` 报 `CS1739`，具名参数 `recovered` 与 record 参数 `Recovered` 大小写不一致；0 warnings / 1 error，用时 3.21 秒。C5 仅修正该处并保留红证据。
+- 数据正确性收口：catalog 增加程序目录 containment、任意区间重叠与 catalog↔catalog 重叠拒绝、设备/校准外键预检、逐 orphan 独立事务、受控 diagnostics；恶意格式算术溢出转为 `InvalidDataException`；新增 4096 事件 / 256KiB canonical / 1 秒及设备、校准、暂停、停止边界的无损 builder。
+- 代跑 `./.tools/dotnet/dotnet.exe build tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-restore`：退出码 0，Input/Storage/Storage.Tests 三项目生成，0 warnings / 0 errors，用时 2.55 秒。
+- 代跑 `./.tools/dotnet/dotnet.exe test tests/InputTracker.Storage.Tests/InputTracker.Storage.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~MouseChunk"`：退出码 0，26 passed / 0 failed / 0 skipped，用时 871ms。
+- 当前结论：chunk 检查点自动测试全绿，但切片尚未完成；C5 继续补精确 privacy allowlist、v1→v2 migration、文档与过渡 spool 清理决策 BLOCKED，未 stage/commit/push。
+- 下一步：跑全部非 Spike Storage 普通测试；完成静态/白名单审查后由 C1 独立复核，再执行 solution/verify/publish 全回归与提交。
+
+## 2026-08-09 首次可测试 UI 只读预审
+
+- 固定 C6 `UI` 线程只读核对 `codex/storage-stats@099e07e`，未修改文件、未建分支、未提交/推送、未运行 GUI；推荐 `terra/high`。
+- 证据：App 已真实创建并启动 `InputCaptureService(new InputCoreSink())`，但当前 sink 只做进程内计数，App 未引用 Storage，统计、热力图和轨迹均无真实查询面。
+- 知情阻断：`MainWindow.xaml` 仍宣称“当前 bootstrap 版本不采集任何输入”，与实际 Raw Input 启动冲突；首次测试前必须修正，并明确区分采集中、已暂停、完整性故障与存储健康。
+- 生命周期风险：标题栏关闭可能销毁唯一 WPF 窗口，而托盘仍尝试重新 `Show()`；本轮禁止 GUI，静态风险为 not-run，后续必须用真实桌面复现并修复。
+- 首测最短链路定案：真实物理事件 → Input Core → App 侧 Storage adapter → 单 writer 持久化 → 同一 Storage 服务只读快照 → 总览/设备筛选/键盘热力图/逐设备未抽样轨迹回放；禁止 mock 数据冒充完成。
+- 视觉证据规划：2 分辨率 × 2 DPI × 2 主题 × 3 页面至少 24 张，加高风险暂停/IntegrityFault 2 张；当前全部 not-run，不作 passed 声明。
+- 下一步：Storage 先提供设备身份、写入/边界、健康水位、四周期查询和严格顺序轨迹流；前置 PR 合并后 C6 才从最新 main 开 UI 分支实现。
+
+## 2026-08-09 首次测试 Portable 只读预审
+
+- 固定 C7 `Portable` 线程只读核对主工作区、发布配置和生命周期，未修改文件、未建分支、未提交/推送、未运行 GUI/build/test/publish；推荐 `luna/medium`。
+- 已有基础：win-x64 self-contained 多文件配置、程序目录写探针、同目录单实例、托盘和用户暂停；历史产物不含 Storage，不能作为当前测试包。
+- 缺口：锁屏/休眠原因虽在状态机存在，但 App 未订阅真实系统事件；Startup、首次启动告知、配置/日志/备份路径和卸载说明均未实现。
+- 首测发布线：Storage 接通后建立唯一程序目录路径服务；Raw Input 启动前完成首次告知；正常交互生命周期验证目录外零写入、零网络、零注册表/服务/提权；Startup 未实现期间保持零改动。
+- 单实例契约风险：当前 mutex 按程序目录分域，两个绿色副本可并行采集；后续必须明确保留该行为或改为用户级唯一，不能静默重复统计。
+- 当前全部真实锁屏/休眠、普通用户、Startup、ProcMon/网络与卸载残留检查为 not-run；B-003/B-005/B-007 未解除。
+- 下一步：在 UI 前置合并后，C7 从最新 main 开独立 portable 分支实现首次告知、系统暂停桥、Startup 窄能力和卸载说明。
