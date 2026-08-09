@@ -16,6 +16,7 @@
 | C8 | Storage Service | 单 owner 写入、设备映射、周期聚合与只读查询 | 第一检查点已提交；A 切片 systemError | `src/InputTracker.Storage/**`、普通 Storage tests/docs | `codex/storage-service-work@857671f`；3 文件未提交现场保留 | 是：`019fe6b9-dc32-7fd0-9c36-b8b2514a67af` | terra / high | 迁移、隐私、时区与数据正确性 | contracts/schema v3/device catalog 经 C1/C2 放行，non-Spike 67/0/0；A 切片中断后由 C9 同目录续作，禁止重做 |
 | C9 | Storage Service | 从 C8 现场续作单 owner 与键盘 ingestion A 切片 | 进行中 | `src/InputTracker.Storage/**`、普通 Storage tests/docs | `codex/storage-service-work@857671f` + 未提交现场 | 是：`019fe6fd-b748-7713-878a-37b8a43ce1b3` | terra / high | 同目录恢复，避免丢失或重做 | schema v4 已撤销；冻结 32 transitions / 64 rows / 250ms timer、SQLiteCommitted 水位与 fail-closed 生命周期；B-007/B-008/B-009/B-010 未解除 |
 | C6 | UI | 页面、筛选、热力图、轨迹回放、主题 | 首测隐私文案/托盘生命周期阻断修复进行中 | WPF UI 与视觉证据 | 从本地最新已合并 `main` 建 `codex/ui`；未提交/未推送 | 是：`019fd04e-238f-7c11-b854-4b0e4298228f` | terra / high | 跨页面状态与缩放矩阵 | 本切片只修真实采集披露、采集状态和关闭到托盘；GUI/截图仍 not-run，真实统计继续依赖 Storage |
+| C10 | UI | 从 C6 冻结现场窄修状态披露与系统关机边界 | 进行中 | `src/InputTracker.App/**`、普通 App tests、`PROGRESS.md` | `codex/ui@f6136c31` + 未提交现场 | 是：`/root/ui_fix` | terra / high | WPF 生命周期、用户可见隐私状态 | C2 阻断要求 Running/StartFailed/Rejected 披露一致，并使 SessionEnding 进入受控退出；禁止改 Acceptance/verify |
 | C7 | Portable | 自包含绿色发布、启动授权、锁屏与卸载 | 首测边界只读预审完成，待 UI 合并 | 发布、便携性、说明与测试 | 尚未建实现分支/提交；只读目标 `codex/storage-stats@099e07e` | 是：`019fd04e-2416-7e50-99c7-f8be6a5a8367` | luna / medium | 发布与权限边界明确 | 已确认锁屏/休眠、Startup、首次告知与卸载尚缺；当前保持 Startup 零写入，真实生命周期 not-run |
 
 ## 协调说明
