@@ -748,3 +748,10 @@
 - 当前冻结源码 Release build raw exit 0，wall 1.6 秒，MSBuild 1.14 秒，0 warnings / 0 errors。
 - 当前冻结源码非 `StorageSpike` tests raw exit 0，wall 2.9 秒；67 passed / 0 failed / 0 skipped / 67 total，测试持续 1 秒。
 - 结论：v2 legacy migration/upsert、reopen mapping/alias、三类 corrupt device fail-closed 与 DB/WAL privacy 四项窄硬化已在同一冻结源码上完成权威 build/test 闭环。继续保持产品、测试与 Storage 文档冻结，不进入 ingestion/query，不 stage/commit/push，等待主任务最终白名单复核与提交指令。
+
+### Storage service 第一检查点提交完成
+
+- 主任务已在 `codex/storage-service-work` 提交第一检查点：`ffd35bb6d179943de500734b9147ffffbe08701d`，message `feat: add storage service contracts and device catalog`；10 files changed / 1265 insertions / 6 deletions，提交后 worktree clean。
+- 权威验证保持：Release build 0 warnings / 0 errors；非 `StorageSpike` tests 67 passed / 0 failed / 0 skipped / 67 total。C1 白名单/Git 审查与 C2 第一检查点只读审阅均已放行。
+- GitHub 状态：本地提交完整，仍未 push；B-009 GitHub HTTPS 不可达继续有效，不伪报远端分支或 draft PR。
+- 下一步：从该提交开始独立实现 Storage 单 owner ingestion 与 fail-closed 生命周期边界，优先接通 health/durable watermark/IntegrityFault、键盘日聚合与现有 mouse spool/builder/catalog；read-query 继续作为后续独立切片。当前只记录进度，等待主任务提交本次 `PROGRESS.md` 记录后再发放实施指令。
