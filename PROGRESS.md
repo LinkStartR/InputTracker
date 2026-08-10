@@ -675,6 +675,19 @@
 - 用户对已给出的完整首次流程回复“都OK”：启动与状态/隐私披露、标题栏关闭到托盘、托盘重开、暂停/恢复、窗口/托盘退出及退出后无残留均按用户现场反馈通过。
 - 证据边界：这是用户对清单的整体确认，主任务未远程目击、未取得截图或逐步日志；只记为首次桌面行为通过，不扩张为普通用户/UAC、Windows 注销/关机、视觉矩阵、Storage、统计、设备隔离或硬件性能验收。
 - 下一步：保留该 UI 提交和测试包；继续完成 Storage A 数据正确性修复，再生成首个带真实持久化与统计的测试包。
+
+## 2026-08-10 Storage Service A 主任务集成与统一回归
+
+- worker 提交：`codex/storage-service-work@2e009f4 feat: add single-owner keyboard storage service`，9 files changed / 2248 insertions / 40 deletions，工作树 clean；C1/C14 最终放行，未 push/PR，B-009 有效。
+- 首次直接 cherry-pick `2e009f4` raw exit 1：除 `PROGRESS.md` 外，`storage-service-v1.md` 与 `StorageContracts.cs` 出现 modify/delete，证明主任务缺少 worker 的前置第一检查点；立即 `git cherry-pick --abort` exit 0，未硬接文件或丢失现场。
+- 依赖顺序集成：先 cherry-pick `ffd35bb`，唯一冲突为 `PROGRESS.md` 双方追加记录，完整保留后生成 `7a03b2d`；再自动集成 `857671f` 为 `3a34e0d`；最后 `2e009f4` 自动集成为 `9c88d1c`，产品文件无冲突。
+- 集成快速回归首个沙箱 build raw exit 1：`MSB4184`，拒绝读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs`，未进入源码编译；主机权限同命令 raw exit 0，3 projects、0 warnings / 0 errors、2.99s；non-Spike raw exit 0，92 passed / 0 failed / 0 skipped、1s。
+- 统一 restore raw exit 0：1 project restored / 6 up-to-date；solution Release build raw exit 0：7 projects、0 warnings / 0 errors、2.01s。
+- 完整 solution test raw exit 0：App 10 + Input 29 + Acceptance 12 + Storage 93 = 144 passed / 0 failed / 0 skipped；StorageSpike 4m22s。最新 `.tools/storage-spike/20260810-001626-511-3036/storage-durability-spike.json` 四组计数 100000 / 100000 / 100000 / 30000，均 `accepted=sinkAcknowledged=sqliteCommitted=powerDurable=recovered`、lost=0、corrupt=0；native SQLite 3.49.1，B-007 不解除。
+- `scripts/verify.ps1 -Stage InputCore` raw exit 0：SDK 10.0.302，total 144 / acceptance 12 / failed 0 / skipped 0 / gates 23；published self-check exit 0、second-instance exit 2；evidence `.tools/verification/20260810-082150-313/verification.json`。
+- 首次 solution publish 调用在工具进程创建阶段报 Windows code 267“目录名称无效”，未启动 dotnet；改用绝对 SDK/solution 路径重试 raw exit 0，7 projects 完成 win-x64 self-contained restore/build/publish。
+- 结论：Storage schema v3/device catalog、单 owner writer、键盘日聚合、SQLiteCommitted 水位、timer/64-row/frequency fail-closed 已进入 `codex/storage-stats@9c88d1c` 并完成统一绿回归；这不是 mouse ingestion、query/export/delete、物理断电、硬件或 final Storage 验收。
+- 下一步：从本集成点开独立 mouse ingestion B 切片，接现有 spool→chunk/catalog 的完整原始字段与 device/calibration/pause/stop boundary；随后 read-query 与 App adapter，生成首个带真实持久化统计的测试包。
 ## 2026-08-09 Storage service 第一检查点待代跑
 
 - 分支证据：从 detached `6a6a5ea232b04372c1539643b4f4a173a0138afc` 创建 `codex/storage-service-work`；创建后 `git status` 为 clean，HEAD 未变化。
