@@ -697,6 +697,14 @@
 - durable 边界：`SinkAcknowledged` 仍不等于物理断电；公开 mouse 水位只在 spool `Flush(true)` 与 SQLite catalog commit 的既定协议后推进。B-008 禁止清理或覆盖 spool/chunk/tmp/corrupt。
 - 不在本切片：App adapter、read query、统计 UI、export/backup/delete、Acceptance、硬件/物理断电；不得借 mock 宣称真实轨迹终验。
 - 下一步：固定 Storage worker 从新分支读取现有 spool/chunk API，先冻结最小契约与普通 FS/SQLite 测试矩阵，再实施并请求主任务代跑 build/non-Spike。
+
+## 2026-08-10 Storage mouse ingestion B 契约冻结提交
+
+- 只读设计经过 C14 多轮红审，先后阻断并写死：表示无关 mouse watermark 唯一推进点、v4 spool-segment 目录、device-global sequence、pre-existing tmp/spool 不可变、自描述 segment header、spool/chunk 双 hash 域、legacy v3 copy migration、builder exact/crossing 对齐、validate-before-mutate，以及 step3 后 uncertain-ack/published-prefix 语义；阻断解除前产品/测试始终零 diff。
+- worker 文档提交：`codex/storage-mouse-ingestion@6ff5a7a docs: freeze mouse ingestion contract`，4 files changed / 184 insertions / 2 deletions，新增 `docs/storage/mouse-ingestion-v1.md`；提交后工作树 clean，未 push/PR。
+- C1/C14 最终结论：允许提交 4 文档，并仅按文档冻结的 18 文件白名单进入实施；该放行不代表 mouse ingestion、Storage stage、硬件或物理断电通过。
+- 实施顺序：A schema v4+self-describing spool；B device-global sequence/SQLiteCommitted prefix/catalog overlap；C coordinator+StorageService lifecycle/recovery；D privacy/B-008/10k zero sampling 与 non-Spike 回归。任何扩白名单先停。
+- 下一步：worker 从 `6ff5a7a` 实施，不改 Input/App/Acceptance/verify/依赖/solution；每小块记录定向红绿，最终由主任务代跑 build/non-Spike 并再交 C1/C14。
 ## 2026-08-09 Storage service 第一检查点待代跑
 
 - 分支证据：从 detached `6a6a5ea232b04372c1539643b4f4a173a0138afc` 创建 `codex/storage-service-work`；创建后 `git status` 为 clean，HEAD 未变化。
