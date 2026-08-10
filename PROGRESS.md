@@ -688,6 +688,15 @@
 - 首次 solution publish 调用在工具进程创建阶段报 Windows code 267“目录名称无效”，未启动 dotnet；改用绝对 SDK/solution 路径重试 raw exit 0，7 projects 完成 win-x64 self-contained restore/build/publish。
 - 结论：Storage schema v3/device catalog、单 owner writer、键盘日聚合、SQLiteCommitted 水位、timer/64-row/frequency fail-closed 已进入 `codex/storage-stats@9c88d1c` 并完成统一绿回归；这不是 mouse ingestion、query/export/delete、物理断电、硬件或 final Storage 验收。
 - 下一步：从本集成点开独立 mouse ingestion B 切片，接现有 spool→chunk/catalog 的完整原始字段与 device/calibration/pause/stop boundary；随后 read-query 与 App adapter，生成首个带真实持久化统计的测试包。
+
+## 2026-08-10 Storage mouse ingestion B 后继分支启动
+
+- 任务书原顺序要求前置 PR 合并后再 rebase 后继分支；当前 B-009 已连续三次证明 GitHub HTTPS 不可达，无法形成/合并 Storage 前置 PR。为继续不受影响的本地工作，采用最小替代：从已双审并完成统一回归的本地集成点 `codex/storage-stats@2ce0838` 创建 `codex/storage-mouse-ingestion`，不直接推 main、不伪报远端依赖已满足；网络恢复后仍按 PR 顺序整理。
+- 创建命令：在 clean `51f2` worktree 执行 `git switch -c codex/storage-mouse-ingestion 2ce0838` raw exit 0；原 `codex/storage-service-work@2e009f4` 提交保留，不重写历史。
+- B 切片范围：只实现 Storage-native mouse ingestion 到现有 CRC spool、bounded chunk builder 与 catalog；完整原始字段不抽样，按 device/calibration/pause/stop/checkpoint boundary 封口，任何顺序/flush/catalog 失败立即 IntegrityFault。
+- durable 边界：`SinkAcknowledged` 仍不等于物理断电；公开 mouse 水位只在 spool `Flush(true)` 与 SQLite catalog commit 的既定协议后推进。B-008 禁止清理或覆盖 spool/chunk/tmp/corrupt。
+- 不在本切片：App adapter、read query、统计 UI、export/backup/delete、Acceptance、硬件/物理断电；不得借 mock 宣称真实轨迹终验。
+- 下一步：固定 Storage worker 从新分支读取现有 spool/chunk API，先冻结最小契约与普通 FS/SQLite 测试矩阵，再实施并请求主任务代跑 build/non-Spike。
 ## 2026-08-09 Storage service 第一检查点待代跑
 
 - 分支证据：从 detached `6a6a5ea232b04372c1539643b4f4a173a0138afc` 创建 `codex/storage-service-work`；创建后 `git status` 为 clean，HEAD 未变化。
