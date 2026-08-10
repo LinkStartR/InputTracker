@@ -66,15 +66,46 @@ public enum StorageLifecycleBoundary
     Stop = 5
 }
 
+[Flags]
+public enum StoragePauseReason
+{
+    None = 0,
+    User = 1,
+    SessionLock = 2,
+    Suspend = 4
+}
+
+public enum StorageKeyboardTransitionResult
+{
+    Accepted = 0,
+    DuplicateDownIgnored = 1,
+    OrphanUpIgnored = 2
+}
+
+public readonly record struct StorageKeyboardTransition(
+    Guid DeviceId,
+    ushort MakeCode,
+    bool IsE0,
+    bool IsE1,
+    bool IsDown,
+    long MonotonicTimestamp,
+    Guid CalibrationSessionId);
+
 public sealed record StorageIntegrityFault(
     string Code,
     string Summary,
     StorageLifecycleBoundary? Boundary);
 
+public enum StorageDurabilityScope
+{
+    SQLiteCommitted = 0
+}
+
 public sealed record StorageDurableWatermark(
     long CommitSequence,
     long KeyboardAggregateCommitSequence,
-    IReadOnlyDictionary<Guid, long> MouseSequenceByDevice);
+    IReadOnlyDictionary<Guid, long> MouseSequenceByDevice,
+    StorageDurabilityScope Scope);
 
 public sealed record StorageServiceHealth(
     StorageServiceState State,

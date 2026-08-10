@@ -755,3 +755,21 @@
 - 权威验证保持：Release build 0 warnings / 0 errors；非 `StorageSpike` tests 67 passed / 0 failed / 0 skipped / 67 total。C1 白名单/Git 审查与 C2 第一检查点只读审阅均已放行。
 - GitHub 状态：本地提交完整，仍未 push；B-009 GitHub HTTPS 不可达继续有效，不伪报远端分支或 draft PR。
 - 下一步：从该提交开始独立实现 Storage 单 owner ingestion 与 fail-closed 生命周期边界，优先接通 health/durable watermark/IntegrityFault、键盘日聚合与现有 mouse spool/builder/catalog；read-query 继续作为后续独立切片。当前只记录进度，等待主任务提交本次 `PROGRESS.md` 记录后再发放实施指令。
+
+### StorageService A 单 owner 与键盘 ingestion 实测收口
+
+- 分支/基线：`codex/storage-service-work@857671f` 加本切片未提交修改；未 stage/commit/push。
+- 本切片只完成 A：新增 `StorageService` 单 owner writer/checkpointer、进程内 owner registry 与保留型 `storage-service.writer.lock`，实现 `Created/Running/Paused/IntegrityFault/Stopped/Disposed`、只读 health、`SQLiteCommitted` 水位及不可自动恢复的 fail-closed 边界；未开始 mouse ingestion、query 或 export。
+- 键盘 ingestion 仅接受 device GUID、makeCode、E0/E1、down/up、单调时钟和 calibration session。首次 down、up、重复 down、孤立 up、双前缀、单调顺序、显式 Windows 时区与 calibration mismatch 均按冻结契约处理；没有持久化文字、VKey/message、事件顺序、精确事件时间、窗口、焦点、进程或 open-hold 状态。
+- 继续遵守 B-006：不退化为逐键 SQLite 事务/fsync。固定阈值为 32 pending transitions、64 distinct pending daily rows、250 ms 主动 timer，另含 explicit checkpoint 与所有 lifecycle boundary，取最早触发并以单事务提交。accepted/pending 不等于 `SQLiteCommitted`，commit 成功前不推进水位；失败后不重试、不双计并进入 `IntegrityFault`。
+- 无 schema v4：沿用 v3 的 `store_metadata` 保存两个可重开读取的 scalar ordinal。任何真实持久变化使 global `CommitSequence` 加一；只有含 keyboard delta 的事务使 `KeyboardAggregateCommitSequence` 加一；calibration-only 只推进 global，完全无变化的 boundary 不推进。理由是水位不需要事件历史或新表，现有 metadata 已满足原子性与 reopen。
+- lifecycle：User/SessionLock/Suspend 用 flags 叠加，首个原因关闭入口并结清全部 hold，移除最后原因才恢复 Running；device removal 只结清该设备；calibration change 结清全部并原子写新 calibration；stop 正常结清后 Stopped。状态保持及 SQLite/顺序/时区失败均有真实 DB/FS 回归。
+- 时间与 crash：单调时间先经 calibration 映射 UTC，再与显式 Windows 时区各 local date 的 `[midnight,next midnight)` UTC 区间求交，覆盖 UTC、China Standard Time、Pacific spring 23h/fall 25h。`Dispose` without `Stop` 不合成 up、不写 open-event；已提交 aggregate 保留，最后成功 batch 之后的 pending/open tail 可丢失且不伪报 durable。
+- 测试只增：新增 10 个 lifecycle、11 个 keyboard ingestion（含 4 个 theory case）与 4 个 privacy nonSpike case，共 25 个；从历史记录的 67 baseline 增至实际 92。覆盖 owner/锁文件保留、calibration-only reopen、pause flags、device/calibration/stop、commit/order/time-zone fault、32/64/250ms、重复/孤立、crash reopen、午夜/DST、E0/E1、internal-only fault seam、反射/source/DB 隐私。
+- 首次 build：`& 'E:\Projects\InputTracker 20260704\.tools\dotnet\dotnet.exe' build tests\InputTracker.Storage.Tests\InputTracker.Storage.Tests.csproj -c Release --no-restore` exit 0，但 `StorageService.cs:190` 有 1 个 nullable warning / 0 errors；仅把 `TryGetValue` 的引用类型 out 标注为 nullable 后重跑 exit 0，0 warnings / 0 errors，耗时 1.04s。
+- 首次 nonSpike test：同一本地 SDK 执行 `test ... --no-build --no-restore --filter "Category!=StorageSpike"` exit 1，90 passed / 1 failed / 0 skipped；失败测试在 1s key-up 时已被冻结的 250ms 门槛自动提交，之后才注入 commit fault，故 checkpoint 合理未抛错。仅把该测试 key-up/checkpoint 收到 100ms，使故障命中真实 pending transaction，产品逻辑和断言未放宽。
+- C14 数据正确性复核后的窄修：Timer 只提交已形成 pending delta，不再以 wall-clock 推进全局/hold event cursor；legacy `StorageDatabase.Open` 与 Service 共用保留型 writer lock，Service 仅经已持锁内部入口打开；daily split 改为惰性枚举并限制每事务最多 64 distinct rows；calibration frequency 必须匹配 active clock，同 session 异 frequency 不再被 `INSERT OR IGNORE` 静默接受。
+- 65 日 hold 明确采用 durable-prefix 语义：成功路径以 64+1 两事务完整提交；若第二事务失败，第一事务的 64 日精确 prefix 与对应水位保留，Service 立即 `IntegrityFault`、拒绝后续写、剩余 suffix 不重试，Dispose/reopen 后 prefix 不丢不重。本水位不声称整个 up transition 原子。
+- C14 后最终 build：同一仓库本地 SDK 命令 exit 0，0 warnings / 0 errors，最终重跑耗时 0.76s。最终 nonSpike test exit 0，92 passed / 0 failed / 0 skipped / 92 total，测试持续 1s；timer newer-wall-clock 后的合法旧排队 up、legacy owner、64+1 成功/第二批失败 prefix、clock/session frequency 冲突均由普通测试实际执行。该自动绿不替代 StorageSpike、真实进程 kill/物理断电、真实硬件或最终 Acceptance。
+- 静态冻结：`StorageSchema.cs` 内容 diff 为空；`git diff --check` exit 0，仅有既有工作树 LF→CRLF 提示；未发现 skip/TODO/NotImplemented；所有改动均在 Storage 白名单内，未触碰 Input/App/Acceptance/verify/solution/依赖，也未 stage/commit/push。
+- 下一步：主任务/C1/C2 只读复核精确白名单、数据正确性与验收边界；放行后再由主任务协调 stage/commit。后续 mouse ingestion、query/export/delete 与硬件/物理断电证据保持未开始或 blocked，不由本切片冒充。
