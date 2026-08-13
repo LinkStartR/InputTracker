@@ -13,7 +13,7 @@ public sealed class StorageDatabaseTests
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
         Assert.StartsWith(directory.Path, database.Layout.DatabasePath, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(3, database.SchemaVersion);
+        Assert.Equal(4, database.SchemaVersion);
         Assert.Equal("wal", database.JournalMode, ignoreCase: true);
         Assert.Equal(2, database.Synchronous);
         Assert.True(database.ForeignKeysEnabled);
@@ -31,7 +31,7 @@ public sealed class StorageDatabaseTests
         {
             connection.Open();
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 4;";
+            command.CommandText = "PRAGMA user_version = 5;";
             command.ExecuteNonQuery();
         }
 
@@ -79,14 +79,18 @@ public sealed class StorageDatabaseTests
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
-        Assert.Equal(3, database.SchemaVersion);
+        Assert.Equal(4, database.SchemaVersion);
         using SqliteCommand checksum = database.Connection.CreateCommand();
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 2;";
         Assert.Equal(StorageSchema.Version2Checksum, (string)checksum.ExecuteScalar()!);
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 3;";
         Assert.Equal(StorageSchema.Version3Checksum, (string)checksum.ExecuteScalar()!);
+        checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 4;";
+        Assert.Equal(StorageSchema.Version4Checksum, (string)checksum.ExecuteScalar()!);
         Assert.Contains("mouse_chunks", database.ReadSchemaColumns().Keys);
         Assert.Contains("device_identity_mappings", database.ReadSchemaColumns().Keys);
+        Assert.Contains("mouse_spool_segments", database.ReadSchemaColumns().Keys);
+        Assert.Contains("mouse_device_watermarks", database.ReadSchemaColumns().Keys);
     }
 
     [Fact]
@@ -119,11 +123,180 @@ public sealed class StorageDatabaseTests
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
-        Assert.Equal(3, database.SchemaVersion);
+        Assert.Equal(4, database.SchemaVersion);
         Assert.Contains("device_identity_mappings", database.ReadSchemaColumns().Keys);
         using SqliteCommand checksum = database.Connection.CreateCommand();
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 3;";
         Assert.Equal(StorageSchema.Version3Checksum, (string)checksum.ExecuteScalar()!);
+    }
+
+    [Fact]
+    public void VersionThreeDatabaseMigratesToVersionFourWithCompleteObjectsAndChecksum()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+
+        using var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False");
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 4;";
+        Assert.Equal(StorageSchema.Version4Checksum, (string)command.ExecuteScalar()!);
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('mouse_spool_segments', 'mouse_device_watermarks');";
+        Assert.Equal(2L, (long)command.ExecuteScalar()!);
+    }
+
+    [Fact]
+    public void VersionFourChecksumMismatchFailsClosed()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "UPDATE schema_migrations SET checksum = 'tampered' WHERE version = 4;";
+            command.ExecuteNonQuery();
+        }
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => StorageDatabase.Open(layout, new FakeClock()));
+        Assert.Contains("migration 4", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("checksum", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("DELETE FROM store_metadata WHERE key = 'mouse.v3-adoption-complete';")]
+    [InlineData("UPDATE store_metadata SET value = 'invalid' WHERE key = 'mouse.v3-adoption-complete';")]
+    public void VersionFourMissingOrInvalidAdoptionMarkerFailsClosed(string mutation)
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = mutation;
+            command.ExecuteNonQuery();
+        }
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+            StorageDatabase.Open(layout, new FakeClock()));
+        Assert.Contains("shape", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void VersionFourWrongIndexShapeFailsClosedWithValidVersionAndChecksum()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP INDEX mouse_spool_segments_device_sequence;
+                CREATE INDEX mouse_spool_segments_device_sequence
+                    ON mouse_spool_segments(device_id, last_sequence, first_sequence);
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+            StorageDatabase.Open(layout, new FakeClock()));
+        Assert.Contains("shape", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PartialVersionFourObjectsFailClosedWithoutChangingVersionThree()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock())) { }
+        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "DROP TABLE mouse_device_watermarks; DELETE FROM store_metadata WHERE key = 'mouse.v3-adoption-complete'; PRAGMA user_version = 3; DELETE FROM schema_migrations WHERE version = 4;";
+            command.ExecuteNonQuery();
+        }
+
+        Assert.ThrowsAny<Exception>(() => StorageDatabase.Open(layout, new FakeClock()));
+        using var verify = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False");
+        verify.Open();
+        using SqliteCommand version = verify.CreateCommand();
+        version.CommandText = "PRAGMA user_version;";
+        Assert.Equal(3L, (long)version.ExecuteScalar()!);
+    }
+
+    [Fact]
+    public void MouseSpoolPrefixTransactionAdvancesDeviceAndGlobalWatermarksAcrossCalibrations()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        var clock = new FakeClock();
+        using StorageDatabase database = StorageDatabase.Open(layout, clock);
+        Guid deviceId = Guid.NewGuid();
+        database.RegisterDevice(deviceId, kind: 0, identityConfidence: 0, createdUtcMicroseconds: 1);
+        Guid firstSession = Guid.NewGuid();
+        long firstCalibration = database.RecordCalibration(TimeCalibrationSegment.Capture(firstSession, clock));
+        MouseSpoolSegment first = CreateSpoolSegment(layout, deviceId, firstSession, firstCalibration, 1, 2);
+
+        StorageMousePrefixCommit firstCommit = database.CommitMouseSpoolSegment(first, 10);
+
+        Guid secondSession = Guid.NewGuid();
+        long secondCalibration = database.RecordCalibration(TimeCalibrationSegment.Capture(secondSession, clock));
+        MouseSpoolSegment second = CreateSpoolSegment(layout, deviceId, secondSession, secondCalibration, 3, 2);
+        StorageMousePrefixCommit secondCommit = database.CommitMouseSpoolSegment(second, 11);
+
+        Assert.Equal(2, firstCommit.DeviceSequence);
+        Assert.Equal(4, secondCommit.DeviceSequence);
+        Assert.Equal(1, firstCommit.CommitOrdinal);
+        Assert.Equal(2, secondCommit.CommitOrdinal);
+        Assert.Equal(0, secondCommit.KeyboardAggregateCommitOrdinal);
+        Assert.Equal(4, database.ReadMouseDeviceWatermarks()[deviceId]);
+        using SqliteCommand rows = database.Connection.CreateCommand();
+        rows.CommandText = "SELECT COUNT(*), MIN(first_sequence), MAX(last_sequence) FROM mouse_spool_segments WHERE device_id = $device;";
+        rows.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        using SqliteDataReader reader = rows.ExecuteReader();
+        Assert.True(reader.Read());
+        Assert.Equal(2, reader.GetInt64(0));
+        Assert.Equal(1, reader.GetInt64(1));
+        Assert.Equal(4, reader.GetInt64(2));
+    }
+
+    [Fact]
+    public void MouseSpoolDirectoryFailurePublishesNoWatermarkOrGlobalOrdinal()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        var clock = new FakeClock();
+        using StorageDatabase database = StorageDatabase.Open(layout, clock);
+        Guid deviceId = Guid.NewGuid();
+        database.RegisterDevice(deviceId, kind: 0, identityConfidence: 0, createdUtcMicroseconds: 1);
+        Guid session = Guid.NewGuid();
+        long calibration = database.RecordCalibration(TimeCalibrationSegment.Capture(session, clock));
+        MouseSpoolSegment segment = CreateSpoolSegment(layout, deviceId, session, calibration, 1, 1);
+        using (SqliteCommand trigger = database.Connection.CreateCommand())
+        {
+            trigger.CommandText = """
+                CREATE TRIGGER fail_spool_directory_insert
+                BEFORE INSERT ON mouse_spool_segments
+                BEGIN SELECT RAISE(ABORT, 'test spool directory failure'); END;
+                """;
+            trigger.ExecuteNonQuery();
+        }
+
+        Assert.Throws<SqliteException>(() => database.CommitMouseSpoolSegment(segment, 10));
+
+        Assert.Empty(database.ReadMouseDeviceWatermarks());
+        Assert.Equal(new StorageServiceOrdinals(0, 0), database.ReadStorageServiceOrdinals());
+        using SqliteCommand rows = database.Connection.CreateCommand();
+        rows.CommandText = "SELECT COUNT(*) FROM mouse_spool_segments;";
+        Assert.Equal(0L, (long)rows.ExecuteScalar()!);
+        Assert.True(File.Exists(segment.Path));
     }
 
     [Fact]
@@ -168,7 +341,7 @@ public sealed class StorageDatabaseTests
         }
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
-        Assert.Equal(3, database.SchemaVersion);
+        Assert.Equal(4, database.SchemaVersion);
         using (SqliteCommand migrated = database.Connection.CreateCommand())
         {
             migrated.CommandText = """
@@ -305,6 +478,32 @@ public sealed class StorageDatabaseTests
 
         Assert.Equal(1_785_931_201_000_000L, oneSecondLater);
         Assert.NotEqual(segment.MonotonicAnchor, segment.UtcAnchorMicroseconds);
+    }
+
+    private static MouseSpoolSegment CreateSpoolSegment(
+        StorageLayout layout,
+        Guid deviceId,
+        Guid calibrationSessionId,
+        long calibrationSegmentId,
+        long firstSequence,
+        int count)
+    {
+        Guid segmentId = Guid.NewGuid();
+        string path = System.IO.Path.Combine(layout.SpoolDirectory, segmentId.ToString("N") + ".mspool");
+        var header = new MouseSpoolHeader(
+            segmentId, deviceId, calibrationSessionId, calibrationSegmentId, firstSequence);
+        using (var writer = new MouseSpoolWriter(path, header))
+        {
+            for (int index = 0; index < count; index++)
+            {
+                long sequence = firstSequence + index;
+                writer.Append(new MouseSpoolRecord(sequence, sequence, index, -index, 0, false, 0, 0, 0));
+            }
+
+            writer.FlushFile();
+        }
+
+        return MouseSpoolSegmentReader.Read(path);
     }
 }
 

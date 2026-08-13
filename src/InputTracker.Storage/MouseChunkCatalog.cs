@@ -98,7 +98,7 @@ internal static class MouseChunkCatalog
         EnsureForeignKeysExist(database.Connection, deviceId, calibrationSegmentId);
         long firstSequence = records[0].Sequence;
         long lastSequence = records[^1].Sequence;
-        if (HasSequenceOverlap(database.Connection, null, deviceId, calibrationSegmentId, firstSequence, lastSequence))
+        if (HasSequenceOverlap(database.Connection, null, deviceId, firstSequence, lastSequence))
         {
             throw new InvalidDataException("Mouse chunk sequence range overlaps an indexed chunk.");
         }
@@ -120,7 +120,6 @@ internal static class MouseChunkCatalog
             database.Connection,
             transaction,
             entry.DeviceId,
-            entry.CalibrationSegmentId,
             entry.FirstSequence,
             entry.LastSequence))
         {
@@ -483,7 +482,6 @@ internal static class MouseChunkCatalog
                     database.Connection,
                     transaction,
                     entry.DeviceId,
-                    entry.CalibrationSegmentId,
                     entry.FirstSequence,
                     entry.LastSequence))
                 {
@@ -679,7 +677,6 @@ internal static class MouseChunkCatalog
         SqliteConnection connection,
         SqliteTransaction? transaction,
         Guid deviceId,
-        long calibrationSegmentId,
         long firstSequence,
         long lastSequence)
     {
@@ -689,13 +686,11 @@ internal static class MouseChunkCatalog
             SELECT 1
             FROM mouse_chunks
             WHERE device_id = $device
-              AND calibration_segment_id = $segment
               AND first_sequence <= $last
               AND last_sequence >= $first
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
-        command.Parameters.AddWithValue("$segment", calibrationSegmentId);
         command.Parameters.AddWithValue("$first", firstSequence);
         command.Parameters.AddWithValue("$last", lastSequence);
         return command.ExecuteScalar() is not null;
@@ -706,7 +701,6 @@ internal static class MouseChunkCatalog
 
     private static bool RangesOverlap(MouseChunkCatalogEntry left, MouseChunkCatalogEntry right) =>
         left.DeviceId == right.DeviceId
-        && left.CalibrationSegmentId == right.CalibrationSegmentId
         && left.FirstSequence <= right.LastSequence
         && left.LastSequence >= right.FirstSequence;
 

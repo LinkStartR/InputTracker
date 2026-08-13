@@ -91,6 +91,18 @@ public readonly record struct StorageKeyboardTransition(
     long MonotonicTimestamp,
     Guid CalibrationSessionId);
 
+public readonly record struct StorageMouseTransition(
+    Guid DeviceId,
+    Guid CalibrationSessionId,
+    long MonotonicTimestamp,
+    int DeltaX,
+    int DeltaY,
+    byte MotionKind,
+    bool UsesVirtualDesktop,
+    ushort ButtonChanges,
+    short VerticalWheelDelta,
+    short HorizontalWheelDelta);
+
 public sealed record StorageIntegrityFault(
     string Code,
     string Summary,
@@ -112,6 +124,12 @@ public sealed record StorageServiceHealth(
     bool AcceptingWrites,
     StorageDurableWatermark DurableWatermark,
     StorageIntegrityFault? IntegrityFault);
+
+internal readonly record struct StorageMousePrefixCommit(
+    Guid DeviceId,
+    long DeviceSequence,
+    long CommitOrdinal,
+    long KeyboardAggregateCommitOrdinal);
 
 public enum StoragePeriodKind
 {

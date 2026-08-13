@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 
 namespace InputTracker.Storage;
 
@@ -29,6 +30,90 @@ public readonly record struct SpoolDurableWatermark(
 internal readonly record struct SpoolFlushResult(
     long FileFlushedCount,
     long FlushedLength);
+
+internal readonly record struct MouseSpoolHeader(
+    Guid SegmentId,
+    Guid DeviceId,
+    Guid CalibrationSessionId,
+    long CalibrationSegmentId,
+    long FirstSequence);
+
+internal sealed record MouseSpoolSegment(
+    string Path,
+    MouseSpoolHeader Header,
+    IReadOnlyList<MouseSpoolRecord> Records,
+    long ValidLength,
+    string SpoolFileSha256);
+
+internal static class MouseSpoolHeaderCodec
+{
+    private const uint Magic = 0x4850534D; // MSPH in little endian.
+    private const ushort Version = 1;
+    public const int HeaderSize = 80;
+    private const int ChecksumOffset = 76;
+
+    public static byte[] Encode(MouseSpoolHeader header)
+    {
+        Validate(header);
+        byte[] bytes = new byte[HeaderSize];
+        Span<byte> span = bytes;
+        BinaryPrimitives.WriteUInt32LittleEndian(span, Magic);
+        BinaryPrimitives.WriteUInt16LittleEndian(span[4..], Version);
+        BinaryPrimitives.WriteUInt16LittleEndian(span[6..], HeaderSize);
+        header.SegmentId.TryWriteBytes(span[8..24]);
+        header.DeviceId.TryWriteBytes(span[24..40]);
+        header.CalibrationSessionId.TryWriteBytes(span[40..56]);
+        BinaryPrimitives.WriteInt64LittleEndian(span[56..], header.CalibrationSegmentId);
+        BinaryPrimitives.WriteInt64LittleEndian(span[64..], header.FirstSequence);
+        BinaryPrimitives.WriteUInt32LittleEndian(span[72..], 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(span[ChecksumOffset..], Crc32C.Calculate(span[..ChecksumOffset]));
+        return bytes;
+    }
+
+    public static MouseSpoolHeader Decode(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length != HeaderSize)
+        {
+            throw new InvalidDataException($"Mouse spool header length {bytes.Length} is not {HeaderSize}.");
+        }
+
+        if (BinaryPrimitives.ReadUInt32LittleEndian(bytes) != Magic
+            || BinaryPrimitives.ReadUInt16LittleEndian(bytes[4..]) != Version
+            || BinaryPrimitives.ReadUInt16LittleEndian(bytes[6..]) != HeaderSize
+            || BinaryPrimitives.ReadUInt32LittleEndian(bytes[72..]) != 0)
+        {
+            throw new InvalidDataException("Mouse spool header identity is invalid.");
+        }
+
+        uint expected = BinaryPrimitives.ReadUInt32LittleEndian(bytes[ChecksumOffset..]);
+        uint actual = Crc32C.Calculate(bytes[..ChecksumOffset]);
+        if (expected != actual)
+        {
+            throw new InvalidDataException("Mouse spool header CRC32C does not match.");
+        }
+
+        var header = new MouseSpoolHeader(
+            new Guid(bytes[8..24]),
+            new Guid(bytes[24..40]),
+            new Guid(bytes[40..56]),
+            BinaryPrimitives.ReadInt64LittleEndian(bytes[56..]),
+            BinaryPrimitives.ReadInt64LittleEndian(bytes[64..]));
+        Validate(header);
+        return header;
+    }
+
+    private static void Validate(MouseSpoolHeader header)
+    {
+        if (header.SegmentId == Guid.Empty
+            || header.DeviceId == Guid.Empty
+            || header.CalibrationSessionId == Guid.Empty
+            || header.CalibrationSegmentId <= 0
+            || header.FirstSequence <= 0)
+        {
+            throw new InvalidDataException("Mouse spool header fields are invalid.");
+        }
+    }
+}
 
 internal static class MouseSpoolRecordCodec
 {
@@ -143,6 +228,82 @@ public static class MouseSpoolRecovery
     }
 }
 
+internal static class MouseSpoolSegmentReader
+{
+    public static MouseSpoolSegment Read(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
+        if (stream.Length < MouseSpoolHeaderCodec.HeaderSize)
+        {
+            throw new InvalidDataException("Mouse spool header is incomplete.");
+        }
+
+        byte[] headerBytes = new byte[MouseSpoolHeaderCodec.HeaderSize];
+        stream.ReadExactly(headerBytes);
+        MouseSpoolHeader header = MouseSpoolHeaderCodec.Decode(headerBytes);
+        long bodyLength = stream.Length - MouseSpoolHeaderCodec.HeaderSize;
+        if (bodyLength % MouseSpoolRecordCodec.RecordSize != 0)
+        {
+            throw new InvalidDataException("Mouse spool has an incomplete record tail.");
+        }
+
+        int count = checked((int)(bodyLength / MouseSpoolRecordCodec.RecordSize));
+        var records = new List<MouseSpoolRecord>(count);
+        byte[] recordBytes = new byte[MouseSpoolRecordCodec.RecordSize];
+        long expectedSequence = header.FirstSequence;
+        for (int index = 0; index < count; index++)
+        {
+            stream.ReadExactly(recordBytes);
+            MouseSpoolRecord record = MouseSpoolRecordCodec.Decode(recordBytes);
+            if (record.Sequence != expectedSequence)
+            {
+                throw new InvalidDataException(
+                    $"Mouse spool expected sequence {expectedSequence}, found {record.Sequence}.");
+            }
+
+            records.Add(record);
+            expectedSequence = checked(expectedSequence + 1);
+        }
+
+        stream.Position = 0;
+        string fileHash = Convert.ToHexString(SHA256.HashData(stream));
+        return new MouseSpoolSegment(System.IO.Path.GetFullPath(path), header, records, stream.Length, fileHash);
+    }
+}
+
+internal static class LegacyMouseSpoolReader
+{
+    public static IReadOnlyList<MouseSpoolRecord> Read(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
+        if (stream.Length == 0 || stream.Length % MouseSpoolRecordCodec.RecordSize != 0)
+        {
+            throw new InvalidDataException("Legacy mouse spool length is invalid.");
+        }
+
+        int count = checked((int)(stream.Length / MouseSpoolRecordCodec.RecordSize));
+        var records = new List<MouseSpoolRecord>(count);
+        byte[] bytes = new byte[MouseSpoolRecordCodec.RecordSize];
+        long expected = 0;
+        for (int index = 0; index < count; index++)
+        {
+            stream.ReadExactly(bytes);
+            MouseSpoolRecord record = MouseSpoolRecordCodec.Decode(bytes);
+            if (index > 0 && record.Sequence != checked(expected + 1))
+            {
+                throw new InvalidDataException("Legacy mouse spool sequence is not contiguous.");
+            }
+
+            records.Add(record);
+            expected = record.Sequence;
+        }
+
+        return records;
+    }
+}
+
 public sealed class MouseSpoolWriter : IDisposable
 {
     private readonly FileStream _stream;
@@ -161,6 +322,45 @@ public sealed class MouseSpoolWriter : IDisposable
         _stream = new FileStream(Path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1, FileOptions.SequentialScan);
         _stream.Position = _stream.Length;
         SpoolAppended = recovery.Recovered;
+    }
+
+    internal MouseSpoolWriter(string path, MouseSpoolHeader header)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        string fullPath = System.IO.Path.GetFullPath(path);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath)!);
+        Path = fullPath;
+        if (File.Exists(fullPath))
+        {
+            MouseSpoolSegment existing = MouseSpoolSegmentReader.Read(fullPath);
+            if (existing.Header != header)
+            {
+                throw new InvalidDataException("Existing mouse spool header does not match the requested segment.");
+            }
+
+            Recovered = existing.Records.Count;
+            SpoolAppended = existing.Records.Count;
+            _lastSequence = existing.Records.Count == 0
+                ? checked(header.FirstSequence - 1)
+                : existing.Records[^1].Sequence;
+            _stream = new FileStream(fullPath, FileMode.Open, FileAccess.Write, FileShare.Read, 1, FileOptions.SequentialScan);
+            _stream.Position = _stream.Length;
+            return;
+        }
+
+        _stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 1, FileOptions.SequentialScan);
+        try
+        {
+            byte[] headerBytes = MouseSpoolHeaderCodec.Encode(header);
+            _stream.Write(headerBytes);
+            _stream.Flush(flushToDisk: true);
+            _lastSequence = checked(header.FirstSequence - 1);
+        }
+        catch
+        {
+            _stream.Dispose();
+            throw;
+        }
     }
 
     public string Path { get; }

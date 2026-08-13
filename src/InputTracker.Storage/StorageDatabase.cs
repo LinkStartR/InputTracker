@@ -167,6 +167,259 @@ public sealed class StorageDatabase : IDisposable
     internal StorageServiceOrdinals ReadStorageServiceOrdinals() =>
         ReadStorageServiceOrdinals(_connection, transaction: null);
 
+    internal IReadOnlyDictionary<Guid, long> ReadMouseDeviceWatermarks()
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = "SELECT device_id, durable_sequence FROM mouse_device_watermarks ORDER BY device_id;";
+        using SqliteDataReader reader = command.ExecuteReader();
+        var result = new Dictionary<Guid, long>();
+        while (reader.Read())
+        {
+            if (!Guid.TryParseExact(reader.GetString(0), "N", out Guid deviceId)
+                || deviceId == Guid.Empty
+                || reader.GetInt64(1) < 0
+                || !result.TryAdd(deviceId, reader.GetInt64(1)))
+            {
+                throw new InvalidDataException("Mouse device watermark contains invalid data.");
+            }
+        }
+
+        return result;
+    }
+
+    internal bool IsRegisteredMouse(Guid deviceId)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = "SELECT kind FROM devices WHERE device_id = $device;";
+        command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        object? value = command.ExecuteScalar();
+        return value is long kind && kind == (long)StorageDeviceKind.Mouse;
+    }
+
+    internal void ValidateMouseSpoolIdentity(MouseSpoolHeader header)
+    {
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        ValidateMouseSpoolForeignKeys(_connection, transaction, header);
+        transaction.Rollback();
+    }
+
+    internal bool IsMouseV3AdoptionComplete()
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = "SELECT value FROM store_metadata WHERE key = 'mouse.v3-adoption-complete';";
+        object? value = command.ExecuteScalar();
+        return value switch
+        {
+            "0" => false,
+            "1" => true,
+            _ => throw new InvalidDataException("Mouse v3 adoption marker is missing or invalid.")
+        };
+    }
+
+    internal void CompleteMouseV3Adoption()
+    {
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        using SqliteCommand command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE store_metadata
+            SET value = '1'
+            WHERE key = 'mouse.v3-adoption-complete' AND value = '0';
+            """;
+        if (command.ExecuteNonQuery() != 1)
+        {
+            throw new InvalidDataException("Mouse v3 adoption marker did not make the required atomic transition.");
+        }
+
+        transaction.Commit();
+        if (!IsMouseV3AdoptionComplete())
+        {
+            throw new InvalidDataException("Mouse v3 adoption marker did not persist completion.");
+        }
+    }
+
+    internal long FindCalibrationSegmentId(TimeCalibrationSegment calibration)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = """
+            SELECT segment_id
+            FROM time_calibration_segments
+            WHERE session_id = $session
+              AND monotonic_anchor = $monotonic
+              AND utc_anchor_us = $utc
+              AND uncertainty_ticks = $uncertainty
+              AND time_zone_id = $zone
+            ORDER BY segment_id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$session", calibration.SessionId.ToString("N"));
+        command.Parameters.AddWithValue("$monotonic", calibration.MonotonicAnchor);
+        command.Parameters.AddWithValue("$utc", calibration.UtcAnchorMicroseconds);
+        command.Parameters.AddWithValue("$uncertainty", calibration.SamplingUncertaintyTicks);
+        command.Parameters.AddWithValue("$zone", calibration.TimeZoneId);
+        object? result = command.ExecuteScalar();
+        if (result is not long segmentId || segmentId <= 0)
+        {
+            throw new InvalidDataException("Active calibration segment was not persisted.");
+        }
+
+        return segmentId;
+    }
+
+    internal bool CalibrationSegmentMatches(long segmentId, TimeCalibrationSegment calibration)
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM time_calibration_segments c
+            JOIN clock_sessions s ON s.session_id = c.session_id
+            WHERE c.segment_id = $segment
+              AND c.session_id = $session
+              AND s.frequency = $frequency
+              AND monotonic_anchor = $monotonic
+              AND utc_anchor_us = $utc
+              AND uncertainty_ticks = $uncertainty
+              AND time_zone_id = $zone;
+            """;
+        command.Parameters.AddWithValue("$segment", segmentId);
+        command.Parameters.AddWithValue("$session", calibration.SessionId.ToString("N"));
+        command.Parameters.AddWithValue("$frequency", calibration.Frequency);
+        command.Parameters.AddWithValue("$monotonic", calibration.MonotonicAnchor);
+        command.Parameters.AddWithValue("$utc", calibration.UtcAnchorMicroseconds);
+        command.Parameters.AddWithValue("$uncertainty", calibration.SamplingUncertaintyTicks);
+        command.Parameters.AddWithValue("$zone", calibration.TimeZoneId);
+        return (long)command.ExecuteScalar()! == 1;
+    }
+
+    internal StorageMousePrefixCommit CommitMouseSpoolSegment(
+        MouseSpoolSegment segment,
+        long updatedUtcMicroseconds)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        if (segment.Records.Count == 0
+            || segment.ValidLength != MouseSpoolHeaderCodec.HeaderSize
+                + (long)segment.Records.Count * MouseSpoolRecordCodec.RecordSize
+            || segment.Header.FirstSequence != segment.Records[0].Sequence
+            || segment.Records[^1].Sequence != checked(segment.Header.FirstSequence + segment.Records.Count - 1))
+        {
+            throw new InvalidDataException("Mouse spool segment range or length is invalid.");
+        }
+
+        string relativePath = segment.Header.SegmentId.ToString("N") + ".mspool";
+        string root = Path.GetFullPath(Layout.SpoolDirectory);
+        string rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        string expectedPath = Path.GetFullPath(Path.Combine(root, relativePath));
+        if (!expectedPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(expectedPath, Path.GetFullPath(segment.Path), StringComparison.OrdinalIgnoreCase)
+            || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0
+            || (File.GetAttributes(expectedPath) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidDataException("Mouse spool path is outside the contained spool directory.");
+        }
+
+        MouseSpoolSegment verified = MouseSpoolSegmentReader.Read(expectedPath);
+        if (verified.Header != segment.Header
+            || verified.ValidLength != segment.ValidLength
+            || !string.Equals(verified.SpoolFileSha256, segment.SpoolFileSha256, StringComparison.Ordinal)
+            || !verified.Records.SequenceEqual(segment.Records))
+        {
+            throw new InvalidDataException("Mouse spool changed before directory publication.");
+        }
+
+        MouseChunkEncoded canonical = MouseChunkCodec.Encode(
+            Guid.NewGuid(),
+            segment.Header.DeviceId,
+            segment.Header.CalibrationSegmentId,
+            segment.Records);
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        ValidateMouseSpoolForeignKeys(_connection, transaction, segment.Header);
+        long currentDeviceSequence = ReadMouseDeviceWatermark(
+            _connection, transaction, segment.Header.DeviceId);
+        if (segment.Header.FirstSequence != checked(currentDeviceSequence + 1))
+        {
+            throw new InvalidDataException("Mouse spool range does not begin at the next device-global sequence.");
+        }
+
+        using (SqliteCommand overlap = _connection.CreateCommand())
+        {
+            overlap.Transaction = transaction;
+            overlap.CommandText = """
+                SELECT 1 FROM mouse_spool_segments
+                WHERE device_id = $device
+                  AND first_sequence <= $last
+                  AND last_sequence >= $first
+                LIMIT 1;
+                """;
+            overlap.Parameters.AddWithValue("$device", segment.Header.DeviceId.ToString("N"));
+            overlap.Parameters.AddWithValue("$first", segment.Records[0].Sequence);
+            overlap.Parameters.AddWithValue("$last", segment.Records[^1].Sequence);
+            if (overlap.ExecuteScalar() is not null)
+            {
+                throw new InvalidDataException("Mouse spool range overlaps a published device-global range.");
+            }
+        }
+
+        using (SqliteCommand insert = _connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO mouse_spool_segments(
+                    spool_segment_id, device_id, calibration_segment_id, relative_path,
+                    first_sequence, last_sequence,
+                    first_monotonic_timestamp, last_monotonic_timestamp,
+                    record_count, committed_length, spool_file_sha256, canonical_sha256, created_utc_us)
+                VALUES (
+                    $segment, $device, $calibration, $path,
+                    $first, $last, $firstTimestamp, $lastTimestamp,
+                    $count, $length, $fileHash, $canonicalHash, $created);
+                """;
+            insert.Parameters.AddWithValue("$segment", segment.Header.SegmentId.ToString("N"));
+            insert.Parameters.AddWithValue("$device", segment.Header.DeviceId.ToString("N"));
+            insert.Parameters.AddWithValue("$calibration", segment.Header.CalibrationSegmentId);
+            insert.Parameters.AddWithValue("$path", relativePath);
+            insert.Parameters.AddWithValue("$first", segment.Records[0].Sequence);
+            insert.Parameters.AddWithValue("$last", segment.Records[^1].Sequence);
+            insert.Parameters.AddWithValue("$firstTimestamp", segment.Records[0].MonotonicTimestamp);
+            insert.Parameters.AddWithValue("$lastTimestamp", segment.Records[^1].MonotonicTimestamp);
+            insert.Parameters.AddWithValue("$count", segment.Records.Count);
+            insert.Parameters.AddWithValue("$length", segment.ValidLength);
+            insert.Parameters.AddWithValue("$fileHash", segment.SpoolFileSha256);
+            insert.Parameters.AddWithValue("$canonicalHash", canonical.CanonicalSha256);
+            insert.Parameters.AddWithValue("$created", updatedUtcMicroseconds);
+            insert.ExecuteNonQuery();
+        }
+
+        long nextDeviceSequence = segment.Records[^1].Sequence;
+        using (SqliteCommand watermark = _connection.CreateCommand())
+        {
+            watermark.Transaction = transaction;
+            watermark.CommandText = """
+                INSERT INTO mouse_device_watermarks(device_id, durable_sequence, updated_utc_us)
+                VALUES ($device, $sequence, $updated)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    durable_sequence = excluded.durable_sequence,
+                    updated_utc_us = excluded.updated_utc_us;
+                """;
+            watermark.Parameters.AddWithValue("$device", segment.Header.DeviceId.ToString("N"));
+            watermark.Parameters.AddWithValue("$sequence", nextDeviceSequence);
+            watermark.Parameters.AddWithValue("$updated", updatedUtcMicroseconds);
+            watermark.ExecuteNonQuery();
+        }
+
+        StorageServiceOrdinals current = ReadStorageServiceOrdinals(_connection, transaction);
+        var next = new StorageServiceOrdinals(
+            checked(current.CommitOrdinal + 1),
+            current.KeyboardAggregateCommitOrdinal);
+        WriteStorageServiceOrdinals(_connection, transaction, next);
+        transaction.Commit();
+        return new StorageMousePrefixCommit(
+            segment.Header.DeviceId,
+            nextDeviceSequence,
+            next.CommitOrdinal,
+            next.KeyboardAggregateCommitOrdinal);
+    }
+
     internal StorageServiceOrdinals CommitStorageServiceBatch(
         IReadOnlyList<StorageKeyboardAggregateDelta> deltas,
         TimeCalibrationSegment? calibration,
@@ -416,6 +669,56 @@ public sealed class StorageDatabase : IDisposable
         return new StorageServiceOrdinals(commit, keyboard);
     }
 
+    private static long ReadMouseDeviceWatermark(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid deviceId)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT durable_sequence FROM mouse_device_watermarks WHERE device_id = $device;";
+        command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        object? value = command.ExecuteScalar();
+        if (value is null)
+        {
+            return 0;
+        }
+
+        long sequence = Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (sequence < 0)
+        {
+            throw new InvalidDataException("Mouse device watermark is invalid.");
+        }
+
+        return sequence;
+    }
+
+    private static void ValidateMouseSpoolForeignKeys(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        MouseSpoolHeader header)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT d.kind, c.session_id
+            FROM devices d
+            JOIN time_calibration_segments c ON c.segment_id = $calibration
+            WHERE d.device_id = $device;
+            """;
+        command.Parameters.AddWithValue("$device", header.DeviceId.ToString("N"));
+        command.Parameters.AddWithValue("$calibration", header.CalibrationSegmentId);
+        using SqliteDataReader reader = command.ExecuteReader();
+        if (!reader.Read()
+            || reader.GetInt32(0) != (int)StorageDeviceKind.Mouse
+            || !Guid.TryParseExact(reader.GetString(1), "N", out Guid sessionId)
+            || sessionId != header.CalibrationSessionId
+            || reader.Read())
+        {
+            throw new InvalidDataException("Mouse spool device or calibration identity is invalid.");
+        }
+    }
+
     private static void WriteStorageServiceOrdinals(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -515,6 +818,69 @@ public sealed class StorageDatabase : IDisposable
         }
 
         VerifyMigrationChecksum(connection, 3, StorageSchema.Version3Checksum);
+        if (version == 3)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Execute(connection, StorageSchema.Version4Sql, transaction);
+            using SqliteCommand record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (4, 'mouse-ingestion-spool-directory', $checksum, $applied);
+                """;
+            record.Parameters.AddWithValue("$checksum", StorageSchema.Version4Checksum);
+            record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
+            record.ExecuteNonQuery();
+            transaction.Commit();
+            version = 4;
+        }
+
+        VerifyMigrationChecksum(connection, 4, StorageSchema.Version4Checksum);
+        ValidateVersionFourShape(connection);
+    }
+
+    private static void ValidateVersionFourShape(SqliteConnection connection)
+    {
+        const string spoolColumns = "spool_segment_id:TEXT:1:1|device_id:TEXT:1:0|calibration_segment_id:INTEGER:1:0|relative_path:TEXT:1:0|first_sequence:INTEGER:1:0|last_sequence:INTEGER:1:0|first_monotonic_timestamp:INTEGER:1:0|last_monotonic_timestamp:INTEGER:1:0|record_count:INTEGER:1:0|committed_length:INTEGER:1:0|spool_file_sha256:TEXT:1:0|canonical_sha256:TEXT:1:0|created_utc_us:INTEGER:1:0";
+        const string watermarkColumns = "device_id:TEXT:1:1|durable_sequence:INTEGER:1:0|updated_utc_us:INTEGER:1:0";
+        string actualSpoolColumns = Scalar<string>(connection, """
+            SELECT group_concat(name || ':' || type || ':' || "notnull" || ':' || pk, '|')
+            FROM (SELECT name, type, "notnull", pk FROM pragma_table_info('mouse_spool_segments') ORDER BY cid);
+            """);
+        string actualWatermarkColumns = Scalar<string>(connection, """
+            SELECT group_concat(name || ':' || type || ':' || "notnull" || ':' || pk, '|')
+            FROM (SELECT name, type, "notnull", pk FROM pragma_table_info('mouse_device_watermarks') ORDER BY cid);
+            """);
+        string indexColumns = Scalar<string>(connection, """
+            SELECT group_concat(name, '|')
+            FROM (SELECT name FROM pragma_index_info('mouse_spool_segments_device_sequence') ORDER BY seqno);
+            """);
+        long spoolShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name = 'mouse_spool_segments' AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long watermarkShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name = 'mouse_device_watermarks' AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long indexShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_index_list('mouse_spool_segments')
+            WHERE name = 'mouse_spool_segments_device_sequence' AND "unique" = 0 AND origin = 'c';
+            """);
+        long markerShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM store_metadata
+            WHERE key = 'mouse.v3-adoption-complete' AND value IN ('0', '1');
+            """);
+        if (!string.Equals(actualSpoolColumns, spoolColumns, StringComparison.Ordinal)
+            || !string.Equals(actualWatermarkColumns, watermarkColumns, StringComparison.Ordinal)
+            || !string.Equals(indexColumns, "device_id|first_sequence|last_sequence", StringComparison.Ordinal)
+            || spoolShape != 1
+            || watermarkShape != 1
+            || indexShape != 1
+            || markerShape != 1)
+        {
+            throw new InvalidDataException("Storage schema version 4 shape or adoption marker is invalid.");
+        }
     }
 
     private static void VerifyMigrationChecksum(SqliteConnection connection, int version, string expected)

@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace InputTracker.Storage;
 
 internal interface IStorageServiceFaultInjector
@@ -25,15 +23,13 @@ public sealed class StorageService : IDisposable
 
     private static readonly object OwnersGate = new();
     private static readonly HashSet<string> OwnedStores = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly IReadOnlyDictionary<Guid, long> EmptyMouseWatermark =
-        new ReadOnlyDictionary<Guid, long>(new Dictionary<Guid, long>());
-
     private readonly object _gate = new();
     private readonly string _ownerKey;
     private readonly FileStream _ownerLock;
     private readonly StorageDatabase _database;
     private readonly IStorageClock _clock;
     private readonly IStorageServiceFaultInjector _faultInjector;
+    private readonly MouseIngestion _mouse;
     private readonly Timer? _batchTimer;
     private readonly Dictionary<StorageKeyboardKey, StorageKeyboardHold> _openHolds = [];
     private readonly Dictionary<StorageKeyboardAggregateKey, StorageKeyboardAggregateDelta> _pending = [];
@@ -63,6 +59,8 @@ public sealed class StorageService : IDisposable
         _clock = clock;
         _faultInjector = faultInjector;
         _ordinals = database.ReadStorageServiceOrdinals();
+        _mouse = new MouseIngestion(database);
+        _ordinals = _mouse.Ordinals;
         if (startTimer)
         {
             _batchTimer = new Timer(
@@ -101,7 +99,7 @@ public sealed class StorageService : IDisposable
                     new StorageDurableWatermark(
                         _ordinals.CommitOrdinal,
                         _ordinals.KeyboardAggregateCommitOrdinal,
-                        EmptyMouseWatermark,
+                        _mouse.Watermarks,
                         StorageDurabilityScope.SQLiteCommitted),
                     _integrityFault);
             }
@@ -129,6 +127,8 @@ public sealed class StorageService : IDisposable
                     boundary: null,
                     _faultInjector);
                 _activeCalibration = calibration;
+                _mouse.SetCalibration(calibration, _database.FindCalibrationSegmentId(calibration));
+                RefreshMousePublishedState();
                 _lastMonotonicTimestamp = calibration.MonotonicAnchor;
                 _state = StorageServiceState.Running;
                 _acceptingWrites = true;
@@ -235,6 +235,28 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public void WriteMouseTransition(StorageMouseTransition transition)
+    {
+        lock (_gate)
+        {
+            EnsureRunningAndAccepting();
+            try
+            {
+                _mouse.Validate(transition, _lastMonotonicTimestamp);
+                _mouse.WriteValidated(transition);
+                _lastMonotonicTimestamp = transition.MonotonicTimestamp;
+                RefreshMousePublishedState();
+            }
+            catch (Exception error) when (IsControlledFailure(error))
+            {
+                _mouse.RefreshPublishedState();
+                RefreshMousePublishedState();
+                EnterFault("storage.mouse-ingestion-failed", "Mouse ingestion failed closed.", null);
+                throw;
+            }
+        }
+    }
+
     public void Checkpoint(long monotonicTimestamp)
     {
         lock (_gate)
@@ -248,6 +270,7 @@ public sealed class StorageService : IDisposable
                 closeHolds: false,
                 boundary: null,
                 calibration: null);
+            CommitMouseBoundary(static mouse => mouse.SealAll(), boundary: null);
         }
     }
 
@@ -279,6 +302,9 @@ public sealed class StorageService : IDisposable
                     closeHolds: true,
                     boundary: GetPauseBoundary(added),
                     calibration: null);
+                CommitMouseBoundary(
+                    static mouse => mouse.SealAll(),
+                    GetPauseBoundary(added));
                 _state = StorageServiceState.Paused;
             }
 
@@ -326,6 +352,9 @@ public sealed class StorageService : IDisposable
                 closeHolds: true,
                 boundary: StorageLifecycleBoundary.DeviceRemoval,
                 calibration: null);
+            CommitMouseBoundary(
+                mouse => mouse.SealDevice(deviceId),
+                StorageLifecycleBoundary.DeviceRemoval);
             _acceptingWrites = restoreAccepting;
         }
     }
@@ -349,6 +378,10 @@ public sealed class StorageService : IDisposable
 
                 TrackTimestamp(monotonicTimestamp, StorageLifecycleBoundary.CalibrationChange);
                 _acceptingWrites = false;
+                long previousCalibrationSegmentId = _database.FindCalibrationSegmentId(_activeCalibration!.Value);
+                CommitMouseBoundary(
+                    mouse => mouse.SealCalibration(previousCalibrationSegmentId),
+                    StorageLifecycleBoundary.CalibrationChange);
                 CommitScope(
                     monotonicTimestamp,
                     static _ => true,
@@ -357,6 +390,7 @@ public sealed class StorageService : IDisposable
                     boundary: StorageLifecycleBoundary.CalibrationChange,
                     calibration: calibration);
                 _activeCalibration = calibration;
+                _mouse.SetCalibration(calibration, _database.FindCalibrationSegmentId(calibration));
                 _lastMonotonicTimestamp = calibration.MonotonicAnchor;
                 _state = previousState;
                 _acceptingWrites = previousState == StorageServiceState.Running;
@@ -393,6 +427,9 @@ public sealed class StorageService : IDisposable
                 closeHolds: true,
                 boundary: StorageLifecycleBoundary.Stop,
                 calibration: null);
+            CommitMouseBoundary(
+                static mouse => mouse.SealAll(),
+                StorageLifecycleBoundary.Stop);
             _pauseReasons = StoragePauseReason.None;
             _state = StorageServiceState.Stopped;
         }
@@ -417,6 +454,7 @@ public sealed class StorageService : IDisposable
             _pendingTransitionsByDevice.Clear();
             _batchStartByDevice.Clear();
             _batchTimer?.Dispose();
+            _mouse.Dispose();
             try
             {
                 _database.Dispose();
@@ -649,7 +687,10 @@ public sealed class StorageService : IDisposable
     {
         lock (_gate)
         {
-            if (_disposed || _state != StorageServiceState.Running || !_acceptingWrites || _batchStartByDevice.Count == 0)
+            if (_disposed
+                || _state != StorageServiceState.Running
+                || !_acceptingWrites
+                || _batchStartByDevice.Count == 0 && !_mouse.HasBuffered)
             {
                 return;
             }
@@ -668,6 +709,8 @@ public sealed class StorageService : IDisposable
                         boundary: null,
                         calibration: null);
                 }
+
+                CommitMouseBoundary(mouse => mouse.SealAtTimestamp(timestamp), boundary: null);
             }
             catch (Exception error) when (IsControlledFailure(error))
             {
@@ -696,6 +739,28 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    private void CommitMouseBoundary(Action<MouseIngestion> action, StorageLifecycleBoundary? boundary)
+    {
+        try
+        {
+            action(_mouse);
+            RefreshMousePublishedState();
+        }
+        catch (Exception error) when (IsControlledFailure(error))
+        {
+            _mouse.RefreshPublishedState();
+            RefreshMousePublishedState();
+            EnterFault("storage.mouse-boundary-failed", "Mouse boundary failed closed.", boundary);
+            throw;
+        }
+    }
+
+    private void RefreshMousePublishedState()
+    {
+        _mouse.RefreshPublishedState();
+        _ordinals = _mouse.Ordinals;
+    }
+
     private void ValidateCalibrationForClock(TimeCalibrationSegment calibration)
     {
         StorageKeyboardTime.ValidateCalibration(calibration);
@@ -720,7 +785,7 @@ public sealed class StorageService : IDisposable
         ThrowIfDisposed();
         if (_state != StorageServiceState.Running || !_acceptingWrites)
         {
-            throw new InvalidOperationException("Storage service is not accepting keyboard transitions.");
+            throw new InvalidOperationException("Storage service is not accepting input transitions.");
         }
     }
 

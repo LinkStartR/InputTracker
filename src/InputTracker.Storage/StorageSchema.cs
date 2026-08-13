@@ -5,7 +5,7 @@ namespace InputTracker.Storage;
 
 internal static class StorageSchema
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     public const string Version1Sql = """
         CREATE TABLE schema_migrations (
@@ -134,4 +134,41 @@ internal static class StorageSchema
 
     public static string Version3Checksum { get; } = Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(Version3Sql)));
+
+    public const string Version4Sql = """
+        CREATE TABLE mouse_spool_segments (
+            spool_segment_id TEXT PRIMARY KEY CHECK (length(spool_segment_id) = 32),
+            device_id TEXT NOT NULL REFERENCES devices(device_id),
+            calibration_segment_id INTEGER NOT NULL REFERENCES time_calibration_segments(segment_id),
+            relative_path TEXT NOT NULL UNIQUE,
+            first_sequence INTEGER NOT NULL CHECK (first_sequence > 0),
+            last_sequence INTEGER NOT NULL CHECK (last_sequence >= first_sequence),
+            first_monotonic_timestamp INTEGER NOT NULL CHECK (first_monotonic_timestamp >= 0),
+            last_monotonic_timestamp INTEGER NOT NULL CHECK (last_monotonic_timestamp >= first_monotonic_timestamp),
+            record_count INTEGER NOT NULL CHECK (
+                record_count > 0 AND record_count = last_sequence - first_sequence + 1),
+            committed_length INTEGER NOT NULL CHECK (committed_length > 0),
+            spool_file_sha256 TEXT NOT NULL CHECK (length(spool_file_sha256) = 64),
+            canonical_sha256 TEXT NOT NULL CHECK (length(canonical_sha256) = 64),
+            created_utc_us INTEGER NOT NULL,
+            UNIQUE(device_id, first_sequence, last_sequence)
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE INDEX mouse_spool_segments_device_sequence
+            ON mouse_spool_segments(device_id, first_sequence, last_sequence);
+
+        CREATE TABLE mouse_device_watermarks (
+            device_id TEXT PRIMARY KEY REFERENCES devices(device_id),
+            durable_sequence INTEGER NOT NULL CHECK (durable_sequence >= 0),
+            updated_utc_us INTEGER NOT NULL
+        ) WITHOUT ROWID, STRICT;
+
+        INSERT INTO store_metadata(key, value)
+        VALUES ('mouse.v3-adoption-complete', '0');
+
+        PRAGMA user_version = 4;
+        """;
+
+    public static string Version4Checksum { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(Version4Sql)));
 }

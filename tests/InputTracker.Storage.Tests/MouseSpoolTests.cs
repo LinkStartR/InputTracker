@@ -3,6 +3,53 @@ namespace InputTracker.Storage.Tests;
 public sealed class MouseSpoolTests
 {
     [Fact]
+    public void SelfDescribingSegmentHeaderIsFlushedAndRoundTripsFromSequence129()
+    {
+        using var directory = new TemporaryDirectory();
+        string path = System.IO.Path.Combine(directory.Path, "segment.mspool");
+        var header = new MouseSpoolHeader(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 17, 129);
+
+        using (var writer = new MouseSpoolWriter(path, header))
+        {
+            Assert.Equal(MouseSpoolHeaderCodec.HeaderSize, writer.Length);
+            writer.Append(Record(129));
+            writer.Append(Record(130));
+            writer.FlushFile();
+        }
+
+        MouseSpoolSegment segment = MouseSpoolSegmentReader.Read(path);
+        Assert.Equal(header, segment.Header);
+        Assert.Equal([Record(129), Record(130)], segment.Records);
+        Assert.Equal(MouseSpoolHeaderCodec.HeaderSize + 2 * MouseSpoolRecordCodec.RecordSize, segment.ValidLength);
+    }
+
+    [Fact]
+    public void IncompleteOrCorruptSelfDescribingSegmentFailsWithoutTruncatingOrRepairing()
+    {
+        using var directory = new TemporaryDirectory();
+        string incomplete = System.IO.Path.Combine(directory.Path, "incomplete.mspool");
+        File.WriteAllBytes(incomplete, new byte[MouseSpoolHeaderCodec.HeaderSize - 1]);
+        byte[] incompleteBefore = File.ReadAllBytes(incomplete);
+        Assert.Throws<InvalidDataException>(() => MouseSpoolSegmentReader.Read(incomplete));
+        Assert.Equal(incompleteBefore, File.ReadAllBytes(incomplete));
+
+        string corrupt = System.IO.Path.Combine(directory.Path, "corrupt.mspool");
+        var header = new MouseSpoolHeader(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 3, 1);
+        using (var writer = new MouseSpoolWriter(corrupt, header))
+        {
+            writer.Append(Record(1));
+            writer.FlushFile();
+        }
+
+        byte[] corruptBefore = File.ReadAllBytes(corrupt);
+        corruptBefore[^1] ^= 1;
+        File.WriteAllBytes(corrupt, corruptBefore);
+        Assert.Throws<InvalidDataException>(() => new MouseSpoolWriter(corrupt, header));
+        Assert.Equal(corruptBefore, File.ReadAllBytes(corrupt));
+    }
+
+    [Fact]
     public void RecoveryKeepsValidPrefixAndPreciselyReportsTruncatedTail()
     {
         using var directory = new TemporaryDirectory();

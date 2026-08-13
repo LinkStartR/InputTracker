@@ -38,6 +38,49 @@ public sealed class StorageServicePrivacyTests
     }
 
     [Fact]
+    public void MouseTransitionContractHasOnlyDeviceCalibrationAndRawPhysicalFields()
+    {
+        Dictionary<string, Type> properties = typeof(StorageMouseTransition)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .ToDictionary(property => property.Name, property => property.PropertyType, StringComparer.Ordinal);
+        var expected = new Dictionary<string, Type>(StringComparer.Ordinal)
+        {
+            ["DeviceId"] = typeof(Guid),
+            ["CalibrationSessionId"] = typeof(Guid),
+            ["MonotonicTimestamp"] = typeof(long),
+            ["DeltaX"] = typeof(int),
+            ["DeltaY"] = typeof(int),
+            ["MotionKind"] = typeof(byte),
+            ["UsesVirtualDesktop"] = typeof(bool),
+            ["ButtonChanges"] = typeof(ushort),
+            ["VerticalWheelDelta"] = typeof(short),
+            ["HorizontalWheelDelta"] = typeof(short)
+        };
+
+        Assert.Equal(expected.OrderBy(pair => pair.Key), properties.OrderBy(pair => pair.Key));
+        Assert.DoesNotContain(properties.Keys, name => ContainsAny(
+            name, "Sequence", "Text", "Character", "Window", "Focus", "Application", "Process", "Interface", "Hardware"));
+    }
+
+    [Fact]
+    public void MouseIngestionSchemaAndSourcesExcludeContentAndRawIdentityFields()
+    {
+        using var directory = new TemporaryDirectory();
+        using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
+        IReadOnlyList<string> spoolColumns = database.ReadSchemaColumns()["mouse_spool_segments"];
+        IReadOnlyList<string> watermarkColumns = database.ReadSchemaColumns()["mouse_device_watermarks"];
+        string schema = string.Join('|', spoolColumns.Concat(watermarkColumns));
+        string root = FindRepositoryRoot();
+        string source = string.Join('\n', new[] { "MouseIngestion.cs", "MouseSpool.cs" }
+            .Select(file => File.ReadAllText(Path.Combine(root, "src", "InputTracker.Storage", file))));
+        foreach (string forbidden in new[] { "Text", "Character", "Window", "Focus", "Application", "Process", "InterfacePath", "HardwareIds", "SerialNumber", "ContainerId" })
+        {
+            Assert.DoesNotContain(forbidden, schema, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotMatch(new Regex($@"\b{Regex.Escape(forbidden)}\b", RegexOptions.CultureInvariant), source);
+        }
+    }
+
+    [Fact]
     public void ProductionServiceDoesNotExposeClockOrFaultInjection()
     {
         Assert.Empty(typeof(StorageService).GetConstructors(BindingFlags.Instance | BindingFlags.Public));
@@ -96,11 +139,15 @@ public sealed class StorageServicePrivacyTests
 
         Assert.Equal(
             [
+                "mouse.v3-adoption-complete",
                 "storage.service.commit-ordinal",
                 "storage.service.keyboard-aggregate-commit-ordinal"
             ],
             values.Keys);
-        Assert.All(values.Values, value => Assert.True(long.TryParse(
+        Assert.Equal("1", values["mouse.v3-adoption-complete"]);
+        Assert.All(values
+            .Where(pair => pair.Key.StartsWith("storage.service.", StringComparison.Ordinal))
+            .Select(pair => pair.Value), value => Assert.True(long.TryParse(
             value,
             System.Globalization.NumberStyles.None,
             System.Globalization.CultureInfo.InvariantCulture,

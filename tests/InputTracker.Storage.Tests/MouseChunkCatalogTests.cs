@@ -71,6 +71,18 @@ public sealed class MouseChunkCatalogTests
     }
 
     [Fact]
+    public void OverlapAcrossCalibrationSegmentsForSameDeviceFailsClosed()
+    {
+        using var fixture = new ChunkFixture();
+        fixture.Database.CommitMouseChunk(
+            Guid.NewGuid(), fixture.DeviceId, fixture.CalibrationSegmentId, Records(1, 5), 1);
+        long secondCalibration = fixture.CreateCalibration();
+
+        Assert.Throws<InvalidDataException>(() => fixture.Database.CommitMouseChunk(
+            Guid.NewGuid(), fixture.DeviceId, secondCalibration, Records(4, 3), 2));
+    }
+
+    [Fact]
     public void BadOrphansDoNotRollbackLegalRecoveryAndRepeatedRecoveryIsIdempotent()
     {
         using var fixture = new ChunkFixture();
@@ -361,6 +373,9 @@ public sealed class MouseChunkCatalogTests
         public StorageDatabase Database { get; }
         public Guid DeviceId { get; }
         public long CalibrationSegmentId { get; }
+
+        public long CreateCalibration() =>
+            Database.RecordCalibration(TimeCalibrationSegment.Capture(Guid.NewGuid(), new FakeClock()));
 
         public void Dispose()
         {
