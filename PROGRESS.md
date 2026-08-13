@@ -967,3 +967,11 @@
 - 独立复审：C1/C14 最终放行当前切片；确认有界后台显示、absolute/relative 分段、退出兜底、恢复回滚和 unknown removal。此结论不等于最终 UI/Storage/硬件验收。
 - 未验证：新链路真实 GUI、两键盘两鼠标 2 小时、1000Hz 30 分钟、锁屏/挂起/注销、Win10/11 双系统、深浅色与缩放截图、范围删除、备份恢复 UI 仍 pending。
 - 下一步：提交当前 App 切片；随后让用户从首测目录执行 10–15 分钟第一次真实测试并记录设备、暂停/恢复、重插、统计与轨迹反馈；同时继续 portable 与删除/备份恢复切片。
+
+## 2026-08-13 Storage 完成项与 Portable 并行启动
+
+- 当前基线：`codex/ui-storage-integration@2fec60d`，工作树 clean；第一次测试目录已生成并自检通过。
+- C26 `/root/storage_completion` 已创建且可定位；范围限于 Storage/普通测试/docs，推荐 terra/high，删除与恢复协议按 xhigh 风险门处理，不得操作真实用户数据。
+- C27 `/root/portable_completion` 已创建且可定位；范围限于 App/普通测试/portable docs/README，推荐 luna/medium，Startup 与系统生命周期审查 high；不得真实修改本机 Startup。
+- 共享边界：两任务不改 `tests/Acceptance/**`、`scripts/verify.ps1`、依赖版本或 Git；PROGRESS/BLOCKED 由主线程协调。
+- 下一步：主线程检查现有 Storage 格式/API 和 Portable 生命周期契约；每个切片红→绿、独立复审、精确提交后，再交固定用户测试角色补 Acceptance/反向验证。

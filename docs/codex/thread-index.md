@@ -28,6 +28,8 @@
 | C20 | UI Storage Adapter | Input→Storage 接线、真实统计/轨迹 UI 与退出控制 | 已完成，待主任务提交 | `src/InputTracker.App/**`、普通 App tests | `codex/ui-storage-integration` 未提交切片 | 是：`/root/ui_storage_adapter` | terra / high | 跨 Input/Storage/UI 的数据正确性与生命周期 | App 30/0/0；全量与判卷均绿；真实 GUI/硬件/视觉仍 pending |
 | C24 | Git/GitHub 同步 | UI Storage Adapter 最终白名单与行为复审 | 已完成 | App/UI 未提交切片 | `codex/ui-storage-integration` | 是：`/root/git_storage_p0_review` | luna / medium | 精确 Git 与用户可见事实 | absolute/relative 分段修复后放行；不代表最终视觉验收 |
 | C25 | 用户测试与下一步建议 | UI Storage Adapter 数据正确性复审 | 已完成 | App→Storage 生命周期与有界查询 | `codex/ui-storage-integration` | 是：`/root/storage_p0_review` | terra / high | 暂停、退出、设备与轨迹完整性 | 退出兜底、resume 回滚、unknown removal 与百万点边界放行；硬件终验保持 pending |
+| C26 | Storage Stats | CSV/PNG 导出、备份恢复与范围删除安全协议 | 进行中 | `src/InputTracker.Storage/**`、普通 Storage tests、`docs/storage/**` | `codex/ui-storage-integration@2fec60d` 未提交切片 | 是：`/root/storage_completion` | terra / high；删除恢复复审 xhigh | 用户数据删除、恢复和格式一致性为最高风险 | 不操作真实数据；删除必须 preview+确认 token，无法安全处理块内范围则写 BLOCKED 并继续其他项 |
+| C27 | Portable | 首次告知、Startup 授权、锁屏/挂起、数据位置和卸载 | 进行中 | `src/InputTracker.App/**`、普通 App tests、`docs/portable/**`、README | `codex/ui-storage-integration@2fec60d` 未提交切片 | 是：`/root/portable_completion` | luna / medium；系统生命周期 high | 常规本地功能，权限与会话边界需升级审查 | 不真实改本机 Startup；测试使用临时目录 seam，不写注册表、不联网 |
 
 ## 协调说明
 
