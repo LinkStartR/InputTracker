@@ -6,6 +6,7 @@
 - 第一次 `git push -u origin codex/storage-stats` raw exit 1，54.4 秒后报 `Recv failure: Connection was reset`；第二次同命令 raw exit 1，21.4 秒后报无法连接 `github.com:443`；第三次仅对单命令指定 HTTP/1.1，raw exit 1，21.4 秒后仍无法连接 `github.com:443`。
 - 影响：本地 7 笔 Storage 提交完整保留且已验证，但远端分支和 draft PR 尚未创建；禁止伪报 GitHub 同步完成。
 - 处置：停止继续刷网络，先做不依赖远端的 Storage 写入/查询切片；外网恢复后从同一 clean commit 重试 push，再按 `github:yeet` 流程创建 draft PR。该阻断不影响本地实现与测试。
+- 2026-08-13 状态更新：网络恢复；`git push -u origin codex/ui-storage-integration` exit 0，创建远端分支；`gh pr create --draft --base main --head codex/ui-storage-integration` exit 0，draft PR #3：`https://github.com/LinkStartR/InputTracker/pull/3`。该 PR 明确为依赖栈、当前不可直接合并。B-009 对当前分支已解除；早期失败证据保留用于审计。
 
 ## B-001：指定的 `main-child-workflow` Skill 不可用
 

@@ -8,7 +8,7 @@
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 常驻 | Git 状态、分支、PR | chunk worker `ae21717` 审查通过；主任务集成 `ff1c250` | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | 15 文件边界、格式/恢复/隐私与测试单调性通过；B-007/B-008 和真实硬件仍待验 |
+| C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 常驻 | Git 状态、分支、PR | `codex/ui-storage-integration` 已 push；draft PR #3 | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | GitHub 网络已恢复；PR #3 为不可直接合并的依赖栈，B-007/B-008 和真实硬件仍待验 |
 | C12 | Git/GitHub 同步 | UI 阻断修复提交前只读 Git 审查 | 已完成 | `codex/ui` 11 文件 | `codex/ui@3c84012` | 是：`/root/git_review` | luna / medium | 常规白名单与提交边界 | 最终增量复核通过；无越界依赖、测试或权限风险，允许主任务提交 |
 | C13 | 用户测试与下一步建议 | UI 阻断修复提交前只读 QA | 已完成 | `codex/ui` 状态披露与关闭生命周期 | `codex/ui@3c84012` | 是：`/root/ui_qa` | terra / high | 用户可见隐私与 WPF 生命周期 | 动态披露、Cancel→Hide、SessionEnding 受控退出与 16/0/0 通过；GUI/真实注销/硬件仍 not-run |
 | C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | chunk slice 只读验收完成 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | InputCore `03985a4`；Storage final gate/API seam 尚未落文件 | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | 现有 slice 单元验收充分但非 final；等 ingestion/query/export/delete API 稳定后落 Storage Acceptance 与非零 corruption 红→绿 |

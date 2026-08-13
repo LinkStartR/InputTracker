@@ -975,3 +975,11 @@
 - C27 `/root/portable_completion` 已创建且可定位；范围限于 App/普通测试/portable docs/README，推荐 luna/medium，Startup 与系统生命周期审查 high；不得真实修改本机 Startup。
 - 共享边界：两任务不改 `tests/Acceptance/**`、`scripts/verify.ps1`、依赖版本或 Git；PROGRESS/BLOCKED 由主线程协调。
 - 下一步：主线程检查现有 Storage 格式/API 和 Portable 生命周期契约；每个切片红→绿、独立复审、精确提交后，再交固定用户测试角色补 Acceptance/反向验证。
+
+## 2026-08-13 GitHub 同步恢复
+
+- 前置检查：`git status -sb` 为 clean；`gh 2.93.0` 已以 `HorizonZhi` 登录；origin 为 `https://github.com/LinkStartR/InputTracker.git`。
+- Push：`git push -u origin codex/ui-storage-integration` exit 0，新建远端分支并设置 tracking；未推 `main`、未 force push。
+- Draft PR：`gh pr create --draft --base main --head codex/ui-storage-integration` exit 0，PR #3 `https://github.com/LinkStartR/InputTracker/pull/3`。
+- PR 边界：明确为从 Storage durability 到首次测试 UI 的依赖栈，当前不可直接合并；正文保留 CSV/PNG、备份恢复、范围删除、Portable、真实硬件/性能/视觉与 B-007 未完成项。
+- 下一步：继续 C26/C27 本地切片；各自审查和验证后追加独立提交，等待依赖拆分/合并顺序，不直接推 main。
