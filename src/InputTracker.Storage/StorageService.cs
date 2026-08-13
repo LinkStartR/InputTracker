@@ -108,6 +108,53 @@ public sealed class StorageService : IDisposable
 
     internal string OwnerLockPath => _ownerLock.Name;
 
+    public StorageDeviceResolution ObserveDevice(StorageDeviceObservation observation)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            EnsureDeviceCatalogWritable();
+            try
+            {
+                return _database.ObserveDevice(
+                    observation,
+                    checked((_clock.GetUtcNow().UtcDateTime.Ticks - 621355968000000000L) / 10));
+            }
+            catch (Exception error) when (IsControlledFailure(error))
+            {
+                EnterFault("storage.device-observation-failed", "Device observation failed closed.", null);
+                throw;
+            }
+        }
+    }
+
+    public IReadOnlyList<StorageDeviceInfo> ListDevices()
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return _database.ListDevices();
+        }
+    }
+
+    public StorageDeviceInfo SetDeviceAlias(Guid deviceId, string? alias)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            EnsureDeviceCatalogWritable();
+            try
+            {
+                return _database.SetDeviceAlias(deviceId, alias);
+            }
+            catch (Exception error) when (IsControlledFailure(error))
+            {
+                EnterFault("storage.device-alias-failed", "Device alias update failed closed.", null);
+                throw;
+            }
+        }
+    }
+
     public StorageKeyboardPeriodResult QueryKeyboardPeriod(
         StoragePeriodKind kind,
         DateOnly containingDate,
@@ -820,6 +867,16 @@ public sealed class StorageService : IDisposable
         if (_state != StorageServiceState.Running || !_acceptingWrites)
         {
             throw new InvalidOperationException("Storage service is not accepting input transitions.");
+        }
+    }
+
+    private void EnsureDeviceCatalogWritable()
+    {
+        if (_state is StorageServiceState.IntegrityFault
+            or StorageServiceState.Stopped
+            or StorageServiceState.Disposed)
+        {
+            throw new InvalidOperationException("Storage service cannot modify devices from its current state.");
         }
     }
 

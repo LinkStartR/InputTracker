@@ -5,6 +5,93 @@ namespace InputTracker.Storage.Tests;
 public sealed class StorageServiceLifecycleTests
 {
     [Fact]
+    public void DeviceFacadeUsesOwnedCatalogAndPersistsObservationAndAlias()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        var clock = new ControllableStorageClock
+        {
+            UtcNow = new DateTimeOffset(2026, 8, 13, 1, 2, 3, TimeSpan.Zero)
+        };
+        var observation = new StorageDeviceObservation(
+            StorageDeviceKind.Keyboard,
+            "HID#OWNER-FACADE",
+            ["HID\\VID_1234&PID_5678"],
+            "SERIAL-1",
+            Guid.NewGuid(),
+            IsBluetooth: false,
+            IsRemoteDesktop: false,
+            IsVirtual: false);
+        Guid deviceId;
+
+        using (StorageService service = StorageService.OpenForTests(layout, clock))
+        {
+            StorageDeviceResolution created = service.ObserveDevice(observation);
+            deviceId = created.Device.DeviceId;
+            Assert.False(created.ReusedExisting);
+            Assert.Equal(clock.UtcNow.ToUnixTimeMilliseconds() * 1000, created.Device.LastSeenUtcMicroseconds);
+            Assert.Equal(created.Device, Assert.Single(service.ListDevices()));
+
+            StorageDeviceInfo aliased = service.SetDeviceAlias(deviceId, "  Desk keyboard  ");
+            Assert.Equal("Desk keyboard", aliased.Alias);
+            Assert.Equal(aliased, Assert.Single(service.ListDevices()));
+        }
+
+        using StorageService reopened = StorageService.OpenForTests(layout, clock);
+        StorageDeviceInfo persisted = Assert.Single(reopened.ListDevices());
+        Assert.Equal(deviceId, persisted.DeviceId);
+        Assert.Equal("Desk keyboard", persisted.Alias);
+    }
+
+    [Fact]
+    public void DeviceFacadeRejectsWritesAfterIntegrityFaultOrStopButKeepsCatalogReadable()
+    {
+        using var faultDirectory = new TemporaryDirectory();
+        var clock = new ControllableStorageClock();
+        using StorageService faulted = StorageService.OpenForTests(
+            StorageLayout.Create(faultDirectory.Path),
+            clock);
+        StorageDeviceInfo device = faulted.ObserveDevice(TransientKeyboard("HID#FAULT")).Device;
+        Assert.Throws<InvalidDataException>(() => faulted.Start(
+            StorageServiceTestSupport.Calibration(
+                "America/Los_Angeles",
+                new DateTimeOffset(2026, 8, 13, 0, 0, 0, TimeSpan.Zero))));
+        Assert.Equal(StorageServiceState.IntegrityFault, faulted.Health.State);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            faulted.ObserveDevice(TransientKeyboard("HID#AFTER-FAULT")));
+        Assert.Throws<InvalidOperationException>(() => faulted.SetDeviceAlias(device.DeviceId, "blocked"));
+        Assert.Equal(device.DeviceId, Assert.Single(faulted.ListDevices()).DeviceId);
+
+        using var stoppedDirectory = new TemporaryDirectory();
+        using StorageService stopped = StorageService.OpenForTests(
+            StorageLayout.Create(stoppedDirectory.Path),
+            clock);
+        StorageDeviceInfo stoppedDevice = stopped.ObserveDevice(TransientKeyboard("HID#STOP")).Device;
+        stopped.Stop(0);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            stopped.ObserveDevice(TransientKeyboard("HID#AFTER-STOP")));
+        Assert.Throws<InvalidOperationException>(() => stopped.SetDeviceAlias(stoppedDevice.DeviceId, "blocked"));
+        Assert.Equal(stoppedDevice.DeviceId, Assert.Single(stopped.ListDevices()).DeviceId);
+    }
+
+    [Fact]
+    public void DisposedDeviceFacadeRejectsReadsAndWrites()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageService service = StorageService.OpenForTests(
+            StorageLayout.Create(directory.Path),
+            new ControllableStorageClock());
+        StorageDeviceInfo device = service.ObserveDevice(TransientKeyboard("HID#DISPOSED")).Device;
+        service.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => service.ObserveDevice(TransientKeyboard("HID#OTHER")));
+        Assert.Throws<ObjectDisposedException>(() => service.ListDevices());
+        Assert.Throws<ObjectDisposedException>(() => service.SetDeviceAlias(device.DeviceId, "blocked"));
+    }
+
+    [Fact]
     public void SameStoreHasOneProcessAndFileOwnerAndRetainsLockFile()
     {
         using var directory = new TemporaryDirectory();
@@ -302,6 +389,16 @@ public sealed class StorageServiceLifecycleTests
             new ControllableStorageClock());
         Assert.Equal(1, conflictReopened.Health.DurableWatermark.CommitSequence);
     }
+
+    private static StorageDeviceObservation TransientKeyboard(string interfacePath) => new(
+        StorageDeviceKind.Keyboard,
+        interfacePath,
+        ["HID\\VID_1234&PID_5678"],
+        SerialNumber: null,
+        ContainerId: null,
+        IsBluetooth: false,
+        IsRemoteDesktop: false,
+        IsVirtual: false);
 }
 
 internal sealed class ControllableStorageClock : IStorageClock
