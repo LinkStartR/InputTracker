@@ -952,3 +952,18 @@
 - 修后主任务权威 build：同一 App.Tests build 命令 raw exit 0；3 个项目生成，0 warnings / 0 errors；MSBuild 3.08s，工具 wall 3.5s。
 - 修后主任务权威 test：同一 App.Tests test 命令 raw exit 0；16 passed / 0 failed / 0 skipped；test 30ms，工具 wall 1.5s。
 - 未验证项不变：真实 GUI 重入/关闭顺序、托盘行为、Windows 注销/关机、残留进程、普通用户/UAC、截图和硬件均仍为 not-run；下一步仍为 C1/C2 只读复核后由主任务提交。
+
+## 2026-08-13 UI 与真实 Storage 首次测试链路
+
+- 分支：`codex/ui-storage-integration`；依赖提交为 Storage 查询 `4e3be97`、Input 身份 `ce73402`、UI 生命周期 `0341159`、Input 私有适配 seam `f7ecac0`、Storage 设备 facade `4467f16`。本轮不 push，B-009 仍有效。
+- 产品结果：Storage 成功进入 Running 后才启动 Raw Input；键盘/鼠标、私有设备身份、暂停原因、设备移除与停止边界同步写入程序目录。Indeterminate 与 `hDevice=0` 只使用按会话/类型隔离的 transient 身份，不伪称永久唯一。
+- UI 结果：真实设备列表、日/周/月/年键盘聚合、热力数据和逐设备鼠标轨迹已接入；原始鼠标流完整读取，后台合并为最多 2048 个显示点。relative/absolute/virtual 切换分段，absolute 坐标不再误作相对位移。
+- 控制结果：叠加暂停原因逐项同步；恢复先开放 Storage 再恢复尚未开放入口的 Raw Input，Input 恢复失败会把 Storage 回滚为暂停；未知 removal 安全 no-op，已知 removal 先封口再移除映射；退出故障仍继续 Stop/Dispose Storage、托盘与单实例资源。
+- 诚实披露：当前版本明确尚未提供范围删除；数据保留在程序目录。没有新增网络、注册表、服务、AppData/Temp 回退、管理员权限或遥测。
+- 红→绿：缺 App Storage contract、Dashboard contract、MainWindow contract、Brush 歧义与 internal 可见性均先编译红；旧“Storage 未接通”断言为 17 passed / 4 failed；修复后 App 最终 30 passed / 0 failed / 0 skipped，Release build 0 warnings / 0 errors。
+- 全量回归：restore exit 0；solution Release build exit 0、0 warnings / 0 errors；Spike 全量为 App 29 + Input 38 + Acceptance 12 + Storage 154 = 233 passed / 0 failed / 0 skipped，其中 Storage 4m34s。最终显示语义增量后非 Spike 为 App 30 + Input 38 + Acceptance 12 + Storage 153 = 233 / 0 / 0。
+- 判卷：`scripts/verify.ps1 -Stage InputCore` exit 0，total=233、acceptance=12、failed=0、skipped=0、gates=23；证据 `.tools/verification/20260813-182057-231/verification.json`，published self-check exit 0，second-instance exit 2。
+- 首测目录：`.tools/publish/first-test/`；`InputTracker.exe --self-check` exit 0。该目录被 Git 忽略，仅供本机第一次真实 GUI/键鼠测试。
+- 独立复审：C1/C14 最终放行当前切片；确认有界后台显示、absolute/relative 分段、退出兜底、恢复回滚和 unknown removal。此结论不等于最终 UI/Storage/硬件验收。
+- 未验证：新链路真实 GUI、两键盘两鼠标 2 小时、1000Hz 30 分钟、锁屏/挂起/注销、Win10/11 双系统、深浅色与缩放截图、范围删除、备份恢复 UI 仍 pending。
+- 下一步：提交当前 App 切片；随后让用户从首测目录执行 10–15 分钟第一次真实测试并记录设备、暂停/恢复、重插、统计与轨迹反馈；同时继续 portable 与删除/备份恢复切片。

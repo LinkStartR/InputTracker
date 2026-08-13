@@ -1,5 +1,7 @@
 using System.Windows;
 using InputTracker.Input;
+using InputTracker.Input.Win32;
+using InputTracker.Storage;
 
 namespace InputTracker;
 
@@ -9,6 +11,8 @@ public partial class App : System.Windows.Application
     private TrayIconController? _trayIcon;
     private InputCaptureService? _capture;
     private CollectionController? _collection;
+    private StorageService? _storage;
+    private AppStorageCoordinator? _storageCoordinator;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -48,9 +52,39 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _capture = directory.IsWritable ? new InputCaptureService(new InputCoreSink()) : null;
-        _collection = new CollectionController(directory, _capture);
-        var window = new MainWindow(_collection, directory);
+        string? storageStartupError = null;
+        DashboardViewModel? dashboard = null;
+        if (directory.IsWritable)
+        {
+            try
+            {
+                _storage = StorageService.Open(StorageLayout.Create(AppContext.BaseDirectory));
+                Guid calibrationSession = Guid.NewGuid();
+                _storage.Start(TimeCalibrationSegment.Capture(calibrationSession, SystemStorageClock.Instance));
+                _storageCoordinator = new AppStorageCoordinator(
+                    new StorageServiceWriter(_storage), calibrationSession);
+                _storageCoordinator.EnsureReady();
+                _capture = new InputCaptureService(
+                    _storageCoordinator,
+                    options: null,
+                    RawInputHostFactory.Instance,
+                    new RawDeviceInfoProvider(),
+                    _storageCoordinator);
+                dashboard = new DashboardViewModel(new StorageDashboardDataSource(_storage));
+            }
+            catch (Exception error)
+            {
+                storageStartupError = error.Message;
+                _storage?.Dispose();
+                _storage = null;
+            }
+        }
+
+        IInputCaptureControl? collectionControl = _capture is not null && _storageCoordinator is not null
+            ? new PersistingCaptureControl(_capture, _storageCoordinator)
+            : null;
+        _collection = new CollectionController(directory, collectionControl, storageStartupError);
+        var window = new MainWindow(_collection, directory, dashboard);
 
         _trayIcon = new TrayIconController(
             _collection,
@@ -81,11 +115,19 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _capture?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        _collection?.Dispose();
-        _trayIcon?.Dispose();
-        _singleInstance?.Dispose();
-        base.OnExit(e);
+        try
+        {
+            AppShutdown.Run(
+                _capture is null ? null : () => _capture.DisposeAsync().AsTask(),
+                _storage,
+                _collection,
+                _trayIcon,
+                _singleInstance);
+        }
+        finally
+        {
+            base.OnExit(e);
+        }
     }
 
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)

@@ -12,5 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\InputTracker.Input\InputTracker.Input.csproj" />
+    <ProjectReference Include="..\InputTracker.Storage\InputTracker.Storage.csproj" />
   </ItemGroup>
 </Project>

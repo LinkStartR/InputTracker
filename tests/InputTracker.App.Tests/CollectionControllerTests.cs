@@ -44,7 +44,7 @@ public sealed class CollectionControllerTests
         Assert.Equal(CollectionMode.Collecting, controller.Current.Mode);
         Assert.Equal("采集中", controller.Current.Label);
         Assert.Contains("后台接收物理键盘和鼠标事件", controller.Current.Explanation);
-        Assert.Contains("尚未持久化", controller.Current.Explanation);
+        Assert.Contains("写入程序目录中的 Storage", controller.Current.Explanation);
 
         await controller.PauseAsync();
         Assert.Equal(PauseReason.User, capture.CurrentStatus.PauseReasons);

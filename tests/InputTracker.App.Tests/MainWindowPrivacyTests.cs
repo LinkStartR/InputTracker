@@ -13,10 +13,11 @@ public sealed class MainWindowPrivacyTests
         string disclosure = PrivacyDisclosure.For(snapshot);
 
         Assert.Contains(expectedState, disclosure);
-        Assert.Contains("本阶段尚未接通 Storage，事件不会持久化", disclosure);
+        Assert.DoesNotContain("Storage 尚未接通", disclosure);
         Assert.Contains("设备、物理键和日期", disclosure);
         Assert.Contains("不保存文字、事件顺序、窗口或进程", disclosure);
-        Assert.Contains("鼠标原始轨迹才会按设备持久化", disclosure);
+        Assert.Contains("鼠标原始轨迹按设备完整持久化", disclosure);
+        Assert.Contains("当前版本尚未提供范围删除", disclosure);
     }
 
     [Fact]

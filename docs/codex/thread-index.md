@@ -4,7 +4,7 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：Input Core PR #2 已合并为 `main@f6136c3`；versioned mouse chunk 已集成为 `codex/storage-stats@ff1c250`，下一切片打通 Storage 写入/查询与首次可测试真实链路；UI/Portable 首测路径只读预审已完成。
+- 当前阶段：Input Core PR #2 已合并为 `main@f6136c3`；Storage 写入/查询与 UI 首次真实链路已在 `codex/ui-storage-integration` 集成并通过本地判卷，等待第一次用户现场测试；Portable、删除/备份恢复和终验仍待完成。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,6 +25,9 @@
 | C7 | Portable | 自包含绿色发布、启动授权、锁屏与卸载 | 首测边界只读预审完成，待 UI 合并 | 发布、便携性、说明与测试 | 尚未建实现分支/提交；只读目标 `codex/storage-stats@099e07e` | 是：`019fd04e-2416-7e50-99c7-f8be6a5a8367` | luna / medium | 发布与权限边界明确 | 已确认锁屏/休眠、Startup、首次告知与卸载尚缺；当前保持 Startup 零写入，真实生命周期 not-run |
 | C21 | Input Device Identity | SetupAPI/ConfigMgr 结构化瞬时身份与隐私边界 | 实现完成，待提交 | `src/InputTracker.Input/**`、普通 Input tests/docs | `codex/input-device-identity@f6136c3` 加未提交切片 | 是：`/root/input_device_identity` | sol / high | 设备身份与隐私，影响历史映射正确性 | 37/0/0；不从 Instance ID 猜 serial，真实硬件仍 B-003 |
 | C23 | Git/GitHub 同步 | Input 身份切片提交前只读 Git/隐私审查 | 已完成 | 10 个 Input 身份意图文件 | `codex/input-device-identity@f6136c3` 加未提交切片 | 是：`/root/git_input_identity_review` | luna / medium | 常规白名单与 API 边界 | 白名单/worker-only/隐私/序列号来源全通过，放行精确提交；B-009 禁止 push |
+| C20 | UI Storage Adapter | Input→Storage 接线、真实统计/轨迹 UI 与退出控制 | 已完成，待主任务提交 | `src/InputTracker.App/**`、普通 App tests | `codex/ui-storage-integration` 未提交切片 | 是：`/root/ui_storage_adapter` | terra / high | 跨 Input/Storage/UI 的数据正确性与生命周期 | App 30/0/0；全量与判卷均绿；真实 GUI/硬件/视觉仍 pending |
+| C24 | Git/GitHub 同步 | UI Storage Adapter 最终白名单与行为复审 | 已完成 | App/UI 未提交切片 | `codex/ui-storage-integration` | 是：`/root/git_storage_p0_review` | luna / medium | 精确 Git 与用户可见事实 | absolute/relative 分段修复后放行；不代表最终视觉验收 |
+| C25 | 用户测试与下一步建议 | UI Storage Adapter 数据正确性复审 | 已完成 | App→Storage 生命周期与有界查询 | `codex/ui-storage-integration` | 是：`/root/storage_p0_review` | terra / high | 暂停、退出、设备与轨迹完整性 | 退出兜底、resume 回滚、unknown removal 与百万点边界放行；硬件终验保持 pending |
 
 ## 协调说明
 

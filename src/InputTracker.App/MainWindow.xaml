@@ -17,6 +17,7 @@
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
     </Window.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <Grid Margin="40">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -26,6 +27,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
@@ -54,8 +57,53 @@
             </StackPanel>
         </Border>
 
-        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+        <Grid Grid.Row="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="真实统计" FontSize="18" FontWeight="SemiBold" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <ComboBox x:Name="PeriodSelector" Width="120" SelectionChanged="QuerySelection_Changed">
+                            <ComboBoxItem Content="日" Tag="Day" IsSelected="True" />
+                            <ComboBoxItem Content="周" Tag="Week" />
+                            <ComboBoxItem Content="月" Tag="Month" />
+                            <ComboBoxItem Content="年" Tag="Year" />
+                        </ComboBox>
+                        <ComboBox x:Name="KeyboardDeviceSelector" Width="220" Margin="8,0,0,0" DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" SelectionChanged="QuerySelection_Changed" />
+                    </StackPanel>
+                    <TextBlock x:Name="KeyboardSummary" Margin="0,12,0,0" Text="尚无键盘聚合" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="HeatmapItems" Margin="0,8,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,8,8" Padding="8" MinWidth="72" Background="#FFE2E8F0" CornerRadius="6">
+                                    <TextBlock Text="{Binding}" Foreground="#FF172033" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="逐设备鼠标轨迹" FontSize="18" FontWeight="SemiBold" />
+                    <ComboBox x:Name="MouseDeviceSelector" Width="220" Margin="0,12,0,0" HorizontalAlignment="Left" DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" SelectionChanged="QuerySelection_Changed" />
+                    <TextBlock x:Name="MouseSummary" Margin="0,12,0,0" Text="选择鼠标后读取完整原始轨迹" TextWrapping="Wrap" />
+                    <Canvas x:Name="MouseCanvas" Height="128" Margin="0,12,0,0" Background="#FFF8FAFC" ClipToBounds="True" />
+                    <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource MutedTextBrush}" Text="绘制副本按时间合并为最多 2048 个显示点；Storage 原始点读取不抽样。" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Click="ExitButton_Click" Content="退出" />
         </StackPanel>
     </Grid>
+    </ScrollViewer>
 </Window>

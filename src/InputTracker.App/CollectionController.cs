@@ -11,6 +11,7 @@ public enum CollectionMode
     IntegrityFault,
     ControlUncertain,
     StartFailed,
+    StorageStartFailed,
     RejectedProgramDirectory
 }
 
@@ -26,13 +27,25 @@ public sealed class CollectionController : IDisposable
     private readonly IInputCaptureControl? _capture;
     private readonly SynchronizationContext? _synchronizationContext;
 
-    public CollectionController(DirectoryProbeResult directory, IInputCaptureControl? capture = null)
+    public CollectionController(
+        DirectoryProbeResult directory,
+        IInputCaptureControl? capture = null,
+        string? storageStartupError = null)
     {
         _capture = capture;
         _synchronizationContext = SynchronizationContext.Current;
         if (!directory.IsWritable)
         {
             Current = Rejected(directory.Error ?? "程序目录不可写。");
+        }
+        else if (!string.IsNullOrWhiteSpace(storageStartupError))
+        {
+            Current = new CollectionSnapshot(
+                CollectionMode.StorageStartFailed,
+                "存储启动失败 · 未采集",
+                $"Storage 未能安全启动，Raw Input 未启动。现有文件不会被自动修复或删除。{storageStartupError}",
+                CanPause: false,
+                CanResume: false);
         }
         else if (capture is null)
         {
@@ -155,7 +168,7 @@ public sealed class CollectionController : IDisposable
         InputCaptureState.Running => new CollectionSnapshot(
             CollectionMode.Collecting,
             "采集中",
-            "Win32 Raw Input 正在后台接收物理键盘和鼠标事件。Storage 尚未接通，当前事件尚未持久化。",
+            "Win32 Raw Input 正在后台接收物理键盘和鼠标事件，并写入程序目录中的 Storage。",
             CanPause: true,
             CanResume: false),
         InputCaptureState.Paused => new CollectionSnapshot(
