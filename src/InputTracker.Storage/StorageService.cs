@@ -108,6 +108,40 @@ public sealed class StorageService : IDisposable
 
     internal string OwnerLockPath => _ownerLock.Name;
 
+    public StorageKeyboardPeriodResult QueryKeyboardPeriod(
+        StoragePeriodKind kind,
+        DateOnly containingDate,
+        string timeZoneId,
+        Guid? deviceId = null)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.QueryKeyboardPeriod(
+                _database.Connection,
+                kind,
+                containingDate,
+                timeZoneId,
+                deviceId);
+        }
+    }
+
+    public IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
+        Guid deviceId,
+        StorageUtcRange utcRange,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.CreateMouseSnapshot(
+                _database,
+                deviceId,
+                utcRange,
+                cancellationToken);
+        }
+    }
+
     public void Start(TimeCalibrationSegment calibration)
     {
         lock (_gate)

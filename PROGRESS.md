@@ -1,5 +1,18 @@
 # InputTracker 执行进度
 
+## 2026-08-13 Storage read-query 独立切片
+
+- 分支/基线：`codex/storage-stats@9b2d641`；C16 推荐 `terra/high`，只改冻结 Storage query 产品、普通测试、契约与本进度文件，未改 App/Input/Acceptance/verify/依赖/schema/export/delete。
+- Period 首红：受控 `build Storage.Tests -c Release --no-restore` 退出码 1，0 warnings / 10 errors，均为缺 `StorageResolvedPeriod` / `StoragePeriodResolver`；实现后 build 退出码 0、0 warnings / 0 errors，目标 11 passed / 0 failed / 0 skipped。
+- Keyboard 首红：build 退出码 1，0 warnings / 8 errors，均为缺 `StorageKeyboardPeriodResult` / `QueryKeyboardPeriod`；中间 13/1 红仅为随机 GUID 创建顺序与 SQL 稳定排序的测试假设，改为复合键精确定位且未放宽计数/隔离断言；最终 Period+Keyboard 14/0/0。
+- Mouse 首红：build 退出码 1，3 analyzer warnings / 7 errors，7 errors 均为缺 `StreamMouseAsync`；warnings 按 xUnit predicate overload 消除。首轮运行 14/4 红：3 项为 calibration frequency 应来自 `clock_sessions`，1 项为测试在 live owner 后另开 writer；窄修后 query 18/0/0。
+- 语义：显式 Windows zone 的 Day/ISO Monday Week/Month/Year 本地边界转 UTC 半开区间；Pacific spring/fall 精确 23/25 小时。键盘仅合并同 capture zone 的日聚合并返回可用 zones，不伪造跨时区重投影。
+- Mouse：只读 v4 committed spool 的严格 `[1..watermark]` 快照；chunk 只作 point-for-point 等价见证，不重复计数。首个 `MoveNextAsync` 在 worker 上完成全段验证，第二遍逐段重读、按 calibration 映射 UTC 并流式输出；缺失/损坏/路径逃逸/reparse/不等价均 fail closed。
+- 百万查询：`StreamsOneMillionCommittedRecordsWithExactCountHashAndBoundedLiveMemory` 退出码 0，1/0/0，用时 10 秒（VSTest 11.59 秒）；1,000,000 条 exact count 与 rolling hash 一致，观测 managed memory growth 不超过 128 MiB。该测试不是硬件验收。
+- 最终本切片 build：退出码 0，3 项目，0 warnings / 0 errors，1.53 秒。完整 `Category!=StorageSpike` 回归退出码 0，150 passed / 0 failed / 0 skipped，14 秒。
+- 结果：read-query 产品切片已达代码与普通测试冻结条件；未运行 4 分钟 StorageSpike、统一 solution/verify/publish、真实硬件或 UI，仍不得声称 Storage/final 完成。
+- 下一步：由主任务执行白名单/Git/数据正确性只读复审；通过后独立提交，再进入 App 只读 adapter 和 export/backup/delete 后继切片。
+
 ## 目标、顺序、最大风险（8 行）
 1. 目标：交付 Windows 10/11 x64 本地绿色版 InputTracker，用户始终知情并可暂停、删除、备份和恢复。
 2. 隐私：键盘仅保留设备、物理键、日期的次数与时长；不保存文字、顺序、窗口或进程。

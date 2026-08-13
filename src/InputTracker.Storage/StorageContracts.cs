@@ -154,6 +154,13 @@ public readonly record struct StorageUtcRange(
     }
 }
 
+public sealed record StorageResolvedPeriod(
+    StoragePeriodKind Kind,
+    DateOnly LocalStartDate,
+    DateOnly LocalEndDate,
+    string TimeZoneId,
+    StorageUtcRange UtcRange);
+
 public sealed record StorageKeyboardAggregate(
     Guid DeviceId,
     ushort MakeCode,
@@ -163,6 +170,19 @@ public sealed record StorageKeyboardAggregate(
     string TimeZoneId,
     long PressCount,
     long HoldDurationMicroseconds);
+
+public sealed record StorageKeyboardPeriodAggregate(
+    Guid DeviceId,
+    ushort MakeCode,
+    bool IsE0,
+    bool IsE1,
+    long PressCount,
+    long HoldDurationMicroseconds);
+
+public sealed record StorageKeyboardPeriodResult(
+    StorageResolvedPeriod Period,
+    IReadOnlyList<StorageKeyboardPeriodAggregate> Aggregates,
+    IReadOnlyList<string> AvailableCaptureTimeZoneIds);
 
 public readonly record struct StorageMouseRecord(
     Guid DeviceId,
