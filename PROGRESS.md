@@ -983,3 +983,14 @@
 - Draft PR：`gh pr create --draft --base main --head codex/ui-storage-integration` exit 0，PR #3 `https://github.com/LinkStartR/InputTracker/pull/3`。
 - PR 边界：明确为从 Storage durability 到首次测试 UI 的依赖栈，当前不可直接合并；正文保留 CSV/PNG、备份恢复、范围删除、Portable、真实硬件/性能/视觉与 B-007 未完成项。
 - 下一步：继续 C26/C27 本地切片；各自审查和验证后追加独立提交，等待依赖拆分/合并顺序，不直接推 main。
+
+## 2026-08-13 Portable lifecycle and startup controls
+
+- 分支/基线：`codex/ui-storage-integration@65dc884`；精确范围为 README、App/普通 App tests 与 `docs/portable/**`，并行 Storage 差异不纳入本提交。
+- 产品结果：首次确认成功前不构造、不启动 Storage 或 Raw Input；配置只写程序目录。界面显示程序数据位置、绿色卸载说明和显式 Startup 开关，关闭时只删除四元描述符（target、空 arguments、working directory、自有 description）完全匹配的 `InputTracker.lnk`，不写注册表、服务或管理员权限。
+- 生命周期：锁屏与挂起在 WTS/Power 消息返回前完成 pause barrier；解锁与恢复保持同一有序队列且不清除用户暂停。退出先移除 hook、注销并排空系统边界，再排空 capture，随后停止/释放 Storage。
+- 诚实披露：首次提示与主界面均声明当前测试版尚无范围删除；拒绝确认、损坏或未来版本配置保持未采集，不伪称功能完成。
+- 红→绿：先后记录缺失 Startup seam、`MessageBox` 歧义、异步 xUnit API、快捷方式所有权不足和系统消息异步早退；修复后主任务权威 Release build exit 0、0 warnings/0 errors、1.41s，App.Tests 58 passed/0 failed/0 skipped、247ms。
+- 静态/独立复审：`git diff --check` exit 0；无新依赖、网络、注册表、服务、提权、Skip/TODO/NotImplemented/`|| true`。C1 复审确认两个 P0 均关闭并允许精确提交。
+- 未验证：真实 Startup 创建/删除、锁屏/挂起/注销/关机、普通用户/UAC、Windows 10/11、GUI 截图和完整 publish/verify 保持 pending。
+- 下一步：精确提交 Portable 白名单并 push 更新 draft PR #3；继续 Storage 导出/备份/恢复和安全删除预览，随后交 C2 增补 Portable/Storage Acceptance 与现场 runbook。

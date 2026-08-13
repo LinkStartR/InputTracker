@@ -34,6 +34,37 @@ public sealed class CollectionControllerTests
     }
 
     [Fact]
+    public void MissingConsentIsExplicitAndCannotCollect()
+    {
+        var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null),
+            collectionConsentGranted: false);
+
+        Assert.Equal(CollectionMode.ConsentRequired, controller.Current.Mode);
+        Assert.Contains("Storage 和 Raw Input 均未启动", controller.Current.Explanation);
+        Assert.False(controller.Current.CanPause);
+        Assert.False(controller.Current.CanResume);
+    }
+
+    [Fact]
+    public void PreCaptureBoundaryFailureIsKnownNotCollecting()
+    {
+        var capture = new FakeCapture(InputCaptureState.Stopped);
+        using var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null), capture);
+
+        controller.HandlePreCaptureStartException(
+            "注册锁屏采集边界",
+            new InvalidOperationException("registration denied"));
+
+        Assert.Equal(CollectionMode.StartFailed, controller.Current.Mode);
+        Assert.Contains("Raw Input 尚未启动", controller.Current.Explanation);
+        Assert.DoesNotContain("可能仍在运行", controller.Current.Explanation);
+        Assert.False(controller.Current.CanPause);
+        Assert.False(controller.Current.CanResume);
+    }
+
+    [Fact]
     public async Task CaptureStatesAreShownHonestlyAndUserPauseUsesReasonedControl()
     {
         var capture = new FakeCapture(InputCaptureState.Running);

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.IO;
 using InputTracker.Input;
 using InputTracker.Input.Win32;
 using InputTracker.Storage;
@@ -13,6 +14,7 @@ public partial class App : System.Windows.Application
     private CollectionController? _collection;
     private StorageService? _storage;
     private AppStorageCoordinator? _storageCoordinator;
+    private PortableSystemEventBridge? _systemEvents;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -52,9 +54,25 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        bool collectionConsentGranted = false;
+        string? consentError = null;
+        if (directory.IsWritable)
+        {
+            try
+            {
+                collectionConsentGranted = FirstRunConsent.EnsureGranted(
+                    new PortableSettingsStore(AppContext.BaseDirectory),
+                    new WpfPortableConsentPrompt());
+            }
+            catch (Exception error)
+            {
+                consentError = error.Message;
+            }
+        }
+
         string? storageStartupError = null;
         DashboardViewModel? dashboard = null;
-        if (directory.IsWritable)
+        if (directory.IsWritable && collectionConsentGranted)
         {
             try
             {
@@ -83,8 +101,16 @@ public partial class App : System.Windows.Application
         IInputCaptureControl? collectionControl = _capture is not null && _storageCoordinator is not null
             ? new PersistingCaptureControl(_capture, _storageCoordinator)
             : null;
-        _collection = new CollectionController(directory, collectionControl, storageStartupError);
-        var window = new MainWindow(_collection, directory, dashboard);
+        _collection = new CollectionController(
+            directory,
+            collectionControl,
+            storageStartupError,
+            collectionConsentGranted,
+            consentError);
+        string executablePath = Environment.ProcessPath
+            ?? Path.Combine(AppContext.BaseDirectory, "InputTracker.exe");
+        StartupShortcutManager? startup = CreateStartupShortcutManager(executablePath);
+        var window = new MainWindow(_collection, directory, dashboard, startup);
 
         _trayIcon = new TrayIconController(
             _collection,
@@ -104,6 +130,20 @@ public partial class App : System.Windows.Application
         {
             try
             {
+                try
+                {
+                    _systemEvents = new PortableSystemEventBridge(
+                        window,
+                        new PortablePauseController(collectionControl!),
+                        (operation, error) => window.Dispatcher.BeginInvoke(
+                            () => _collection.HandleCaptureControlException(operation, error)));
+                }
+                catch (Exception error)
+                {
+                    _collection.HandlePreCaptureStartException("注册锁屏采集边界", error);
+                    return;
+                }
+
                 await _capture.StartAsync();
             }
             catch (Exception error)
@@ -118,7 +158,9 @@ public partial class App : System.Windows.Application
         try
         {
             AppShutdown.Run(
-                _capture is null ? null : () => _capture.DisposeAsync().AsTask(),
+                _capture is null && _systemEvents is null
+                    ? null
+                    : () => StopCaptureAndSystemEventsAsync(_capture, _systemEvents),
                 _storage,
                 _collection,
                 _trayIcon,
@@ -151,5 +193,43 @@ public partial class App : System.Windows.Application
         window.Show();
         window.WindowState = WindowState.Normal;
         window.Activate();
+    }
+
+    private static StartupShortcutManager? CreateStartupShortcutManager(string executablePath)
+    {
+        string startupDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+        return string.IsNullOrWhiteSpace(startupDirectory)
+            ? null
+            : new StartupShortcutManager(executablePath, startupDirectory);
+    }
+
+    private static async Task StopCaptureAndSystemEventsAsync(
+        InputCaptureService? capture,
+        PortableSystemEventBridge? systemEvents)
+    {
+        Exception? first = null;
+        try
+        {
+            systemEvents?.Dispose();
+        }
+        catch (Exception error)
+        {
+            first = error;
+        }
+
+        try
+        {
+            if (capture is not null) await capture.DisposeAsync();
+        }
+        catch (Exception error)
+        {
+            first ??= error;
+        }
+
+        if (first is not null)
+        {
+            throw new AggregateException(
+                "System lifecycle notification and capture cleanup completed with a failure.", first);
+        }
     }
 }

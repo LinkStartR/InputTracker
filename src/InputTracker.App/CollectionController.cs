@@ -12,6 +12,7 @@ public enum CollectionMode
     ControlUncertain,
     StartFailed,
     StorageStartFailed,
+    ConsentRequired,
     RejectedProgramDirectory
 }
 
@@ -30,13 +31,26 @@ public sealed class CollectionController : IDisposable
     public CollectionController(
         DirectoryProbeResult directory,
         IInputCaptureControl? capture = null,
-        string? storageStartupError = null)
+        string? storageStartupError = null,
+        bool collectionConsentGranted = true,
+        string? consentError = null)
     {
         _capture = capture;
         _synchronizationContext = SynchronizationContext.Current;
         if (!directory.IsWritable)
         {
             Current = Rejected(directory.Error ?? "程序目录不可写。");
+        }
+        else if (!collectionConsentGranted)
+        {
+            Current = new CollectionSnapshot(
+                CollectionMode.ConsentRequired,
+                "等待采集确认 · 未采集",
+                consentError is null
+                    ? "你尚未确认采集边界。Storage 和 Raw Input 均未启动；重新启动并确认后才会开始采集。"
+                    : $"采集确认配置无法安全读取。Storage 和 Raw Input 均未启动；请检查程序目录中的 {PortableSettingsStore.FileName}。{consentError}",
+                CanPause: false,
+                CanResume: false);
         }
         else if (!string.IsNullOrWhiteSpace(storageStartupError))
         {
@@ -86,6 +100,18 @@ public sealed class CollectionController : IDisposable
                 CanPause: false,
                 CanResume: false)
             : Uncertain(operation, error.Message));
+    }
+
+    public void HandlePreCaptureStartException(string operation, Exception error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+        ArgumentNullException.ThrowIfNull(error);
+        Set(new CollectionSnapshot(
+            CollectionMode.StartFailed,
+            "采集启动失败 · 未采集",
+            $"{operation}失败；Raw Input 尚未启动，InputTracker 不会假装正在采集。{error.Message}",
+            CanPause: false,
+            CanResume: false));
     }
 
     public async Task PauseAsync()

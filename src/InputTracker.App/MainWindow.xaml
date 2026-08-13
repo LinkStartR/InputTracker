@@ -29,6 +29,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="16" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
@@ -101,7 +103,20 @@
             </Border>
         </Grid>
 
-        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
+        <Border Grid.Row="8" Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="绿色版与开机启动" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="StartupStatusText" Margin="0,12,0,0" TextWrapping="Wrap" />
+                <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                    <Button Click="EnableStartupButton_Click" Content="启用开机启动" />
+                    <Button Click="DisableStartupButton_Click" Content="关闭开机启动" />
+                </StackPanel>
+                <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
+                           Text="数据、配置、日志和备份均位于上方显示的程序目录。卸载前先退出 InputTracker 并关闭开机启动；需要保留数据时先备份整个程序目录，然后删除该绿色目录即可。不要在程序运行时移动或删除数据文件。" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Click="ExitButton_Click" Content="退出" />
         </StackPanel>
     </Grid>

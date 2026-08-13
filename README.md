@@ -2,7 +2,7 @@
 
 Windows 10/11 x64 本地绿色版输入统计工具（开发中）。
 
-当前 `bootstrap` 阶段提供可自包含发布的 WPF 安全外壳、程序目录可写检查、单实例和托盘暂停控制。它尚未采集任何键盘或鼠标输入。
+当前集成版本提供按设备 Raw Input 后台采集、程序目录内 Storage、键盘周期统计、键盘热力数据和逐设备鼠标轨迹。首次确认、暂停/恢复、托盘、锁屏/挂起暂停及显式开机启动授权均由用户控制。范围删除、备份恢复 UI 与真实双键盘双鼠标终验仍在进行中。
 
 本地构建使用仓库内 .NET 10 SDK：
 
@@ -13,4 +13,4 @@ Windows 10/11 x64 本地绿色版输入统计工具（开发中）。
 & .\.tools\dotnet\dotnet.exe publish InputTracker.sln -c Release -r win-x64 --self-contained true --no-build
 ```
 
-隐私边界与阶段验收见 [docs/acceptance-plan.md](docs/acceptance-plan.md)，bootstrap 设计见 [docs/bootstrap.md](docs/bootstrap.md)。
+隐私边界与阶段验收见 [docs/acceptance-plan.md](docs/acceptance-plan.md)，绿色版使用与卸载见 [docs/portable/README.md](docs/portable/README.md)。

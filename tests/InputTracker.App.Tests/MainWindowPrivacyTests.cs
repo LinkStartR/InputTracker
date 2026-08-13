@@ -40,6 +40,24 @@ public sealed class MainWindowPrivacyTests
         Assert.Contains("PrivacyExplanation.Text = PrivacyDisclosure.For(snapshot)", codeBehind);
     }
 
+    [Fact]
+    public void PortableControlsDiscloseStartupAndUninstallBoundaries()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string xaml = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "MainWindow.xaml"));
+        string code = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("启用开机启动", xaml);
+        Assert.Contains("关闭开机启动", xaml);
+        Assert.Contains("数据、配置、日志和备份均位于", xaml);
+        Assert.Contains("删除该绿色目录即可", xaml);
+        Assert.Contains("_startup.Enable()", code);
+        Assert.Contains("_startup.Disable()", code);
+
+        string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "PortableSettings.cs"));
+        Assert.Contains("当前测试版尚未提供范围删除", consent);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

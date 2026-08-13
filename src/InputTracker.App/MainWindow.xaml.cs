@@ -12,20 +12,24 @@ public partial class MainWindow : Window
     private readonly DirectoryProbeResult _directory;
     private readonly WindowClosePolicy _closePolicy = new();
     private readonly DashboardViewModel? _dashboard;
+    private readonly StartupShortcutManager? _startup;
 
     internal MainWindow(
         CollectionController collection,
         DirectoryProbeResult directory,
-        DashboardViewModel? dashboard = null)
+        DashboardViewModel? dashboard = null,
+        StartupShortcutManager? startup = null)
     {
         InitializeComponent();
         _collection = collection;
         _directory = directory;
         _dashboard = dashboard;
+        _startup = startup;
         _collection.Changed += Collection_Changed;
         Closed += (_, _) => _collection.Changed -= Collection_Changed;
         Render(_collection.Current);
         Loaded += async (_, _) => await RefreshDashboardAsync();
+        Loaded += (_, _) => RefreshStartupState();
     }
 
     public event EventHandler? MinimizeToTrayRequested;
@@ -87,6 +91,45 @@ public partial class MainWindow : Window
         catch (Exception error)
         {
             _collection.HandleCaptureControlException(operation, error);
+        }
+    }
+
+    private void EnableStartupButton_Click(object sender, RoutedEventArgs e) => ChangeStartup(enable: true);
+
+    private void DisableStartupButton_Click(object sender, RoutedEventArgs e) => ChangeStartup(enable: false);
+
+    private void ChangeStartup(bool enable)
+    {
+        if (_startup is null) return;
+        try
+        {
+            if (enable) _startup.Enable();
+            else _startup.Disable();
+            RefreshStartupState();
+        }
+        catch (Exception error)
+        {
+            StartupStatusText.Text = $"开机启动设置失败，未静默修改其他位置：{error.Message}";
+        }
+    }
+
+    private void RefreshStartupState()
+    {
+        if (_startup is null)
+        {
+            StartupStatusText.Text = "开机启动控制不可用。";
+            return;
+        }
+
+        try
+        {
+            StartupStatusText.Text = _startup.IsEnabled
+                ? "已授权随 Windows 启动。关闭授权会立即删除 InputTracker 自身快捷方式。"
+                : "未授权随 Windows 启动。InputTracker 不写注册表。";
+        }
+        catch (Exception error)
+        {
+            StartupStatusText.Text = $"无法安全确认开机启动状态：{error.Message}";
         }
     }
 
