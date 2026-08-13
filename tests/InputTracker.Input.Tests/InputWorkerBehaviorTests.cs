@@ -40,7 +40,7 @@ public sealed class InputWorkerBehaviorTests
         Assert.Equal(CapturedInputKind.DeviceChange, arrival.Kind);
         Assert.Equal(DeviceChangeKind.Arrived, arrival.DeviceChange.Change);
         Assert.Equal(timestamp, arrival.DeviceChange.Timestamp);
-        Assert.Equal($"path-{handle}", arrival.DeviceChange.Device.InterfacePath);
+        Assert.Null(arrival.DeviceChange.Device.InterfacePath);
         Assert.Equal("test", arrival.DeviceChange.Device.HardwareSummary);
         Assert.False(run.IsCompleted);
 

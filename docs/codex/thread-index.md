@@ -1,6 +1,6 @@
 # Codex 线程索引
 
-最后更新：2026-08-09
+最后更新：2026-08-13
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
@@ -23,6 +23,8 @@
 | C6 | UI | 页面、筛选、热力图、轨迹回放、主题 | 首个阻断修复已提交并完成首次用户桌面测试；完整 UI 待 Storage 查询 | WPF UI 与视觉证据 | `codex/ui@3c84012`，未推送 | 是：`019fd04e-238f-7c11-b854-4b0e4298228f` | terra / high | 跨页面状态与缩放矩阵 | 16/0/0；用户反馈启动/托盘/暂停恢复/退出流程都 OK，无截图/逐步日志；统计/热力图/回放继续依赖 Storage |
 | C10 | UI | 从 C6 冻结现场窄修状态披露与系统关机边界 | 已完成 | `src/InputTracker.App/**`、普通 App tests、`PROGRESS.md` | `codex/ui@3c84012` | 是：`/root/ui_fix` | terra / high | WPF 生命周期、用户可见隐私状态 | C1/C2 放行并由主任务提交；未 push/PR，B-009 有效 |
 | C7 | Portable | 自包含绿色发布、启动授权、锁屏与卸载 | 首测边界只读预审完成，待 UI 合并 | 发布、便携性、说明与测试 | 尚未建实现分支/提交；只读目标 `codex/storage-stats@099e07e` | 是：`019fd04e-2416-7e50-99c7-f8be6a5a8367` | luna / medium | 发布与权限边界明确 | 已确认锁屏/休眠、Startup、首次告知与卸载尚缺；当前保持 Startup 零写入，真实生命周期 not-run |
+| C21 | Input Device Identity | SetupAPI/ConfigMgr 结构化瞬时身份与隐私边界 | 实现完成，待提交 | `src/InputTracker.Input/**`、普通 Input tests/docs | `codex/input-device-identity@f6136c3` 加未提交切片 | 是：`/root/input_device_identity` | sol / high | 设备身份与隐私，影响历史映射正确性 | 37/0/0；不从 Instance ID 猜 serial，真实硬件仍 B-003 |
+| C23 | Git/GitHub 同步 | Input 身份切片提交前只读 Git/隐私审查 | 已完成 | 10 个 Input 身份意图文件 | `codex/input-device-identity@f6136c3` 加未提交切片 | 是：`/root/git_input_identity_review` | luna / medium | 常规白名单与 API 边界 | 白名单/worker-only/隐私/序列号来源全通过，放行精确提交；B-009 禁止 push |
 
 ## 协调说明
 

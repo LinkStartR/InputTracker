@@ -6,6 +6,8 @@ namespace InputTracker.Input.Win32;
 
 internal sealed class RawDeviceInfoProvider : IRawDeviceInfoProvider
 {
+    private readonly WindowsDeviceIdentitySource _identitySource = new();
+
     public RawDeviceMetadata Query(nint deviceHandle, RawDeviceKind hintedKind)
     {
         if (deviceHandle == 0)
@@ -17,8 +19,21 @@ internal sealed class RawDeviceInfoProvider : IRawDeviceInfoProvider
                 DeviceIdentityConfidence.Unattributed);
         }
 
-        string? path = ReadDeviceName(deviceHandle);
-        RawInputInterop.NativeRawDeviceInfo information = ReadDeviceInformation(deviceHandle);
+        string? path;
+        RawInputInterop.NativeRawDeviceInfo information;
+        try
+        {
+            path = ReadDeviceName(deviceHandle);
+            information = ReadDeviceInformation(deviceHandle);
+        }
+        catch (Exception error) when (IsExpectedDeviceQueryFailure(error))
+        {
+            return new RawDeviceMetadata(
+                hintedKind,
+                null,
+                null,
+                DeviceIdentityConfidence.RequiresConfirmation);
+        }
         RawDeviceKind kind = information.Type switch
         {
             RawInputInterop.RimTypeMouse => RawDeviceKind.Mouse,
@@ -31,12 +46,30 @@ internal sealed class RawDeviceInfoProvider : IRawDeviceInfoProvider
             RawDeviceKind.Keyboard => $"type={information.Data.Keyboard.Type};subType={information.Data.Keyboard.SubType};keys={information.Data.Keyboard.TotalKeyCount}",
             _ => $"type={information.Type}"
         };
-        DeviceIdentityConfidence confidence = string.IsNullOrWhiteSpace(path)
-            || path.Contains("RDP", StringComparison.OrdinalIgnoreCase)
-            || path.Contains("ROOT#", StringComparison.OrdinalIgnoreCase)
-                ? DeviceIdentityConfidence.RequiresConfirmation
-                : DeviceIdentityConfidence.SessionOnly;
-        return new RawDeviceMetadata(kind, path, summary, confidence);
+        RawDeviceIdentityObservation? identity = null;
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            try
+            {
+                identity = _identitySource.Query(path, kind);
+            }
+            catch (Exception error) when (IsExpectedDeviceQueryFailure(error))
+            {
+                identity = new RawDeviceIdentityObservation(
+                    kind,
+                    path,
+                    [],
+                    null,
+                    null,
+                    DeviceTransportAssessment.Indeterminate,
+                    DeviceIdentityEvidence.RawInputInterfacePath);
+            }
+        }
+
+        DeviceIdentityConfidence confidence = identity?.Transport == DeviceTransportAssessment.Physical
+            ? DeviceIdentityConfidence.SessionOnly
+            : DeviceIdentityConfidence.RequiresConfirmation;
+        return new RawDeviceMetadata(kind, null, summary, confidence, identity);
     }
 
     private static string? ReadDeviceName(nint handle)
@@ -90,4 +123,7 @@ internal sealed class RawDeviceInfoProvider : IRawDeviceInfoProvider
 
         return information;
     }
+
+    private static bool IsExpectedDeviceQueryFailure(Exception error) => error is
+        Win32Exception or UnauthorizedAccessException or IOException or InvalidDataException or OverflowException;
 }

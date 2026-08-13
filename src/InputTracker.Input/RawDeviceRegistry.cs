@@ -56,7 +56,7 @@ internal sealed class RawDeviceRegistry
             new RuntimeDeviceId(++_nextRuntimeId),
             generation,
             metadata.Kind,
-            metadata.InterfacePath,
+            null,
             metadata.HardwareSummary,
             metadata.Confidence);
         _active[handle] = new ActiveDevice(descriptor);

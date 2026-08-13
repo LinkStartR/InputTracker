@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using InputTracker.Input.Win32;
 
 namespace InputTracker.Input;
 
@@ -123,7 +124,8 @@ internal readonly record struct RawDeviceMetadata(
     RawDeviceKind Kind,
     string? InterfacePath,
     string? HardwareSummary,
-    DeviceIdentityConfidence Confidence);
+    DeviceIdentityConfidence Confidence,
+    RawDeviceIdentityObservation? Identity = null);
 
 internal sealed class InputWorker
 {
@@ -131,6 +133,7 @@ internal sealed class InputWorker
     private readonly InputPipelineCounters _counters;
     private readonly IInputEventSink _sink;
     private readonly IRawDeviceInfoProvider _deviceInfo;
+    private readonly IRawDeviceIdentityObserver _identityObserver;
     private readonly RawDeviceRegistry _devices = new();
     private readonly HashSet<PressedKey> _pressedKeys = [];
     private readonly Func<Exception, ValueTask> _onFault;
@@ -145,12 +148,14 @@ internal sealed class InputWorker
         IInputEventSink sink,
         IRawDeviceInfoProvider deviceInfo,
         Func<Exception, ValueTask> onFault,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IRawDeviceIdentityObserver? identityObserver = null)
     {
         _queue = queue;
         _counters = counters;
         _sink = sink;
         _deviceInfo = deviceInfo;
+        _identityObserver = identityObserver ?? NullRawDeviceIdentityObserver.Instance;
         _onFault = onFault;
         _cancellationToken = cancellationToken;
     }
@@ -218,13 +223,15 @@ internal sealed class InputWorker
                     break;
                 }
 
-                RawDeviceMetadata metadata = _deviceInfo.Query(input.DeviceHandle, input.DeviceKind);
-                InputDeviceDescriptor descriptor = _devices.Arrive(
-                    input.DeviceHandle,
-                    metadata,
-                    out bool created);
+                RawDeviceMetadata metadata = default;
+                InputDeviceDescriptor descriptor = _devices.Resolve(input.DeviceHandle, () =>
+                {
+                    metadata = _deviceInfo.Query(input.DeviceHandle, input.DeviceKind);
+                    return metadata;
+                }, out bool created);
                 if (created)
                 {
+                    await ObserveIdentityAsync(descriptor, metadata).ConfigureAwait(false);
                     await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
                         DeviceChangeKind.Arrived,
                         descriptor,
@@ -307,12 +314,15 @@ internal sealed class InputWorker
         RawDeviceKind kind,
         long timestamp)
     {
-        InputDeviceDescriptor descriptor = _devices.Resolve(
-            handle,
-            () => _deviceInfo.Query(handle, kind),
-            out bool created);
+        RawDeviceMetadata metadata = default;
+        InputDeviceDescriptor descriptor = _devices.Resolve(handle, () =>
+        {
+            metadata = _deviceInfo.Query(handle, kind);
+            return metadata;
+        }, out bool created);
         if (created)
         {
+            await ObserveIdentityAsync(descriptor, metadata).ConfigureAwait(false);
             await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
                 DeviceChangeKind.Arrived,
                 descriptor,
@@ -321,6 +331,11 @@ internal sealed class InputWorker
 
         return descriptor;
     }
+
+    private ValueTask ObserveIdentityAsync(InputDeviceDescriptor descriptor, RawDeviceMetadata metadata) =>
+        metadata.Identity is { } identity
+            ? _identityObserver.ObserveAsync(descriptor.RuntimeId, identity, _cancellationToken)
+            : ValueTask.CompletedTask;
 
     private async ValueTask WriteBoundaryForDeviceAsync(
         RuntimeDeviceId deviceId,

@@ -12,6 +12,17 @@
 - 最终本切片 build：退出码 0，3 项目，0 warnings / 0 errors，1.53 秒。完整 `Category!=StorageSpike` 回归退出码 0，150 passed / 0 failed / 0 skipped，14 秒。
 - 结果：read-query 产品切片已达代码与普通测试冻结条件；未运行 4 分钟 StorageSpike、统一 solution/verify/publish、真实硬件或 UI，仍不得声称 Storage/final 完成。
 - 下一步：由主任务执行白名单/Git/数据正确性只读复审；通过后独立提交，再进入 App 只读 adapter 和 export/backup/delete 后继切片。
+## 2026-08-13 Input 结构化设备身份切片
+
+- 分支/基线：`codex/input-device-identity` 从本地 `main@f6136c3` 建立；推荐模型/推理为 `sol/high`，当前环境不可切换但照常执行。
+- 实现：Raw Input 接口路径仅在单一 Input worker 上经 SetupAPI/ConfigMgr 读取 HardwareIds、ContainerId、BusTypeGuid 与 EnumeratorName，分类为 Physical/Bluetooth/RemoteDesktop/KnownVirtual/Indeterminate；同一活动 `hDevice + generation` 只查询一次，移除重插后重查。
+- 隐私与身份边界：结构化原始身份只进入 internal observer；公开到达事件的 `InterfacePath=null`，不向 UI、日志或异常暴露原始路径/硬件 ID/container。审查后撤销 Instance ID 尾段及 `CM_DEVCAP_UNIQUEID` 序列号推导；当前 `SerialNumber` 保守为 null，不伪称永久标识。
+- 红证据：首个主机权限 build exit 1，0 warnings / 8 errors，均为测试先落地时缺失身份契约；中间 `CS0051` 1 error 后保持内部 enum，不扩大公开 API；重复 arrival 回归揭示同代次重复查询并已窄修。
+- 聚焦绿：Release build exit 0，0 warnings / 0 errors，0.95s；`InputTracker.Input.Tests` exit 0，37 passed / 0 failed / 0 skipped，515ms。
+- 统一回归：restore exit 0；solution Release build exit 0、0 warnings / 0 errors、2.73s；solution tests exit 0，App 10 + Input 37 + Acceptance 12 = 59 passed / 0 failed / 0 skipped。
+- 判卷/发布：`scripts/verify.ps1 -Stage InputCore` exit 0，total=59 / acceptance=12 / failed=0 / skipped=0 / gates=23，证据 `.tools/verification/20260813-161723-504/verification.json`；win-x64 self-contained solution publish exit 0。
+- 静态检查：`git diff --check` exit 0；9 个意图文件均在 Input 普通测试/文档/PROGRESS 白名单，未修改 App、Storage、Acceptance、verify、依赖或 LICENSE，无注册表、服务、管理员权限或运行时网络。
+- 未验/下一步：真实两键盘两鼠标、Bluetooth/RDP/virtual、重插与 1000Hz 仍为 B-003；后续 adapter 必须把 Indeterminate 映射为 transient/需确认，并只让 Storage 即时哈希原始身份。等待 Git 只读复核后提交本独立切片。
 
 ## 目标、顺序、最大风险（8 行）
 1. 目标：交付 Windows 10/11 x64 本地绿色版 InputTracker，用户始终知情并可暂停、删除、备份和恢复。
@@ -894,3 +905,15 @@
 - Intermediate honest red: the first full non-Spike run after the core fix was 127 passed / 2 failed / 0 skipped (privacy metadata allowlist omitted the boolean marker; an equivalent spool-covered chunk orphan was rejected too early). After the exact marker allowlist and catalog-then-equivalence validation, the suite returned green. A symbolic-link fixture also failed before product code due missing Windows link privilege; it was replaced by a real NTFS junction fixture with mandatory creation exit 0, not skipped or conditionally returned.
 - Static checks: `git diff --check` exit 0; no new `TODO`, `NotImplementedException`, Skip attribute, `|| true`, or empty catch. No Acceptance/UI/Input/verify files changed, and no stage/commit/push was performed per the delegated Git boundary.
 - Next: main thread should request independent C14 data-correctness review, then run the full solution/Spike/InputCore/publish sequence before C1 stages the frozen whitelist. Physical power loss, real hardware, and B-007 native SQLite remain unresolved and are not claimed by this P0 result.
+## 2026-08-13 Input device identity v1
+
+- Branch/baseline: `codex/input-device-identity@f6136c3`; this slice is not staged, committed, or pushed.
+- Scope: private structured Raw Input identity, SetupAPI/ConfigMgr lookup, explicit `Physical/Bluetooth/RemoteDesktop/KnownVirtual/Indeterminate`, and one query per active handle generation. Serial remains null because no explicit documented serial property was available.
+- Callback/privacy: `RawInputMessageWindow` still has no SetupAPI/ConfigMgr calls. Public arrivals preserve API shape but carry `InterfacePath = null`; raw interface, hardware IDs, serial candidate, and container ID only reach an internal observer and never enter error text, UI, or logging.
+- TDD red: host build entered source compilation and exited 1 with 8 missing identity-contract errors; after product files landed, one `CS0051` accessibility red was corrected without making the internal enum public.
+- First green: focused build exit 0, 0 warnings / 0 errors; focused identity/worker/registry/privacy tests 18 passed / 0 failed / 0 skipped.
+- Review correction: duplicate explicit arrival initially re-queried the active handle. Registry fast-path plus a regression test now prove one provider query and one private observation per active generation.
+- Final verification after removing all InstanceId/parent serial inference: Input test-project build exit 0, 0 warnings / 0 errors, 1.12 s; full Input ordinary tests exit 0, 37 passed / 0 failed / 0 skipped, 470 ms.
+- SDK audit: Windows SDK `10.0.26100.0` headers confirmed all retained property keys; an initially considered nonexistent `DEVPKEY_Device_SerialNumber` and the unsafe InstanceId-tail inference were removed before final verification.
+- Boundaries: no dependency, permission, registry, service, driver, runtime network, Acceptance, verify, Storage, or App change. Real two-keyboard/two-mouse, Bluetooth/RDP/virtual, replug persistence, and 1000 Hz evidence remain B-003.
+- Next: independent Git/privacy review, then commit the Input-only slice. A later adapter must map `Indeterminate` to transient identity before passing raw observation directly to Storage hashing.
