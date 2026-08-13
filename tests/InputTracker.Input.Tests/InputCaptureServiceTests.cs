@@ -1,7 +1,47 @@
+using InputTracker.Input.Win32;
+
 namespace InputTracker.Input.Tests;
 
 public sealed class InputCaptureServiceTests
 {
+    [Fact]
+    public async Task PrivateIdentityObserverFlowsThroughServiceOncePerArrivalGeneration()
+    {
+        var factory = new FakeHostFactory();
+        var observer = new RecordingIdentityObserver();
+        var provider = new IdentityProvider();
+        await using var service = new InputCaptureService(
+            new CountingSink(),
+            options: null,
+            factory,
+            provider,
+            observer);
+        await service.StartAsync();
+        nint handle = new(71);
+
+        Assert.True(factory.Host.Inject(Mouse(handle, 1)));
+        Assert.True(factory.Host.Inject(Mouse(handle, 2)));
+        Assert.True(factory.Host.Inject(new InputIngressEvent(
+            IngressEventKind.DeviceRemoved,
+            handle,
+            3,
+            DeviceKind: RawDeviceKind.Mouse)));
+        Assert.True(factory.Host.Inject(Mouse(handle, 4)));
+
+        await service.StopAsync();
+
+        Assert.Equal(2, provider.QueryCount);
+        Assert.Equal(2, observer.Items.Count);
+        Assert.NotEqual(observer.Items[0].RuntimeId, observer.Items[1].RuntimeId);
+        Assert.All(observer.Items, item => Assert.Equal("PRIVATE-SERIAL", item.Identity.SerialNumber));
+        Assert.False(typeof(IRawDeviceIdentityObserver).IsPublic);
+        Assert.False(typeof(RawDeviceIdentityObservation).IsPublic);
+        Assert.DoesNotContain(
+            typeof(InputCaptureService).GetConstructors(),
+            constructor => constructor.GetParameters().Any(parameter =>
+                parameter.ParameterType == typeof(IRawDeviceIdentityObserver)));
+    }
+
     [Fact]
     public async Task NativeHostRegistersPausesResumesAndStopsWithoutHardwareMock()
     {
@@ -186,8 +226,10 @@ public sealed class InputCaptureServiceTests
         Assert.False(service.Diagnostics.RawInputRegistered);
     }
 
-    private static InputIngressEvent Mouse(long timestamp) =>
-        new(IngressEventKind.Mouse, 0, timestamp, DeltaX: 1, DeltaY: -1);
+    private static InputIngressEvent Mouse(long timestamp) => Mouse(0, timestamp);
+
+    private static InputIngressEvent Mouse(nint handle, long timestamp) =>
+        new(IngressEventKind.Mouse, handle, timestamp, DeltaX: 1, DeltaY: -1);
 
     private sealed class CountingSink : IInputEventSink
     {
@@ -219,6 +261,45 @@ public sealed class InputCaptureServiceTests
             input.Kind == CapturedInputKind.AggregationBoundary
                 ? ValueTask.FromException(new IOException("sink failed"))
                 : ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingIdentityObserver : IRawDeviceIdentityObserver
+    {
+        public List<(RuntimeDeviceId RuntimeId, RawDeviceIdentityObservation Identity)> Items { get; } = [];
+
+        public ValueTask ObserveAsync(
+            RuntimeDeviceId runtimeId,
+            RawDeviceIdentityObservation identity,
+            CancellationToken cancellationToken)
+        {
+            Items.Add((runtimeId, identity));
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class IdentityProvider : IRawDeviceInfoProvider
+    {
+        public int QueryCount { get; private set; }
+
+        public RawDeviceMetadata Query(nint deviceHandle, RawDeviceKind hintedKind)
+        {
+            QueryCount++;
+            return new RawDeviceMetadata(
+                hintedKind,
+                InterfacePath: null,
+                HardwareSummary: "mouse",
+                DeviceIdentityConfidence.RequiresConfirmation,
+                new RawDeviceIdentityObservation(
+                    hintedKind,
+                    "PRIVATE-INTERFACE",
+                    ["HID\\PRIVATE-HARDWARE-ID"],
+                    "PRIVATE-SERIAL",
+                    Guid.NewGuid(),
+                    DeviceTransportAssessment.Physical,
+                    DeviceIdentityEvidence.RawInputInterfacePath |
+                    DeviceIdentityEvidence.DevNodeHardwareIds |
+                    DeviceIdentityEvidence.ContainerId));
+        }
     }
 
     private sealed class FakeHostFactory : IRawInputHostFactory

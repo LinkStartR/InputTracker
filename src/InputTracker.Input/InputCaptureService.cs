@@ -69,7 +69,12 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
     private int _disposed;
 
     public InputCaptureService(IInputEventSink sink, InputCaptureOptions? options = null)
-        : this(sink, options, RawInputHostFactory.Instance)
+        : this(
+            sink,
+            options,
+            RawInputHostFactory.Instance,
+            new RawDeviceInfoProvider(),
+            NullRawDeviceIdentityObserver.Instance)
     {
     }
 
@@ -77,17 +82,35 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
         IInputEventSink sink,
         InputCaptureOptions? options,
         IRawInputHostFactory hostFactory)
+        : this(
+            sink,
+            options,
+            hostFactory,
+            new RawDeviceInfoProvider(),
+            NullRawDeviceIdentityObserver.Instance)
+    {
+    }
+
+    internal InputCaptureService(
+        IInputEventSink sink,
+        InputCaptureOptions? options,
+        IRawInputHostFactory hostFactory,
+        IRawDeviceInfoProvider deviceInfo,
+        IRawDeviceIdentityObserver identityObserver)
     {
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(hostFactory);
+        ArgumentNullException.ThrowIfNull(deviceInfo);
+        ArgumentNullException.ThrowIfNull(identityObserver);
         options ??= new InputCaptureOptions();
         _queue = new BoundedInputQueue(options.QueueCapacity, _counters);
         _worker = new InputWorker(
             _queue,
             _counters,
             sink,
-            new RawDeviceInfoProvider(),
-            OnWorkerFaultAsync);
+            deviceInfo,
+            OnWorkerFaultAsync,
+            identityObserver: identityObserver);
         _host = hostFactory.Create(
             _queue,
             _counters,
