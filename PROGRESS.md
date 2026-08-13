@@ -994,3 +994,25 @@
 - 静态/独立复审：`git diff --check` exit 0；无新依赖、网络、注册表、服务、提权、Skip/TODO/NotImplemented/`|| true`。C1 复审确认两个 P0 均关闭并允许精确提交。
 - 未验证：真实 Startup 创建/删除、锁屏/挂起/注销/关机、普通用户/UAC、Windows 10/11、GUI 截图和完整 publish/verify 保持 pending。
 - 下一步：精确提交 Portable 白名单并 push 更新 draft PR #3；继续 Storage 导出/备份/恢复和安全删除预览，随后交 C2 增补 Portable/Storage Acceptance 与现场 runbook。
+
+## 2026-08-13 Storage export, backup/restore, and deletion preview
+
+- 分支/基线：`codex/ui-storage-integration@2fec60d` 后续共享工作树；C26 推荐 `terra/high`，恢复与删除按最高数据安全门处理；仅改 Storage 产品/普通测试/docs/PROGRESS/BLOCKED，未改 App/Input/Acceptance/verify/依赖/Git，未操作真实程序数据。
+- 导出红→绿：首个有效主机权限 build exit 1、0 warnings / 7 errors，均为缺 `StorageExportArtifact`、CSV/PNG API；实现后 build 0/0、导出 focused 5/0/0。随后修复先 CreateDirectory 再验 junction 的越界写风险，加入真实 junction 外部零新增测试。
+- 导出结果：CSV 固定隐私安全列并正确引用 alias；PNG 为 BCL 原生确定性无损 RGBA，含 signature/IHDR/zlib IDAT/IEND 与逐 chunk CRC，固定深色底、单一色阶、按亮度切黑白 5×7 物理键码字形；目标必须在程序目录、原子新建、拒绝逃逸/reparse/覆盖。
+- 备份红→绿：API 首红 build exit 1、0 warnings / 9 errors；首轮运行 12 项中 10 passed / 2 failed（ZIP epoch 不可表示），修正为 1980 最小时间并移除吞异常后 12/0/0。后续补齐 mouse roundtrip、active owner、上级目录 junction、清理 reparse 与目录精确白名单，最终 completion focused 19/0/0。
+- 备份/恢复结果：SQLite online backup 一致快照；只复制 SQLite 目录声明的 committed spool/chunk；manifest 含 format/schema、每文件长度与 SHA-256。恢复先有界解压并完整重开 staging，再独占 writer、创建自动恢复前备份、交换精确 store 集；失败回滚，未知 live 文件不被伪称 committed 也不静默删除。
+- 删除首红：修正测试构造参数后 build exit 1、0 warnings / 8 errors，均为缺 preview/capability/execute API。实现只读 preview 后 focused 绿；mouse 连续 prefix 与 keyboard daily aggregate 无法安全精确范围重写，execute 固定时验 token 后始终 fail closed，未粗删、未重编号、未按比例扣减。
+- 中间回归红→绿：非 Spike 首轮 171 项中 170 passed / 1 failed，既有隐私源码扫描命中 `System.Text.Encoding`；移除该 token。随后错误尝试不存在的 `Convert.TryFromHexString` 产生 build 0 warnings / 2 errors，改为无该 API 的等长字符固定时比较。
+- 最终权威验证：Storage.Tests Release build exit 0、0 warnings / 0 errors、1.58s；completion focused 19 passed / 0 failed / 0 skipped、1s；`Category!=StorageSpike` 172 passed / 0 failed / 0 skipped、16s；`git diff --check` exit 0。
+- 未验证/阻塞：未重跑 4 分钟 StorageSpike、solution/verify/publish、物理断电/真实硬件；delete execute 仍为 B-011，C2 Storage Acceptance/反向 corruption/aggregate red→green 与 UI 导出/备份/恢复/二次确认尚未落。
+- 下一步：主线程做数据安全/Git 白名单只读复审并精确提交；再由固定用户测试角色维护 Storage Acceptance 与 verify，App 只在协议复审后接入导出、备份恢复和 blocked deletion preview。
+## 2026-08-13 Storage restore xhigh 收口
+
+- 首轮 journal focused 红：24 total，10 passed / 14 failed / 0 skipped，原因是把合法的两阶段 `live -> rollback`、`staging -> live` 共享 live 端点当成全局重复路径；改为严格两阶段拓扑、每阶段 source/destination 唯一，且 staged destination 必须精确对应 original live source。
+- 第二轮 focused 红：24 total，19 passed / 5 failed / 0 skipped；仅靠 source/destination 是否存在无法区分 move 前、move 后但 journal 尚未更新的状态。第三轮改为 journal `CompletedMoves` 连续水位，每次 move 后以 WriteThrough、`Flush(true)` 和原子 `File.Replace` 更新，再触发 after-move fault；catch 重读落盘 journal，只对水位后的唯一 in-flight move 判定状态。第三轮 build exit 0、0 warnings / 0 errors、1.68s；focused 24/0/0、5s。
+- 进程重开等价边界：移除 RestoreCore 开头的无锁 recovery；Restore 与 `StorageService.OpenCore` 均先取得 exact writer lock，再读取/验证/回滚 journal。新增第 4 move 后模拟进程终止并保留 journal 的测试；新 owner Open 自动恢复原 live count=7、删除 journal，并安全清理 staging/rollback。focused 25/0/0；build 0 warnings / 0 errors、1.59s。
+- 预算边界：最多 100,000 entries、单 entry 64 GiB、总解压 512 GiB、1000:1 加 64 MiB slack、保留至少 2 GiB 可用空间；压缩比判断用除法上取整避免乘法溢出。拒绝测试同时断言 live count 不变且未生成 automatic backup。
+- 隐私回归红：non-Spike 186 total 中 185 passed / 1 failed，原因是误把 monotonic/calibration 三字段加入公开 `StorageMouseRecord`，违反精确 DTO allowlist。已撤回公共字段扩张；改为逐项比较既有公开鼠标字段，并对 committed spool/chunk 文件逐文件比较 length + SHA-256，证明内部 monotonic/calibration 编码字节在备份恢复前后不变。
+- 冻结验证：Storage.Tests Release build exit 0、0 warnings / 0 errors、1.57s；`Category!=StorageSpike` 186 passed / 0 failed / 0 skipped、15s；`git diff --check` exit 0。未重跑 4 分钟 StorageSpike、solution/verify/publish、物理断电或真实硬件，且 deletion execute 仍为 B-011。
+- 二次 xhigh P0：原 compression slack 错误地逐 entry 叠加，可由多个小 entry 绕过。现改为聚合 `totalUncompressed` / `totalCompressed`，整个 archive 只加一次 64 MiB slack；单 entry 只保留 64 GiB 硬上限。真实 ZIP 集成测试用两个 allowlisted 高压缩 chunk 和窄预算走完整 Restore 路径，验证 aggregate ratio 拒绝、live DB SHA/count 不变、automatic 无文件、operation staging 清空。修后 build exit 0、0 warnings / 0 errors、1.57s；restore focused 26/0/0、4s；non-Spike 187/0/0、15s；`git diff --check` exit 0。

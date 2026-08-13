@@ -70,8 +70,10 @@
 - 当前处置：强身份若已映射到多个设备则 fail closed；不自动 merge、split、删除、移动或覆盖任何用户 spool/chunk/tmp/corrupt 文件。
 - 解除门槛：独立迁移设计、冲突预览、备份/回滚、逐记录归属证明、真实重复设备/重插测试及 C2 Acceptance seam 全部通过后，才可在用户明确确认下实施。
 
-## B-011：范围删除尚未实现
+## B-011：范围删除已完成只读预览，执行仍被当前格式阻断
 
-- 证据：首次测试 UI 已接通真实持久化与查询，但当前没有用户可操作的按范围删除入口、预览、恢复点或 Acceptance 删除证据。
-- 当前处置：隐私页明确提示“当前版本尚未提供范围删除，数据保留在程序目录”；不得暗示用户已经能删除，也不得直接操作用户数据文件。
-- 解除门槛：Storage 范围删除必须先完成备份/回滚、半开区间与设备隔离、spool/chunk/catalog/聚合一致性、异常退出恢复及 C2 反向验证；再接 UI 确认流程。任何实际删除前必须停下取得用户明确确认。
+- 已完成：Storage 提供按设备与 UTC 半开区间 `[start,end)` 的只读 `PreviewDeletionAsync`；它对鼠标完整验证已提交快照并精确计数，对键盘报告相交日聚合行数，返回包含当前水位的 state fingerprint 与 64 字符确认 token。`ExecuteDeletion` 先固定时校验 token，随后始终 fail closed，不改任何数据。
+- 阻断证据：mouse v4 的 durability/recovery/未来追加依赖每设备从 1 开始的连续 sequence prefix；删除内部范围会制造 gap，重编号会重写原始身份与恢复语义。键盘只有 capture-local daily 聚合，任意 UTC 日内范围无法反推出其精确次数与时长。粗删整块或按比例扣减都会违反数据正确性。
+- 已解除前置：程序目录内备份/恢复基础、恢复前自动备份、损坏/路径逃逸/reparse/version fail closed、安装失败回滚以及只读 preview 普通测试均已完成；但这不等于安全 delete execute。
+- 当前处置：UI 继续明确提示当前版本尚未提供范围删除；不得暗示 token 可以执行，不得直接操作用户数据文件。产品 execute API 的唯一行为是拒绝。
+- 解除门槛：设计版本化的 mouse prefix rewrite/tombstone 与 finer-grained keyboard 删除协议，证明 spool/chunk/catalog/watermark/聚合一致、崩溃回滚、后续追加和重开恢复；再由 C2 添加 Acceptance 红→绿及 UI 二次确认。任何实际删除前必须取得用户明确确认。

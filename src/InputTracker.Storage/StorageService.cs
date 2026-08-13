@@ -189,6 +189,118 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public StorageExportArtifact ExportKeyboardCsv(
+        StorageKeyboardPeriodResult result,
+        string relativePath)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            IReadOnlyDictionary<Guid, string?> aliases = _database.ListDevices()
+                .Where(device => device.Kind == StorageDeviceKind.Keyboard)
+                .ToDictionary(device => device.DeviceId, device => device.Alias);
+            return StorageExport.WriteKeyboardCsv(
+                _database.Layout, result, aliases, relativePath);
+        }
+    }
+
+    public StorageExportArtifact ExportKeyboardHeatmapPng(
+        StorageKeyboardPeriodResult result,
+        string relativePath,
+        int width,
+        int height)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageExport.WriteKeyboardHeatmapPng(
+                _database.Layout, result, relativePath, width, height);
+        }
+    }
+
+    public StorageBackupArtifact CreateBackup(string relativePath)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (_state is not StorageServiceState.Created
+                and not StorageServiceState.Paused
+                and not StorageServiceState.Stopped
+                || _pending.Count != 0
+                || _openHolds.Count != 0
+                || _mouse.HasBuffered)
+            {
+                throw new InvalidOperationException(
+                    "Backup requires Created, Paused, or Stopped storage with no buffered input.");
+            }
+            return StorageBackup.Create(_database, relativePath);
+        }
+    }
+
+    public async Task<StorageDeletionPreview> PreviewDeletionAsync(
+        Guid deviceId,
+        StorageUtcRange utcRange,
+        CancellationToken cancellationToken = default)
+    {
+        utcRange.Validate();
+        StorageDeviceKind kind;
+        long keyboardCount;
+        StorageDurableWatermark watermark;
+        IAsyncEnumerable<StorageMouseRecord>? mouseSnapshot = null;
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            (kind, keyboardCount) = StorageDeletion.DescribeKeyboardImpact(
+                _database.Connection, deviceId, utcRange);
+            watermark = Health.DurableWatermark;
+            if (kind == StorageDeviceKind.Mouse)
+            {
+                mouseSnapshot = StorageQuery.CreateMouseSnapshot(
+                    _database, deviceId, utcRange, cancellationToken);
+            }
+        }
+
+        long mouseCount = 0;
+        if (mouseSnapshot is not null)
+        {
+            await foreach (StorageMouseRecord _ in mouseSnapshot.ConfigureAwait(false))
+            {
+                mouseCount = checked(mouseCount + 1);
+            }
+        }
+        string fingerprint = StorageDeletion.CreateStateFingerprint(
+            deviceId, utcRange, kind, mouseCount, keyboardCount, watermark);
+        string reason = kind == StorageDeviceKind.Mouse
+            ? "Current mouse storage requires one continuous prefix; an exact interior range rewrite is not yet crash-safe."
+            : "Current keyboard storage is daily aggregate data; an arbitrary UTC range cannot be removed exactly within a day.";
+        return new StorageDeletionPreview(
+            deviceId,
+            utcRange,
+            mouseCount,
+            keyboardCount,
+            StorageDeletionCapability.BlockedByCurrentFormat,
+            reason,
+            StorageDeletion.CreateToken(fingerprint),
+            fingerprint);
+    }
+
+    public void ExecuteDeletion(StorageDeletionPreview preview, string confirmationToken)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentException.ThrowIfNullOrWhiteSpace(confirmationToken);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            string expected = StorageDeletion.CreateToken(preview.StateFingerprint);
+            if (!StorageDeletion.FixedTimeTokenEquals(confirmationToken, expected))
+            {
+                throw new InvalidOperationException("Deletion confirmation token does not match its preview.");
+            }
+            throw new InvalidOperationException(
+                preview.BlockedReason ?? "Deletion is blocked by the current storage format.");
+        }
+    }
+
     public void Start(TimeCalibrationSegment calibration)
     {
         lock (_gate)
@@ -581,6 +693,7 @@ public sealed class StorageService : IDisposable
                 FileShare.Read,
                 1,
                 FileOptions.WriteThrough);
+            StorageBackup.RecoverInterruptedRestore(layout, ownerLock);
             database = StorageDatabase.OpenOwned(layout, clock, ownerLock);
             return new StorageService(ownerKey, ownerLock, database, clock, faultInjector, startTimer);
         }
