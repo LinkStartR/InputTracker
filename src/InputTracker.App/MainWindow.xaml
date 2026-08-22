@@ -28,6 +28,8 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
             <RowDefinition Height="*" />
             <RowDefinition Height="16" />
             <RowDefinition Height="Auto" />
@@ -68,7 +70,7 @@
             <Border Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
                 <StackPanel>
                     <TextBlock Text="真实统计" FontSize="18" FontWeight="SemiBold" />
-                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                    <WrapPanel Margin="0,12,0,0">
                         <ComboBox x:Name="PeriodSelector" Width="120" SelectionChanged="QuerySelection_Changed">
                             <ComboBoxItem Content="日" Tag="Day" IsSelected="True" />
                             <ComboBoxItem Content="周" Tag="Week" />
@@ -76,7 +78,10 @@
                             <ComboBoxItem Content="年" Tag="Year" />
                         </ComboBox>
                         <ComboBox x:Name="KeyboardDeviceSelector" Width="220" Margin="8,0,0,0" DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" SelectionChanged="QuerySelection_Changed" />
-                    </StackPanel>
+                        <Button x:Name="RefreshDashboardButton" Margin="8,0,0,0" Click="RefreshDashboardButton_Click" Content="刷新统计" />
+                    </WrapPanel>
+                    <TextBlock x:Name="DashboardRefreshStatusText" Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource MutedTextBrush}"
+                               Text="统计会每 2 秒自动刷新；鼠标完整轨迹在选择设备或点击刷新时更新。" TextWrapping="Wrap" />
                     <TextBlock x:Name="KeyboardSummary" Margin="0,12,0,0" Text="尚无键盘聚合" TextWrapping="Wrap" />
                     <ItemsControl x:Name="HeatmapItems" Margin="0,8,0,0">
                         <ItemsControl.ItemsPanel>
@@ -116,7 +121,23 @@
             </StackPanel>
         </Border>
 
-        <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right">
+        <Border Grid.Row="10" Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="本地数据工具" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
+                           Text="导出和备份写入程序目录。删除当前只提供精确影响预览，当前存储格式阻塞实际删除。恢复只检查程序目录内备份并二次确认，离线恢复执行尚未接通。" />
+                <WrapPanel Margin="0,12,0,0">
+                    <Button x:Name="ExportKeyboardButton" Click="ExportKeyboardButton_Click" Content="导出键盘 CSV + PNG" />
+                    <Button x:Name="CreateBackupButton" Click="CreateBackupButton_Click" Content="创建备份" />
+                    <Button x:Name="PreviewKeyboardDeletionButton" Click="PreviewKeyboardDeletionButton_Click" Content="预览所选键盘删除" />
+                    <Button x:Name="PreviewMouseDeletionButton" Click="PreviewMouseDeletionButton_Click" Content="预览所选鼠标删除" />
+                    <Button x:Name="ValidateRestoreButton" Click="ValidateRestoreButton_Click" Content="选择并检查恢复备份" />
+                </WrapPanel>
+                <TextBlock x:Name="DataToolsStatusText" Margin="0,12,0,0" Text="尚未执行数据操作。" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Click="ExitButton_Click" Content="退出" />
         </StackPanel>
     </Grid>

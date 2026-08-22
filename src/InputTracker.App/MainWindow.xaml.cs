@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using InputTracker.Storage;
 
 namespace InputTracker;
@@ -13,23 +15,42 @@ public partial class MainWindow : Window
     private readonly WindowClosePolicy _closePolicy = new();
     private readonly DashboardViewModel? _dashboard;
     private readonly StartupShortcutManager? _startup;
+    private readonly AppStorageDataToolsController? _dataTools;
+    private readonly DispatcherTimer _dashboardRefreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private bool _dashboardRefreshInProgress;
+    private bool _dashboardRefreshPending;
+    private bool _dashboardRefreshPendingIncludesMouse;
+    private bool _updatingDeviceSelectors;
 
     internal MainWindow(
         CollectionController collection,
         DirectoryProbeResult directory,
         DashboardViewModel? dashboard = null,
-        StartupShortcutManager? startup = null)
+        StartupShortcutManager? startup = null,
+        AppStorageDataToolsController? dataTools = null)
     {
         InitializeComponent();
         _collection = collection;
         _directory = directory;
         _dashboard = dashboard;
         _startup = startup;
+        _dataTools = dataTools;
         _collection.Changed += Collection_Changed;
-        Closed += (_, _) => _collection.Changed -= Collection_Changed;
+        _dashboardRefreshTimer.Tick += DashboardRefreshTimer_Tick;
+        IsVisibleChanged += MainWindow_IsVisibleChanged;
+        Closed += MainWindow_Closed;
         Render(_collection.Current);
-        Loaded += async (_, _) => await RefreshDashboardAsync();
-        Loaded += (_, _) => RefreshStartupState();
+        bool dataToolsAvailable = _dataTools is not null;
+        ExportKeyboardButton.IsEnabled = dataToolsAvailable;
+        CreateBackupButton.IsEnabled = dataToolsAvailable;
+        PreviewKeyboardDeletionButton.IsEnabled = dataToolsAvailable;
+        PreviewMouseDeletionButton.IsEnabled = dataToolsAvailable;
+        ValidateRestoreButton.IsEnabled = dataToolsAvailable;
+        if (!dataToolsAvailable)
+        {
+            DataToolsStatusText.Text = "Storage 未安全启动，本地数据工具不可用。";
+        }
+        Loaded += MainWindow_Loaded;
     }
 
     public event EventHandler? MinimizeToTrayRequested;
@@ -38,6 +59,14 @@ public partial class MainWindow : Window
     internal void PrepareForExplicitExit() => _closePolicy.RequestExplicitExit();
 
     internal void PrepareForSessionEnding() => _closePolicy.RequestSessionEnding();
+
+    internal void ShowDataToolExitBlocked()
+    {
+        DataToolsStatusText.Text = "数据操作或恢复选择正在进行；完成后再退出。";
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
 
     private void Collection_Changed(object? sender, CollectionSnapshot snapshot) => Render(snapshot);
 
@@ -59,7 +88,6 @@ public partial class MainWindow : Window
     private void HideButton_Click(object sender, RoutedEventArgs e) => MinimizeToTrayRequested?.Invoke(this, EventArgs.Empty);
     private void ExitButton_Click(object sender, RoutedEventArgs e)
     {
-        PrepareForExplicitExit();
         ExitRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -133,38 +161,227 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void QuerySelection_Changed(object sender, SelectionChangedEventArgs e) =>
-        await RefreshDashboardAsync();
-
-    private async Task RefreshDashboardAsync()
+    private async void ExportKeyboardButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_dashboard is null || !IsLoaded) return;
-        try
+        if (_dataTools is null || _dashboard?.KeyboardPeriodResult is not { } period)
         {
-            if (PeriodSelector.SelectedItem is ComboBoxItem period
-                && Enum.TryParse(period.Tag?.ToString(), out StoragePeriodKind value))
+            DataToolsStatusText.Text = "请先完成一次键盘统计读取。";
+            return;
+        }
+
+        await RunDataToolAsync(async () =>
+        {
+            StorageDataToolsExportResult result = await _dataTools.ExportKeyboardAsync(period);
+            if (CanUpdateDataToolsUi())
+                DataToolsStatusText.Text = $"导出完成：{result.Csv.Path}；{result.Png.Path}";
+        });
+    }
+
+    private async void CreateBackupButton_Click(object sender, RoutedEventArgs e) =>
+        await RunDataToolAsync(async () =>
+        {
+            if (_dataTools is null) throw new InvalidOperationException("Storage 数据工具不可用。");
+            StorageBackupArtifact result = await _dataTools.CreateBackupAsync();
+            if (CanUpdateDataToolsUi())
+                DataToolsStatusText.Text = $"备份完成：{result.Path} · {result.FileCount:N0} 个文件";
+        });
+
+    private async void PreviewKeyboardDeletionButton_Click(object sender, RoutedEventArgs e) =>
+        await PreviewDeletionAsync(StorageDeviceKind.Keyboard, _dashboard?.SelectedKeyboardDeviceId);
+
+    private async void PreviewMouseDeletionButton_Click(object sender, RoutedEventArgs e) =>
+        await PreviewDeletionAsync(StorageDeviceKind.Mouse, _dashboard?.SelectedMouseDeviceId);
+
+    private async Task PreviewDeletionAsync(StorageDeviceKind kind, Guid? deviceId) =>
+        await RunDataToolAsync(async () =>
+        {
+            if (_dataTools is null || _dashboard?.ResolvedPeriod is not { } period || deviceId is not Guid selected)
             {
-                _dashboard.Period = value;
+                throw new InvalidOperationException(
+                    kind == StorageDeviceKind.Keyboard
+                        ? "请先明确选择一个键盘并完成当前周期读取。"
+                        : "请先明确选择一个鼠标并完成当前周期读取。");
             }
 
-            _dashboard.AnchorDate = DateOnly.FromDateTime(DateTime.Today);
-            _dashboard.TimeZoneId = TimeZoneInfo.Local.Id;
-            _dashboard.SelectedKeyboardDeviceId = KeyboardDeviceSelector.SelectedValue as Guid?;
-            _dashboard.SelectedMouseDeviceId = MouseDeviceSelector.SelectedValue as Guid?;
-            await _dashboard.RefreshAsync();
-            var keyboards = _dashboard.Devices.Where(device => device.Kind == StorageDeviceKind.Keyboard)
-                .Select(DeviceChoice.From).ToArray();
-            var mice = _dashboard.Devices.Where(device => device.Kind == StorageDeviceKind.Mouse)
-                .Select(DeviceChoice.From).ToArray();
-            if (KeyboardDeviceSelector.Items.Count == 0) KeyboardDeviceSelector.ItemsSource = keyboards;
-            if (MouseDeviceSelector.Items.Count == 0) MouseDeviceSelector.ItemsSource = mice;
-            KeyboardSummary.Text = $"按键 {_dashboard.TotalPressCount:N0} 次 · 按住 {_dashboard.TotalHoldDurationMicroseconds / 1_000_000d:N1} 秒";
-            HeatmapItems.ItemsSource = _dashboard.Heatmap.Select(cell =>
-                $"{(cell.IsE0 ? "E0-" : cell.IsE1 ? "E1-" : string.Empty)}{cell.MakeCode:X2}  {cell.PressCount:N0}");
-            MouseSummary.Text = _dashboard.SelectedMouseDeviceId is null
-                ? "选择鼠标后读取完整原始轨迹"
-                : $"已完整读取 {_dashboard.TotalMousePointCount:N0} 个原始点 · 绘制 {_dashboard.MousePoints.Count:N0} 个有界显示点";
-            RenderMouse(_dashboard.MousePoints);
+            StorageDeletionDisplay preview = await _dataTools.PreviewDeletionAsync(
+                selected, kind, period.UtcRange);
+            string label = preview.DeviceKind == StorageDeviceKind.Keyboard ? "键盘" : "鼠标";
+            if (CanUpdateDataToolsUi())
+                DataToolsStatusText.Text =
+                    $"删除预览目标：{label} {preview.DeviceId.ToString("N")[..8]}，UTC [{preview.UtcRange.StartUtcMicroseconds}, {preview.UtcRange.EndUtcMicroseconds})；"
+                    + $"鼠标 {preview.MouseRecordCount:N0} 条，键盘聚合 {preview.KeyboardAggregateCount:N0} 行。{preview.Status}";
+        });
+
+    private void ValidateRestoreButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dataTools is null)
+        {
+            DataToolsStatusText.Text = "Storage 数据工具不可用。";
+            return;
+        }
+
+        SetDataToolsEnabled(false);
+        try
+        {
+            using AppStorageDataToolsController.RestoreInteraction interaction = _dataTools.TryBeginInteraction();
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择 InputTracker 备份（仅检查，不执行恢复）",
+                Filter = "InputTracker backup (*.itbackup)|*.itbackup",
+                InitialDirectory = System.IO.Path.Combine(_directory.DirectoryPath, "backups"),
+                CheckFileExists = true,
+                Multiselect = false
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            MessageBoxResult confirmation = System.Windows.MessageBox.Show(
+                "只检查此备份的路径和文件边界。当前版本不会执行恢复，也不会更改现有数据。是否继续二次确认？",
+                "恢复检查 · 不执行",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            RestoreSelection result = interaction.Validate(dialog.FileName, confirmation == MessageBoxResult.Yes);
+            if (IsLoaded && !_dataTools.IsClosing) DataToolsStatusText.Text = result.Status;
+        }
+        catch (Exception error)
+        {
+            if (IsLoaded && !_dataTools.IsClosing)
+                DataToolsStatusText.Text = $"恢复检查失败，未更改数据：{error.Message}";
+        }
+        finally
+        {
+            if (IsLoaded && !_dataTools.IsClosing) SetDataToolsEnabled(true);
+        }
+    }
+
+    private async Task RunDataToolAsync(Func<Task> action)
+    {
+        SetDataToolsEnabled(false);
+        try
+        {
+            DataToolsStatusText.Text = "正在执行本地数据操作…";
+            await action();
+        }
+        catch (Exception error)
+        {
+            if (IsLoaded && !(_dataTools?.IsClosing ?? false))
+                DataToolsStatusText.Text = $"数据操作失败，未宣称成功：{error.Message}";
+        }
+        finally
+        {
+            if (IsLoaded && !(_dataTools?.IsClosing ?? false))
+                SetDataToolsEnabled(_dataTools is not null);
+        }
+    }
+
+    private void SetDataToolsEnabled(bool enabled)
+    {
+        ExportKeyboardButton.IsEnabled = enabled;
+        CreateBackupButton.IsEnabled = enabled;
+        PreviewKeyboardDeletionButton.IsEnabled = enabled;
+        PreviewMouseDeletionButton.IsEnabled = enabled;
+        ValidateRestoreButton.IsEnabled = enabled;
+    }
+
+    private bool CanUpdateDataToolsUi() => IsLoaded && !(_dataTools?.IsClosing ?? false);
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        RefreshStartupState();
+        await RefreshDashboardAsync(includeMouse: true);
+        if (_dashboard is not null && IsVisible) _dashboardRefreshTimer.Start();
+    }
+
+    private void MainWindow_Closed(object? sender, EventArgs e)
+    {
+        _dashboardRefreshTimer.Stop();
+        _dashboardRefreshTimer.Tick -= DashboardRefreshTimer_Tick;
+        IsVisibleChanged -= MainWindow_IsVisibleChanged;
+        _collection.Changed -= Collection_Changed;
+    }
+
+    private async void MainWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_dashboard is null || !IsLoaded) return;
+        if (!IsVisible)
+        {
+            _dashboardRefreshTimer.Stop();
+            return;
+        }
+
+        await RefreshDashboardAsync(includeMouse: false);
+        _dashboardRefreshTimer.Start();
+    }
+
+    private async void DashboardRefreshTimer_Tick(object? sender, EventArgs e) =>
+        await RefreshDashboardAsync(includeMouse: false);
+
+    private async void RefreshDashboardButton_Click(object sender, RoutedEventArgs e) =>
+        await RefreshDashboardAsync(includeMouse: true);
+
+    private async void QuerySelection_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_updatingDeviceSelectors) await RefreshDashboardAsync(includeMouse: true);
+    }
+
+    private async Task RefreshDashboardAsync(bool includeMouse)
+    {
+        if (_dashboard is null || !IsLoaded) return;
+        if (_dashboardRefreshInProgress)
+        {
+            _dashboardRefreshPending = true;
+            _dashboardRefreshPendingIncludesMouse |= includeMouse;
+            return;
+        }
+
+        _dashboardRefreshInProgress = true;
+        try
+        {
+            bool refreshMouse = includeMouse;
+            do
+            {
+                _dashboardRefreshPending = false;
+                refreshMouse |= _dashboardRefreshPendingIncludesMouse;
+                _dashboardRefreshPendingIncludesMouse = false;
+
+                if (PeriodSelector.SelectedItem is ComboBoxItem period
+                    && Enum.TryParse(period.Tag?.ToString(), out StoragePeriodKind value))
+                {
+                    _dashboard.Period = value;
+                }
+
+                _dashboard.AnchorDate = DateOnly.FromDateTime(DateTime.Today);
+                _dashboard.TimeZoneId = TimeZoneInfo.Local.Id;
+                _dashboard.SelectedKeyboardDeviceId = KeyboardDeviceSelector.SelectedValue is Guid keyboardId
+                    ? keyboardId : null;
+                _dashboard.SelectedMouseDeviceId = MouseDeviceSelector.SelectedValue is Guid mouseId
+                    ? mouseId : null;
+                await _dashboard.RefreshAsync(refreshMouse);
+                var keyboards = _dashboard.Devices.Where(device => device.Kind == StorageDeviceKind.Keyboard)
+                    .Select(DeviceChoice.From).ToArray();
+                var mice = _dashboard.Devices.Where(device => device.Kind == StorageDeviceKind.Mouse)
+                    .Select(DeviceChoice.From).ToArray();
+                _updatingDeviceSelectors = true;
+                try
+                {
+                    UpdateDeviceSelector(KeyboardDeviceSelector, keyboards, _dashboard.SelectedKeyboardDeviceId);
+                    UpdateDeviceSelector(MouseDeviceSelector, mice, _dashboard.SelectedMouseDeviceId);
+                }
+                finally
+                {
+                    _updatingDeviceSelectors = false;
+                }
+
+                KeyboardSummary.Text = $"按键 {_dashboard.TotalPressCount:N0} 次 · 按住 {_dashboard.TotalHoldDurationMicroseconds / 1_000_000d:N1} 秒";
+                HeatmapItems.ItemsSource = _dashboard.Heatmap.Select(cell =>
+                    $"{(cell.IsE0 ? "E0-" : cell.IsE1 ? "E1-" : string.Empty)}{cell.MakeCode:X2}  {cell.PressCount:N0}");
+                MouseSummary.Text = _dashboard.SelectedMouseDeviceId is null
+                    ? "选择鼠标后读取完整原始轨迹"
+                    : $"已完整读取 {_dashboard.TotalMousePointCount:N0} 个原始点 · 绘制 {_dashboard.MousePoints.Count:N0} 个有界显示点";
+                if (refreshMouse) RenderMouse(_dashboard.MousePoints);
+                DashboardRefreshStatusText.Text = $"已刷新 {DateTime.Now:HH:mm:ss} · 采集状态以页面顶部为准";
+                refreshMouse = false;
+            }
+            while (_dashboardRefreshPending && IsLoaded);
         }
         catch (OperationCanceledException)
         {
@@ -173,7 +390,19 @@ public partial class MainWindow : Window
         {
             KeyboardSummary.Text = $"读取失败：{error.Message}";
             MouseSummary.Text = "读取失败；采集与持久化状态请以上方状态为准。";
+            DashboardRefreshStatusText.Text = $"刷新失败 {DateTime.Now:HH:mm:ss} · {error.Message}";
         }
+        finally
+        {
+            _dashboardRefreshInProgress = false;
+        }
+    }
+
+    private static void UpdateDeviceSelector(System.Windows.Controls.ComboBox selector, DeviceChoice[] choices, Guid? selectedDeviceId)
+    {
+        DeviceChoice[] current = selector.Items.Cast<DeviceChoice>().ToArray();
+        if (!current.SequenceEqual(choices)) selector.ItemsSource = choices;
+        selector.SelectedValue = selectedDeviceId;
     }
 
     private void RenderMouse(IReadOnlyList<MouseDisplayPoint> points)

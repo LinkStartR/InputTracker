@@ -60,6 +60,30 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
+    public async Task SummaryRefreshDoesNotReReadOrClearExistingMouseTrajectory()
+    {
+        Guid keyboard = Guid.NewGuid();
+        Guid mouse = Guid.NewGuid();
+        var source = new FakeDashboardDataSource(keyboard, mouse);
+        var model = new DashboardViewModel(source)
+        {
+            SelectedMouseDeviceId = mouse,
+            TimeZoneId = "UTC"
+        };
+
+        await model.RefreshAsync(includeMouse: true);
+        IReadOnlyList<MouseDisplayPoint> firstPoints = model.MousePoints;
+        long firstTotal = model.TotalMousePointCount;
+        int firstEnumerated = source.MouseEnumeratedCount;
+
+        await model.RefreshAsync(includeMouse: false);
+
+        Assert.Same(firstPoints, model.MousePoints);
+        Assert.Equal(firstTotal, model.TotalMousePointCount);
+        Assert.Equal(firstEnumerated, source.MouseEnumeratedCount);
+    }
+
+    [Fact]
     public void ProjectionKeepsAbsoluteCoordinatesSeparateFromRelativeMotion()
     {
         MouseDisplayPoint[] points =
@@ -82,6 +106,7 @@ public sealed class DashboardViewModelTests
     {
         public (StoragePeriodKind, Guid?) KeyboardRequest { get; private set; }
         public Guid MouseRequest { get; private set; }
+        public int MouseEnumeratedCount { get; private set; }
 
         public Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<StorageDeviceInfo>>([
@@ -107,6 +132,7 @@ public sealed class DashboardViewModelTests
             for (long sequence = 1; sequence <= 3; sequence++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                MouseEnumeratedCount++;
                 yield return new StorageMouseRecord(deviceId, sequence, range.StartUtcMicroseconds + sequence,
                     1, 2, 0, false, 0, 0, 0);
                 await Task.Yield();

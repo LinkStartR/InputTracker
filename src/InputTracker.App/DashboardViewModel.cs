@@ -81,8 +81,9 @@ internal sealed class DashboardViewModel
     public StorageResolvedPeriod? ResolvedPeriod { get; private set; }
     public long TotalPressCount { get; private set; }
     public long TotalHoldDurationMicroseconds { get; private set; }
+    public StorageKeyboardPeriodResult? KeyboardPeriodResult { get; private set; }
 
-    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    public async Task RefreshAsync(bool includeMouse = true, CancellationToken cancellationToken = default)
     {
         _refreshCancellation?.Cancel();
         _refreshCancellation?.Dispose();
@@ -92,30 +93,34 @@ internal sealed class DashboardViewModel
         DashboardLoadResult loaded = await Task.Run(
             () => LoadAsync(
                 Period, AnchorDate, TimeZoneId,
-                SelectedKeyboardDeviceId, SelectedMouseDeviceId, token), token);
+                SelectedKeyboardDeviceId, SelectedMouseDeviceId, includeMouse, token), token);
 
         token.ThrowIfCancellationRequested();
         Devices = loaded.Devices;
         ResolvedPeriod = loaded.Keyboard.Period;
+        KeyboardPeriodResult = loaded.Keyboard;
         Heatmap = loaded.Keyboard.Aggregates.Select(value => new HeatmapCell(
             value.MakeCode, value.IsE0, value.IsE1,
             value.PressCount, value.HoldDurationMicroseconds)).ToArray();
-        MousePoints = new ReadOnlyCollection<MouseDisplayPoint>(loaded.Mouse.Points);
-        TotalMousePointCount = loaded.Mouse.Total;
+        if (loaded.Mouse is { } mouse)
+        {
+            MousePoints = new ReadOnlyCollection<MouseDisplayPoint>(mouse.Points);
+            TotalMousePointCount = mouse.Total;
+        }
         TotalPressCount = loaded.Keyboard.Aggregates.Sum(value => value.PressCount);
         TotalHoldDurationMicroseconds = loaded.Keyboard.Aggregates.Sum(value => value.HoldDurationMicroseconds);
     }
 
     private async Task<DashboardLoadResult> LoadAsync(
         StoragePeriodKind period, DateOnly anchor, string zone,
-        Guid? keyboardDevice, Guid? mouseDevice, CancellationToken token)
+        Guid? keyboardDevice, Guid? mouseDevice, bool includeMouse, CancellationToken token)
     {
         IReadOnlyList<StorageDeviceInfo> devices = await _dataSource.ListDevicesAsync(token).ConfigureAwait(false);
         StorageKeyboardPeriodResult keyboard = await _dataSource.QueryKeyboardAsync(
             period, anchor, zone, keyboardDevice, token).ConfigureAwait(false);
-        MouseDisplayResult mouse = mouseDevice is Guid device
+        MouseDisplayResult? mouse = includeMouse && mouseDevice is Guid device
             ? await BucketMouseAsync(device, keyboard.Period.UtcRange, token).ConfigureAwait(false)
-            : new MouseDisplayResult(0, []);
+            : includeMouse ? new MouseDisplayResult(0, []) : null;
         return new DashboardLoadResult(devices, keyboard, mouse);
     }
 
@@ -182,5 +187,5 @@ internal sealed class DashboardViewModel
     private sealed record DashboardLoadResult(
         IReadOnlyList<StorageDeviceInfo> Devices,
         StorageKeyboardPeriodResult Keyboard,
-        MouseDisplayResult Mouse);
+        MouseDisplayResult? Mouse);
 }

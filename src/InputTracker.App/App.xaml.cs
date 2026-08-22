@@ -15,6 +15,8 @@ public partial class App : System.Windows.Application
     private StorageService? _storage;
     private AppStorageCoordinator? _storageCoordinator;
     private PortableSystemEventBridge? _systemEvents;
+    private AppStorageDataToolsController? _dataTools;
+    private bool _disposeStorageOnExit = true;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -110,19 +112,24 @@ public partial class App : System.Windows.Application
         string executablePath = Environment.ProcessPath
             ?? Path.Combine(AppContext.BaseDirectory, "InputTracker.exe");
         StartupShortcutManager? startup = CreateStartupShortcutManager(executablePath);
-        var window = new MainWindow(_collection, directory, dashboard, startup);
+        _dataTools = _storage is not null && collectionControl is not null
+            ? new AppStorageDataToolsController(
+                new StorageServiceDataTools(_storage),
+                collectionControl,
+                directory.DirectoryPath)
+            : null;
+        var window = new MainWindow(_collection, directory, dashboard, startup, _dataTools);
 
         _trayIcon = new TrayIconController(
             _collection,
             showWindow: () => ShowWindow(window),
             exitApplication: () =>
             {
-                window.PrepareForExplicitExit();
-                Shutdown(0);
+                TryExplicitExit(window);
             });
 
         window.MinimizeToTrayRequested += (_, _) => window.Hide();
-        window.ExitRequested += (_, _) => Shutdown(0);
+        window.ExitRequested += (_, _) => TryExplicitExit(window);
         MainWindow = window;
         window.Show();
 
@@ -161,7 +168,7 @@ public partial class App : System.Windows.Application
                 _capture is null && _systemEvents is null
                     ? null
                     : () => StopCaptureAndSystemEventsAsync(_capture, _systemEvents),
-                _storage,
+                _disposeStorageOnExit ? _storage : null,
                 _collection,
                 _trayIcon,
                 _singleInstance);
@@ -182,6 +189,7 @@ public partial class App : System.Windows.Application
 
         if (MainWindow is MainWindow window)
         {
+            _disposeStorageOnExit = _dataTools?.BeginSessionEnding(TimeSpan.FromSeconds(2)) ?? true;
             window.PrepareForSessionEnding();
         }
 
@@ -193,6 +201,17 @@ public partial class App : System.Windows.Application
         window.Show();
         window.WindowState = WindowState.Normal;
         window.Activate();
+    }
+
+    private void TryExplicitExit(MainWindow window)
+    {
+        if (_dataTools is not null && !_dataTools.TryBeginExplicitExit())
+        {
+            window.ShowDataToolExitBlocked();
+            return;
+        }
+        window.PrepareForExplicitExit();
+        Shutdown(0);
     }
 
     private static StartupShortcutManager? CreateStartupShortcutManager(string executablePath)
