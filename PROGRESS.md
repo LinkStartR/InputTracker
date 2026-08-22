@@ -1016,3 +1016,36 @@
 - 隐私回归红：non-Spike 186 total 中 185 passed / 1 failed，原因是误把 monotonic/calibration 三字段加入公开 `StorageMouseRecord`，违反精确 DTO allowlist。已撤回公共字段扩张；改为逐项比较既有公开鼠标字段，并对 committed spool/chunk 文件逐文件比较 length + SHA-256，证明内部 monotonic/calibration 编码字节在备份恢复前后不变。
 - 冻结验证：Storage.Tests Release build exit 0、0 warnings / 0 errors、1.57s；`Category!=StorageSpike` 186 passed / 0 failed / 0 skipped、15s；`git diff --check` exit 0。未重跑 4 分钟 StorageSpike、solution/verify/publish、物理断电或真实硬件，且 deletion execute 仍为 B-011。
 - 二次 xhigh P0：原 compression slack 错误地逐 entry 叠加，可由多个小 entry 绕过。现改为聚合 `totalUncompressed` / `totalCompressed`，整个 archive 只加一次 64 MiB slack；单 entry 只保留 64 GiB 硬上限。真实 ZIP 集成测试用两个 allowlisted 高压缩 chunk 和窄预算走完整 Restore 路径，验证 aggregate ratio 拒绝、live DB SHA/count 不变、automatic 无文件、operation staging 清空。修后 build exit 0、0 warnings / 0 errors、1.57s；restore focused 26/0/0、4s；non-Spike 187/0/0、15s；`git diff --check` exit 0。
+# 2026-08-13 Storage / Portable Acceptance 首红与主机验证阻塞
+
+- 分支/基线：`codex/ui-storage-integration@f5421aa`；固定“用户测试与下一步建议”角色仅修改 `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`，App 数据工具使用独立文件范围。
+- 首轮红：`powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Storage` exit 1，现有脚本明确拒绝 `Storage`，输出 `Storage does not belong to set Bootstrap,InputCore`；没有使用 skip。
+- Acceptance 编译尝试：`.\.tools\dotnet\dotnet.exe build tests\Acceptance\InputTracker.AcceptanceTests.csproj -c Release --no-restore` exit 1、0 warnings / 1 error；`MSB4184` 由沙箱拒绝读取 Windows SDK 目录导致，尚未进入新增源码编译。
+- 主机权限重试：按规则申请后被 Codex 用量额度系统拒绝，提示最早 2026-08-20 14:43 后重试；证据置于 `BLOCKED.md` 的 B-012，禁止绕过。
+- 结果/下一步：继续落 Storage/Portable 阶段 gate、两组反向注入、人工证据协议，以及 App 导出/备份/删除预览；冻结后只做静态审查。主机权限恢复后从冻结提交继续统一五命令和最新版绿色发布，不重做实现。
+
+## 2026-08-22 首次人工测试“能打开但看不到记录”P0
+
+- 分支/基线：`codex/ui-storage-integration@f5421aa`；沿用现有未提交 App 数据工具与 Storage/Portable Acceptance 切片，不覆盖用户旧包或旧数据。推荐 UI `terra/high`；本次为主线程窄修，不新增功能依赖或权限。
+- 用户反馈：旧包 `.tools/publish/first-test/InputTracker.exe` 能启动，但界面无法体现记录。只读核对证明旧包实际产生 `store.sqlite3` 110,592 bytes、26 个 `.mspool` 共 78,156 bytes、26 个 `.mchunk` 共 13,227 bytes，最后写入 `2026-08-13 22:50:46`；因此根因是 UI 仅在启动/筛选变化时读取，采集后设备和统计不会自动刷新，而非底层完全未落盘。
+- 产品修复：Dashboard 每 2 秒只刷新设备与键盘聚合；选择设备或点击“刷新统计”时才完整重读鼠标原始轨迹，避免周期性扫描全天轨迹。界面显示最近刷新时间；设备集合变化时更新下拉框且保留选择；刷新重入合并为单次 pending，不并发堆积。旧鼠标轨迹在轻量刷新时保持不变。
+- 编译首红：统一 Release build 首次 exit 1，`MainWindow.xaml.cs` 的 `Path` 与 WPF `Path` 歧义；限定为 `System.IO.Path` 后第二次暴露当前未提交 Acceptance/App tests 的 4 errors；逐项修正 namespace 与异步测试调用。刷新实现首编译又暴露 WPF/WinForms `ComboBox` 歧义，精确限定后统一 build exit 0，7 项目，0 warnings / 0 errors，4.17s。
+- App 红→绿：首次 `dotnet test tests/InputTracker.App.Tests/... --no-build --no-restore` 为 69 passed / 1 failed / 0 skipped，失败是异步 faulted Task 被旧测试当同步 throw；仅修测试 await 后 App.Tests 70/0/0、244ms。新增回归证明轻量刷新不重复枚举或清空已读鼠标轨迹。
+- 全量首红：第一次 solution test 为 App 70/0/0、Input 38/0/0、Storage 188/0/0、Acceptance 24/1/0；唯一失败因验收夹具把单调频率写死为 1,000,000，产品正确拒绝与主机 `Stopwatch.Frequency` 不一致。夹具改用 `TimeCalibrationSegment.Capture(SystemStorageClock.Instance)` 与真实单调时间；focused 1/0/0。
+- 全量绿：`dotnet restore InputTracker.sln` exit 0；`dotnet build InputTracker.sln -c Release --no-restore` exit 0、0 warnings/0 errors；`dotnet test InputTracker.sln -c Release --no-build --no-restore` exit 0，App 70 + Input 38 + Acceptance 25 + Storage 188 = 321 passed / 0 failed / 0 skipped，StorageSpike 4m30s。
+- 判卷绿：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Storage` exit 0；SDK 10.0.302，total=321、acceptance=25、failed=0、skipped=0、gates=39；publish/self-check exit 0、second-instance exit 2；证据 `.tools/verification/20260822-091347-052/verification.json`。人工硬件终验仍必须保持 `not-run` / `releaseEligible=false`。
+- 新包：`.tools/publish/first-test-20260821-refresh/InputTracker.exe` 已 self-contained publish exit 0；同步 `--self-check` exit 0、残留进程 0、自检未创建 `data`。目录名沿首次生成日期保留，不覆盖旧 `first-test`。
+- 下一步：C28 固定“用户测试与下一步建议”角色依据 321/25/39 单调抬升 Acceptance baseline，并执行 Storage chunk corruption 与 aggregate mismatch 两条原始 exit 1 反向验证；随后主线程运行 Portable/最终 publish、更新 BLOCKED、精确提交，并让用户用新包做 2 分钟真实输入可见性复测。
+- C28 基线：`acceptance-baseline.json` 从 45/12/23 单调抬升为 321/25/39；45 个 required gate ID 全部唯一，旧 23 个完整保留，追加 16 个 Storage 与 6 个 Portable ID；`git diff --check` exit 0。
+- 轨迹块红：`verify.ps1 -Stage Storage -InjectStorageChunkCorruption` 原始 exit 1，Acceptance 24 passed / 1 failed / 0 skipped；关键失败 `Mouse chunk compressed CRC32C mismatch`；证据 `.tools/verification/20260822-092451-757/verification.json`。
+- 聚合红：`verify.ps1 -Stage Storage -InjectStorageAggregateMismatch` 原始 exit 1，Acceptance 24 passed / 1 failed / 0 skipped；关键失败 `Assert.Equal Failure Expected: 4 Actual: 5`；证据 `.tools/verification/20260822-100156-157/verification.json`。两次红测前后 `src/**` SHA-256 均为 `19174E3BF0C0B05005432C513255596BD1B5A6D397E7095F295056CB8975BC62`，没有修改产品源码；绿色恢复证据仍为同一冻结源码的 `20260822-091347-052`。
+- Portable 最高阶段绿：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Portable` exit 0；SDK 10.0.302，build 0 warnings/0 errors，App 70 + Input 38 + Acceptance 25 + Storage 188 = 321/0/0，publish/self-check exit 0、second-instance exit 2，45 gates；证据 `.tools/verification/20260822-100721-436/verification.json`。人工 Startup/锁屏/挂起/双系统/硬件/视觉仍为 not-run，未伪称 release eligible。
+- 原样发布：`dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true` exit 0；另生成 `.tools/publish/first-test-20260822-refresh/`。该目录直接 `--self-check` 的受控执行因审批服务流断开被拒绝，未重试或绕过；只读逐文件比较它与已 self-check exit 0 的 `first-test-20260821-refresh`，两边均 484 files、path/length/SHA-256 difference=0，`InputTracker.exe` SHA-256=`FB6EB047A529F10EEA87718FF8C364578EC0D79949AB701C50009540D80541D1`。
+- 当前下一步：C29 固定 Git/GitHub 角色只读审查 App、Acceptance 与进度文档的提交边界；主线程按精确白名单分批提交，不直接推 main。提交后交付 20260822 新包给用户做最短真实输入可见性复测。
+- 提交前性能收口：发现窗口隐藏到托盘后 2 秒刷新仍会查询 SQLite；改为隐藏时停止 timer、再次显示时立即轻量刷新并恢复。最新 App build exit 0、0 warnings/0 errors；App.Tests 70/0/0。该修复不在旧证据覆盖范围内，因此没有沿用旧绿灯。
+- 最终冻结源码统一绿：solution build exit 0、0 warnings/0 errors、1.29s；solution test exit 0，App 70 + Input 38 + Acceptance 25 + Storage 188 = 321 passed / 0 failed / 0 skipped，Storage 5m00s。
+- 最终权威判卷：`verify.ps1 -Stage Portable` exit 0；SDK/restore/build/4 test projects/publish/self-check 全部 exit 0，second-instance exit 2，321/25/0/0、45 gates；证据 `.tools/verification/20260822-103015-294/verification.json`。Storage/Portable `releaseEligible=false`，hardware/visual/network 继续 not-run。
+- 最终唯一交付包：`.tools/publish/first-test-20260822-live-refresh/InputTracker.exe`；publish exit 0，同步 `--self-check` exit 0，残留进程 0，自检未创建 data，exe SHA-256=`FB6EB047A529F10EEA87718FF8C364578EC0D79949AB701C50009540D80541D1`。旧 `first-test*` 目录均不作为本轮交付入口。
+- App 提交：`06ecdf0 feat: add app storage tools and live statistics refresh`；7 files，909 insertions / 46 deletions；仅 App 产品与普通 App tests，commit exit 0。
+- Acceptance 提交：`67ac9a2 test: add storage and portable acceptance gates`；11 files，646 insertions / 31 deletions；仅 C2 独占 Acceptance/verify/acceptance-plan，commit exit 0。
+- 下一步：提交 `BLOCKED.md`、`PROGRESS.md`、`docs/codex/thread-index.md` 状态文档；复查工作树 clean 后只推当前 `codex/ui-storage-integration` 并更新既有 Draft PR #3，不直接推 main。

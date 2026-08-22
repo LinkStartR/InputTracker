@@ -77,3 +77,10 @@
 - 已解除前置：程序目录内备份/恢复基础、恢复前自动备份、损坏/路径逃逸/reparse/version fail closed、安装失败回滚以及只读 preview 普通测试均已完成；但这不等于安全 delete execute。
 - 当前处置：UI 继续明确提示当前版本尚未提供范围删除；不得暗示 token 可以执行，不得直接操作用户数据文件。产品 execute API 的唯一行为是拒绝。
 - 解除门槛：设计版本化的 mouse prefix rewrite/tombstone 与 finer-grained keyboard 删除协议，证明 spool/chunk/catalog/watermark/聚合一致、崩溃回滚、后续追加和重开恢复；再由 C2 添加 Acceptance 红→绿及 UI 二次确认。任何实际删除前必须取得用户明确确认。
+# B-012：Codex 额度曾阻止主机权限下的 Windows SDK 编译验证（已解除）
+
+- 2026-08-13 在 `codex/ui-storage-integration@f5421aa` 上执行 `.\.tools\dotnet\dotnet.exe build tests\Acceptance\InputTracker.AcceptanceTests.csproj -c Release --no-restore`，沙箱内 exit 1、0 warnings / 1 error；唯一错误为 `MSB4184`，读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 被拒绝，尚未进入新增源码编译。
+- 按权限规则请求相同命令在主机权限下执行，审批系统因 Codex 用量额度耗尽而拒绝，并提示最早可在 2026-08-20 14:43 后重试；禁止通过间接命令或其他路径绕过。
+- 影响：可以继续静态实现、审阅和记录沙箱红证据，但在主机验证能力恢复前，不能可信生成并宣称最新版绿色测试包，也不能把沙箱权限错误记作产品测试失败。
+- 处置：继续所有不依赖主机权限的工作；每个实现切片保持未验证状态。额度恢复后从冻结 commit 依次执行 restore、build、test、verify 红→绿与 publish，不重做已完成实现。
+- 2026-08-22 状态更新：主机权限验证能力已恢复。仓库本地 SDK `10.0.302` 下 restore exit 0、solution Release build exit 0（0 warnings / 0 errors）、solution tests 321 passed / 0 failed / 0 skipped、`scripts/verify.ps1 -Stage Storage` exit 0（39 gates）、self-contained publish 与 `--self-check` exit 0。B-012 已解除；历史权限失败证据保留审计，不再阻塞当前工作。

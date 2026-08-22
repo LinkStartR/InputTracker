@@ -1,6 +1,6 @@
 # Codex 线程索引
 
-最后更新：2026-08-13
+最后更新：2026-08-22
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
@@ -30,6 +30,8 @@
 | C25 | 用户测试与下一步建议 | UI Storage Adapter 数据正确性复审 | 已完成 | App→Storage 生命周期与有界查询 | `codex/ui-storage-integration` | 是：`/root/storage_p0_review` | terra / high | 暂停、退出、设备与轨迹完整性 | 退出兜底、resume 回滚、unknown removal 与百万点边界放行；硬件终验保持 pending |
 | C26 | Storage Stats | CSV/PNG 导出、备份恢复与范围删除安全协议 | 已完成安全子集，删除执行 blocked | Storage 4 个产品文件、3 个普通测试与设计文档 | `codex/ui-storage-integration` Storage 提交待生成 | 是：`/root/storage_completion` | terra / high；删除恢复复审 xhigh | 用户数据删除、恢复和格式一致性为最高风险 | 187/0/0；ZIP 聚合预算、fsynced journal、12 点故障与持锁重开恢复经 xhigh 放行；只读 preview 已完成，实际删除因连续 prefix/日聚合保持 B-011 |
 | C27 | Portable | 首次告知、Startup 授权、锁屏/挂起、数据位置和卸载 | 已完成，待现场终验 | `src/InputTracker.App/**`、普通 App tests、`docs/portable/**`、README | `codex/ui-storage-integration` Portable 提交待生成 | 是：`/root/portable_completion` | luna / medium；系统生命周期 high | 常规本地功能，权限与会话边界需升级审查 | 58/0/0；四元快捷方式所有权与同步 pause barrier 经独立复审放行；真实 Startup/锁屏/挂起/普通用户/双系统仍 pending |
+| C28 | 用户测试与下一步建议 | Storage/Portable 判卷基线单调更新、反向验证与首次可用性复核 | 已完成 | `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`、测试结论 | `67ac9a2` | 是：`/root/user_testing_next_steps` | terra / high | 跨模块验收、数据损坏注入与平台证据需要高推理 | baseline 321/25/39；chunk CRC 与 aggregate mismatch 两条红测均原始 exit 1、0 skipped；最终 Portable 绿证据 321/25/45，产品 SHA 未变 |
+| C29 | Git/GitHub 同步 | 首次可用性修复与 Storage/Portable 验收切片的提交边界审查 | 已完成 | Git 状态、diff、分支、提交规划 | `06ecdf0..67ac9a2` | 是：`/root/git_github_sync` | luna / medium | 混合但可分组的常规 Git 卫生与提交规划 | A App+普通测试 → B Acceptance/verify → C 进度文档；最终 321/25/0/0、45 gates 证据覆盖 timer 修复；无越界依赖或权限变更 |
 
 ## 协调说明
 
