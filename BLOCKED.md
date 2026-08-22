@@ -1,5 +1,12 @@
 # BLOCKED
 
+## B-014：已验证 CI 修正无法推送到 GitHub（用户明确暂缓，不阻塞本地交付）
+
+- 2026-08-22 本地提交 `d4b8a54 test: make dashboard background assertion deterministic` 已完成，提交前本地主机证据为 focused 10/10、App 70/0/0、solution 321/0/0、Portable 321/25/45 全绿；工作树提交后 clean，分支只比 origin ahead 1。
+- 同一 `git push origin codex/ui-storage-integration` 连续三次 raw exit 1：第一次 40.3 秒后 `Recv failure: Connection was reset`；第二、三次各约 21 秒后 `Failed to connect to github.com port 443`。没有 force push、没有改远端、没有绕过网络限制。
+- 影响：Draft PR #3 仍停在远端 `b62e0b8`，GitHub CI 尚未看到 `d4b8a54`，因此不能宣称远端 CI 已恢复。产品本地构建和首次复测包不受影响。
+- 2026-08-22 用户明确指示“不用管 GitHub，本地能运行即可”。因此当前不再重试 push，B-014 不阻塞本地人工复测；若未来恢复远端同步，只需推送现有本地提交并等待 PR #3 CI，禁止重做已通过实现或降低测试。
+
 ## B-013：CI 测试修正后的本地主机验证审批流断开（已解除）
 
 - 2026-08-22 Draft PR #3 的两个 Windows CI 均在同一 App 测试失败：xUnit 在线程池线程执行测试，旧断言把 `Task.Run` 合法复用同一线程误判为 UI 阻塞；两次分别为 69 passed / 1 failed / 0 skipped，Input 38/0/0、Acceptance 25/0/0、Storage 188/0/0。

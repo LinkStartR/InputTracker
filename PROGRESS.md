@@ -1058,3 +1058,7 @@
 - solution 全量 test exit 0：App 70、Input 38、Acceptance 25、Storage 188，合计 321 passed / 0 failed / 0 skipped；StorageSpike 未跳过，总耗时 264.1 秒。
 - `powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Portable` exit 0：SDK 10.0.302，restore/build/publish/self-check 均 exit 0，build 0 warnings / 0 errors，second-instance exit 2，321 tests / 25 Acceptance / 0 failed / 0 skipped / 45 gates；证据 `.tools/verification/20260822-112041-564/verification.json`，总耗时 241.9 秒。
 - 结果：测试修正已在本地主机稳定转绿，产品 `src/**`、百万点负载、内存上限和 Acceptance 阈值未改。下一步只提交 `DashboardViewModelTests.cs`、`BLOCKED.md`、`PROGRESS.md`，推送 `codex/ui-storage-integration` 并等待 Draft PR #3 CI 全绿；若远端仍红则保留原始证据继续最小修正。
+- 提交：`d4b8a54 test: make dashboard background assertion deterministic`，3 files changed / 49 insertions / 2 deletions；精确包含 `DashboardViewModelTests.cs`、`BLOCKED.md`、`PROGRESS.md`，commit exit 0，未包含产品或 `.tools`。
+- Push 三连败：同一 `git push origin codex/ui-storage-integration` 三次 raw exit 1；依次为 `Recv failure: Connection was reset`（40.3 秒）、两次 `Failed to connect to github.com port 443`（各约 21 秒）。按停止重试规则建立 B-014；本地分支 `ahead 1`，远端仍是 `b62e0b8`，没有伪报 CI。
+- 交付状态：唯一复测包仍为 `.tools/publish/first-test-20260822-live-refresh/InputTracker.exe`；本轮仅改普通测试与文档，产品二进制未变化。下一步不依赖 GitHub：用户可立即从该目录复测 2 秒自动统计刷新与鼠标轨迹手动刷新；网络恢复后只推现有本地提交并等待 PR CI。
+- 用户范围调整：2026-08-22 明确“不用管 GitHub，本地能运行即可”。停止所有 push/PR/CI 重试；本地交付依据保持为 SDK 10.0.302、build 0 warnings / 0 errors、solution 321/0/0、Portable 321/25/45、published self-check exit 0。下一步由用户只运行唯一复测包验证真实键鼠记录可见性。
