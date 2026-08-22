@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "minimumTotalTests": 45,
-  "minimumAcceptanceTests": 12,
-  "minimumGateCount": 23,
+  "minimumTotalTests": 321,
+  "minimumAcceptanceTests": 25,
+  "minimumGateCount": 39,
   "requiredGateIds": [
     "local-sdk-10",
     "restore",
@@ -26,6 +26,28 @@
     "inputcore-device-generation-isolation",
     "inputcore-device-change-lifecycle",
     "inputcore-hardware-runbook-present",
-    "inputcore-performance-schema-present"
+    "inputcore-performance-schema-present",
+    "storage-bootstrap-regression",
+    "storage-inputcore-regression",
+    "storage-period-timezone-dst",
+    "storage-export-csv-privacy",
+    "storage-export-png",
+    "storage-backup-restore",
+    "storage-backup-corruption-fail-closed",
+    "storage-active-owner-rejected",
+    "storage-restore-budget",
+    "storage-restore-journal-recovery",
+    "storage-migration-versioned",
+    "storage-privacy-schema-source-policy",
+    "storage-device-mapping-confidence",
+    "storage-chunk-integrity-recovery",
+    "deletion-preview-and-execution-blocked",
+    "storage-manual-terminal-status",
+    "portable-storage-regression",
+    "portable-consent-fail-closed",
+    "portable-startup-exact-ownership",
+    "portable-lock-suspend-barrier",
+    "portable-session-ending-controlled",
+    "portable-terminal-status-not-run"
   ]
 }

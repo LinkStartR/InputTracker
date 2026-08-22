@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InputTracker Storage terminal evidence",
+  "type": "object",
+  "required": [
+    "commit", "windows", "dotnet", "storageFormatVersion", "sqliteVersion",
+    "hardwareTerminalStatus", "physicalPowerStatus", "pipeline", "diskGrowth",
+    "deletionCapability", "releaseEligible"
+  ],
+  "properties": {
+    "commit": { "type": "string", "minLength": 7 },
+    "windows": { "type": "string", "minLength": 1 },
+    "dotnet": { "type": "string", "pattern": "^10\\." },
+    "storageFormatVersion": { "type": "integer", "minimum": 1 },
+    "sqliteVersion": { "type": "string", "minLength": 1 },
+    "hardwareTerminalStatus": { "enum": ["not-run", "passed", "failed"] },
+    "physicalPowerStatus": { "enum": ["not-run", "storage-layer-simulation", "physical"] },
+    "pipeline": {
+      "type": "object",
+      "required": ["accepted", "sinkAcknowledged", "durableWatermark", "lost", "outOfOrder"],
+      "properties": {
+        "accepted": { "type": "integer", "minimum": 0 },
+        "sinkAcknowledged": { "type": "integer", "minimum": 0 },
+        "durableWatermark": { "type": "integer", "minimum": 0 },
+        "lost": { "const": 0 },
+        "outOfOrder": { "const": 0 }
+      }
+    },
+    "diskGrowth": {
+      "type": "object",
+      "required": ["startBytes", "endBytes", "bytesPerHour"],
+      "properties": {
+        "startBytes": { "type": "integer", "minimum": 0 },
+        "endBytes": { "type": "integer", "minimum": 0 },
+        "bytesPerHour": { "type": "number", "minimum": 0 }
+      }
+    },
+    "deletionCapability": { "const": "BlockedByCurrentFormat" },
+    "releaseEligible": { "const": false }
+  }
+}

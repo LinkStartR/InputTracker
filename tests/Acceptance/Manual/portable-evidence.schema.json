@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InputTracker Portable terminal evidence",
+  "type": "object",
+  "required": [
+    "commit", "windows", "dotnet", "programDirectory", "startupShortcutTerminalStatus",
+    "sessionLockSuspendTerminalStatus", "hardwareTerminalStatus", "visualTerminalStatus",
+    "runtimeNetworkStatus", "releaseEligible"
+  ],
+  "properties": {
+    "commit": { "type": "string", "minLength": 7 },
+    "windows": { "type": "string", "minLength": 1 },
+    "dotnet": { "type": "string", "pattern": "^10\\." },
+    "programDirectory": { "type": "string", "minLength": 1 },
+    "startupShortcutTerminalStatus": { "const": "not-run" },
+    "sessionLockSuspendTerminalStatus": { "const": "not-run" },
+    "hardwareTerminalStatus": { "const": "not-run" },
+    "visualTerminalStatus": { "const": "not-run" },
+    "runtimeNetworkStatus": { "const": "not-run" },
+    "releaseEligible": { "const": false }
+  }
+}

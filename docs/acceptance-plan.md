@@ -47,6 +47,20 @@ InputCore 自动测试仅验证规范化注入和生产管线，不是物理硬�
 - 1000Hz 鼠标连续 30 分钟，后台平均 CPU 不高于 3%，工作集不高于 200MB，UI 响应不高于 200ms。
 - 报告每小时磁盘增长、入队/落盘/恢复计数，不得抽样或静默丢点。
 
+## Storage 阶段
+
+执行 `scripts/verify.ps1 -Stage Storage`。该阶段必须完整回归 Bootstrap 与 InputCore gate，并通过日/周/月/年半开区间、Pacific 23/25 小时 DST、显式 Windows 时区、CSV 隐私列、PNG、版本化迁移、设备映射、轨迹块完整性、备份恢复和恢复日志测试。TRX 使用精确测试名并要求每项为 `Passed`，缺失、改名或非通过均失败。
+
+当前格式不能安全地精确重写任意范围，因此删除 gate 固定为 `deletion-preview-and-execution-blocked`。证据必须报告 `BlockedByCurrentFormat`、`releaseEligible=false`，不得把预览或执行阻断称为删除通过。真实多设备、1000Hz、磁盘增长和物理断电保持 `not-run`，按 Storage 人工清单与 schema 现场验收。
+
+`-InjectStorageChunkCorruption` 只破坏 `.tools` 下验收临时块；`-InjectStorageAggregateMismatch` 只改变 Acceptance 期望。二者互斥且只允许 Storage/Portable，原验证进程必须退出 1 并记录 mutation id。注入环境必须在 `finally` 恢复，不得接触产品或用户数据。
+
+## Portable 阶段
+
+执行 `scripts/verify.ps1 -Stage Portable`。该阶段必须完整回归 Bootstrap、InputCore 与 Storage gate，并锁定首次采集授权、程序目录内设置、Startup 自有快捷方式的精确创建/删除、外来快捷方式保护、用户/锁屏/挂起暂停原因叠加、同步 barrier、受控注销/关机和 win-x64 self-contained 中文空格路径。
+
+Startup 真实创建/清理、锁屏与挂起、普通用户/UAC、运行时无网络、Windows 10/11、真实硬件和视觉矩阵均保持 `not-run`，`releaseEligible=false`；按 Portable 人工清单和 schema 记录证据，自动化不得冒充现场通过。
+
 ## 视觉矩阵
 
 在 1440×900 与 1920×1080、100% 与 150% 缩放、浅色与深色下截图；核对无截断、重叠、不可读文字，普通文字对比度至少 4.5:1，热力色阶不遮字。最终由领导确认。
