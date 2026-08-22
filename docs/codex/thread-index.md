@@ -33,6 +33,8 @@
 | C28 | 用户测试与下一步建议 | Storage/Portable 判卷基线单调更新、反向验证与首次可用性复核 | 已完成 | `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`、测试结论 | `67ac9a2` | 是：`/root/user_testing_next_steps` | terra / high | 跨模块验收、数据损坏注入与平台证据需要高推理 | baseline 321/25/39；chunk CRC 与 aggregate mismatch 两条红测均原始 exit 1、0 skipped；最终 Portable 绿证据 321/25/45，产品 SHA 未变 |
 | C29 | Git/GitHub 同步 | 首次可用性修复与 Storage/Portable 验收切片的提交边界审查 | 已完成 | Git 状态、diff、分支、提交规划 | `06ecdf0..67ac9a2` | 是：`/root/git_github_sync` | luna / medium | 混合但可分组的常规 Git 卫生与提交规划 | A App+普通测试 → B Acceptance/verify → C 进度文档；最终 321/25/0/0、45 gates 证据覆盖 timer 修复；无越界依赖或权限变更 |
 | C30 | UI 完成度 | 页面/主题/物理键盘热力图/鼠标轨迹回放的独立切片 | 第一切片完成，待主机全套验证 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | `/root/ui_completion`；基线 `a1a16ba`；未提交 | 是：`/root/ui_completion` | terra / high | WPF 布局、可视数据语义与缩放矩阵为跨状态 UI 工作 | 六页/主题/物理热力图已冻结；build 0w/0e、目标7/0/0，完整77因B-015未权威执行；回放仍待下一切片 |
+| C31 | 用户测试与下一步建议 | 离线恢复执行接线安全设计 | 已完成 | 只读 App/Storage 生命周期与恢复协议 | `docs/storage/offline-restore-app-design.md`；基线 `7835edf` | 是：`/root/user_testing_next_steps` | 最高可用 / xhigh | 用户数据替换、writer lock、journal 与进程生命周期为最高风险 | 仅设计；未接 UI、未执行真实数据。先完成 facade/lease/单owner/临时A-B往返与故障回滚，按钮才可启用 |
+| C32 | UI 完成度 | 鼠标轨迹完整回放与 Storage 游标前置设计 | 已完成 | 只读 App/Storage 查询与 UI 状态机 | `docs/ui/mouse-playback-design.md`；基线 `7835edf` | 是：`/root/ui_completion` | terra / high | 百万点有界处理、异步 generation 与数据语义交叉 | 现有固定水位流支持从头播放；任意 seek 需独立 snapshot/cursor/segment seam，禁止用2048点概览冒充原始回放 |
 
 ## 协调说明
 

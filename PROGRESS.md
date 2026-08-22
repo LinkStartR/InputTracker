@@ -1075,3 +1075,9 @@
 - UI 结果：六页导航（总览、键盘热力图、鼠标轨迹、数据工具、设置、隐私）；页面外全局采集状态与暂停/恢复；浅/深动态资源；常见 Windows 物理扫描码主区/修饰/导航/方向/数字键盘布局；E0/E1 独立；未知键进入其他键；六级热力及两主题逐级文字对比度 ≥4.5:1。未实现鼠标播放、恢复/删除执行。
 - 主线程冻结验证：App.Tests Release build raw exit 0、0 warnings / 0 errors、1.40 秒。完整 test 的主机审批流断线；低权限同命令 raw exit 1，仅 `MSB4184` 访问 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 被拒，未进入测试程序集。建立 B-015，冻结 App/test 文件；预期 77 全套未权威验证前不提交 UI 切片。
 - 下一步：用户在获知审批断线后再次允许仓库本地 App.Tests test；只重跑冻结的 `dotnet test tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-build --no-restore`。绿后审查、提交 UI 第一切片与独立文档记录，再进入鼠标回放。
+- 离线恢复只读设计完成：现有 `StorageBackup.Restore` 后端具备 containment/reparse/format/hash/budget、恢复前自动备份、write-through journal、逐 move 水位、rollback 与下次 Open recovery；App 缺公开窄 facade、可转交 operation lease、唯一生命周期 owner 和 OnExit 幂等转交。
+- 固定状态机为 `IdleRunning → UserPaused → SelectionValidated → FinalConfirmation → RestoreLeaseAcquired → Quiescing → OwnerReleased → RestoringOffline → SucceededAwaitExit|FailedAwaitExit|RecoveryRequired → ControlledExit`。必须先注销系统事件、排空/释放 capture、验证 ingress/raw registration 关闭、Stop/Dispose Storage owner，释放 writer lock 后才可恢复；成功或失败均不自动 resume/重建 capture。
+- 设计文档：`docs/storage/offline-restore-app-design.md`。实现顺序固定为 public offline facade → App coordinator/transferable lease → 临时 A/B store 与 journal fault tests → UI 二次确认 → Acceptance 红→绿 → 可丢弃目录人工验收。任何真实用户 store 操作仍需 UI 明确选择与二次确认；代理未执行数据操作。
+- 鼠标回放只读设计完成：明确区分“完整枚举后生成 ≤2048 点的轨迹概览”和“每条原始记录都参与顺序/计数/hash/积分/按钮滚轮状态的完整回放”；回放预取队列 ≤4096、UI 尾迹 ≤2048、按帧批量 Dispatcher，落后时显示追赶且不得丢点。
+- Storage 核对：现有 `CreateMouseSnapshot` 已固定 durable watermark、按 first sequence 排序、校验全段/chunk/目录前缀/UTC 不倒退，再逐条 yield，足以安全从头完整播放；但 public API 不暴露固定快照句柄、稳定 `(UtcMicroseconds, Sequence)` 游标或 calibration/pause/stop 分段，不能安全启用任意 seek/无缝续播。
+- 设计文档：`docs/ui/mouse-playback-design.md`。下一实现必须先提供窄 Storage playback snapshot/cursor seam；在此之前只允许 forward-only 完整播放和只读进度，不允许用现有概览点冒充原始回放或声称任意拖动零重漏。
