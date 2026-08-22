@@ -34,7 +34,7 @@ public sealed class DashboardViewModelTests
     public async Task MillionPointStreamIsFullyReadButDisplayMemoryIsBounded()
     {
         Guid mouse = Guid.NewGuid();
-        int callerThread = Environment.CurrentManagedThreadId;
+        int callerThread = 0;
         var source = new LargeMouseDataSource(mouse);
         var model = new DashboardViewModel(source)
         {
@@ -42,7 +42,12 @@ public sealed class DashboardViewModelTests
             TimeZoneId = "UTC"
         };
 
-        await model.RefreshAsync();
+        await RunOnDedicatedThreadAsync(async () =>
+        {
+            callerThread = Environment.CurrentManagedThreadId;
+            Assert.False(Thread.CurrentThread.IsThreadPoolThread);
+            await model.RefreshAsync();
+        });
 
         Assert.Equal(1_000_000, model.TotalMousePointCount);
         Assert.Equal(DashboardViewModel.MaxRenderedMousePoints, model.MousePoints.Count);
@@ -51,12 +56,36 @@ public sealed class DashboardViewModelTests
         Assert.Equal(1_000_000, model.MousePoints.Sum(point => point.DeltaY));
         Assert.Equal(1_000_000, source.EnumeratedCount);
         Assert.DoesNotContain(callerThread, source.EnumerationThreads);
+        Assert.True(source.AllEnumerationThreadsWereThreadPoolThreads);
         StorageUtcRange range = model.ResolvedPeriod!.UtcRange;
         long bucketWidth = (range.EndUtcMicroseconds - range.StartUtcMicroseconds) / DashboardViewModel.MaxRenderedMousePoints;
         Assert.InRange(model.MousePoints[0].LastUtcMicroseconds,
             range.StartUtcMicroseconds, range.StartUtcMicroseconds + bucketWidth);
         Assert.InRange(model.MousePoints[^1].LastUtcMicroseconds,
             range.EndUtcMicroseconds - bucketWidth - 1, range.EndUtcMicroseconds - 1);
+    }
+
+    private static Task RunOnDedicatedThreadAsync(Func<Task> action)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action().GetAwaiter().GetResult();
+                completion.SetResult();
+            }
+            catch (Exception error)
+            {
+                completion.SetException(error);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "DashboardViewModelTests dedicated caller"
+        };
+        thread.Start();
+        return completion.Task;
     }
 
     [Fact]
@@ -144,6 +173,7 @@ public sealed class DashboardViewModelTests
     {
         public long EnumeratedCount { get; private set; }
         public HashSet<int> EnumerationThreads { get; } = [];
+        public bool AllEnumerationThreadsWereThreadPoolThreads { get; private set; } = true;
         public Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<StorageDeviceInfo>>([]);
         public Task<StorageKeyboardPeriodResult> QueryKeyboardAsync(
@@ -159,6 +189,7 @@ public sealed class DashboardViewModelTests
                 cancellationToken.ThrowIfCancellationRequested();
                 EnumeratedCount++;
                 EnumerationThreads.Add(Environment.CurrentManagedThreadId);
+                AllEnumerationThreadsWereThreadPoolThreads &= Thread.CurrentThread.IsThreadPoolThread;
                 long utc = range.StartUtcMicroseconds
                     + (long)(((Int128)(range.EndUtcMicroseconds - range.StartUtcMicroseconds) * (sequence - 1)) / 1_000_000);
                 yield return new StorageMouseRecord(mouse, sequence, utc, 1, 1, 0, false, 0, 0, 0);

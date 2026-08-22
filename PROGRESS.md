@@ -1049,3 +1049,12 @@
 - App 提交：`06ecdf0 feat: add app storage tools and live statistics refresh`；7 files，909 insertions / 46 deletions；仅 App 产品与普通 App tests，commit exit 0。
 - Acceptance 提交：`67ac9a2 test: add storage and portable acceptance gates`；11 files，646 insertions / 31 deletions；仅 C2 独占 Acceptance/verify/acceptance-plan，commit exit 0。
 - 下一步：提交 `BLOCKED.md`、`PROGRESS.md`、`docs/codex/thread-index.md` 状态文档；复查工作树 clean 后只推当前 `codex/ui-storage-integration` 并更新既有 Draft PR #3，不直接推 main。
+- Git/GitHub：三提交已推送到 `origin/codex/ui-storage-integration`，远端 `f5421aa..b62e0b8`；Draft PR #3 保持 OPEN/Draft，head=`b62e0b8`，PR 正文已更新为 321/25/45 与真实未完成项。
+- CI 红：两个 Windows job 均在 `DashboardViewModelTests.MillionPointStreamIsFullyReadButDisplayMemoryIsBounded` 失败，分别报告调用线程 ID 7/13 出现在枚举线程集合；原因是 xUnit 调用线程本身属于线程池，旧“不同 thread ID”断言不能稳定证明 UI 非阻塞。其余 App 69、Input 38、Acceptance 25、Storage 188 均通过，skipped=0。
+- 未提交修正：测试改为从专用非线程池线程调用 `RefreshAsync`，断言调用线程非线程池、百万点枚举线程全为线程池且不含调用线程；未改产品、百万点、内存或验收阈值。首次主机 build 审批因服务响应流断开被拒绝，按安全规则未重试/绕过；当前工作树保留该单文件未验证修改与 B-013/本进度增量。
+- 下一步：获得用户对仓库本地 .NET build/test 的明确批准后验证、提交、push 并等待 CI；在此之前 PR 保持红且不得交付为全绿。
+- 2026-08-22 用户明确允许仓库本地 .NET build/test，B-013 本地主机审批阻塞解除。命令 `dotnet build tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-restore` exit 0，0 warnings / 0 errors，5.2 秒。
+- CI 失败用例 `MillionPointStreamIsFullyReadButDisplayMemoryIsBounded` 连续执行 10 次，命令总 exit 0；每次 1 passed / 0 failed / 0 skipped，总耗时 12.3 秒。App 全套 test exit 0，70 passed / 0 failed / 0 skipped，1.7 秒。
+- solution 全量 test exit 0：App 70、Input 38、Acceptance 25、Storage 188，合计 321 passed / 0 failed / 0 skipped；StorageSpike 未跳过，总耗时 264.1 秒。
+- `powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Portable` exit 0：SDK 10.0.302，restore/build/publish/self-check 均 exit 0，build 0 warnings / 0 errors，second-instance exit 2，321 tests / 25 Acceptance / 0 failed / 0 skipped / 45 gates；证据 `.tools/verification/20260822-112041-564/verification.json`，总耗时 241.9 秒。
+- 结果：测试修正已在本地主机稳定转绿，产品 `src/**`、百万点负载、内存上限和 Acceptance 阈值未改。下一步只提交 `DashboardViewModelTests.cs`、`BLOCKED.md`、`PROGRESS.md`，推送 `codex/ui-storage-integration` 并等待 Draft PR #3 CI 全绿；若远端仍红则保留原始证据继续最小修正。

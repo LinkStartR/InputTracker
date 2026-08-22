@@ -1,5 +1,12 @@
 # BLOCKED
 
+## B-013：CI 测试修正后的本地主机验证审批流断开（已解除）
+
+- 2026-08-22 Draft PR #3 的两个 Windows CI 均在同一 App 测试失败：xUnit 在线程池线程执行测试，旧断言把 `Task.Run` 合法复用同一线程误判为 UI 阻塞；两次分别为 69 passed / 1 failed / 0 skipped，Input 38/0/0、Acceptance 25/0/0、Storage 188/0/0。
+- 已做未提交窄修：测试从专用非线程池调用线程启动百万点刷新，并同时断言枚举只在线程池执行；产品 `src/**`、百万点计数、内存上限和验收阈值均未修改。
+- 2026-08-22 用户已明确允许运行仓库本地 .NET build/test。App tests build exit 0（0 warnings / 0 errors）；失败用例连续 10 次均为 1 passed / 0 failed / 0 skipped；App 全套 70/0/0；solution 全套 321/0/0；`scripts/verify.ps1 -Stage Portable` exit 0，321 tests、25 Acceptance、45 gates，证据 `.tools/verification/20260822-112041-564/verification.json`。
+- 本地审批阻塞已解除；剩余动作是提交、推送并等待 GitHub CI 复验，因此不能在 CI 变绿前把远端状态写成已通过。
+
 ## B-009：GitHub HTTPS 不可达，Storage 分支尚未 push / draft PR
 
 - 2026-08-09 在 `codex/storage-stats@40067f2`、push 前工作树 clean、`gh 2.93.0` 且账号 `HorizonZhi` 已认证的前提下，三次推送同一分支均失败；当前未提交内容仅为本阻塞记录与对应进度记录。
