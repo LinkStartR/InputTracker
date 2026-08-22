@@ -1084,3 +1084,5 @@
 - Storage playback snapshot v1 只读协议完成：公开 `SnapshotInfo/Cursor/PlaybackRecord` 与 snapshot lifetime，Open 时在 worker 全量 fail-closed 验证后才返回；seek 使用 `(UtcMicroseconds, Sequence)` 精确元组且 cursor 绑定 `SnapshotId`，相同 UTC 不折叠，cross-snapshot/伪造/out-of-range fail closed。
 - 迁移前置：现有 `MouseChunkBuilder` 产生 seal reason，但 `MouseIngestion.Publish` 在 spool 目录提交时丢弃它；v1 需版本化新增 `mouse_spool_segments.seal_reason`。正常发布写精确 reason，既有行迁为 `LegacyUnknown`，崩溃采用为 `RecoveryUnknown`，所有段边界一律断段且不得凭空声称 pause/stop 原因。
 - 设计文档：`docs/storage/mouse-playback-snapshot-v1.md`。该协议不重写 mouse payload/sequence；实现需先做 migration/checksum/future fail-closed、百万点有界 scan、同 timestamp cursor 零重漏、snapshot read lease 与隐私公开契约测试。当前未改 Storage 代码。
+- B-015 三轮阻塞收口：第 1 轮主机 App test 审批响应流断开、低权限仅 `MSB4184`；第 2 轮完成并提交 restore/playback 设计；第 3 轮完成并提交 Storage snapshot/cursor/seal-reason v1。当前仍只有 6 个冻结 UI 文件未提交，产品 build 已 0 warnings / 0 errors，目标 UI 7/0/0，但新增后完整 77 项未获主线程权威退出码。
+- 已无安全旁路：恢复与删除涉及真实用户数据，Storage snapshot 属迁移，继续编码而不跑 tests 会违反数据正确与稳定优先级。按连续三轮阻塞规则停下；恢复时只执行冻结 App.Tests 77 项，绿后提交 UI 第一切片并继续 snapshot migration/回放，不重做任何已完成设计。

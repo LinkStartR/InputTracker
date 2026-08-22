@@ -6,6 +6,8 @@
 - 随后的完整 `dotnet test ... --no-build --no-restore` 主机执行在等待输出时被审批服务以响应流断开拒绝，未获得可采信的最终退出码。没有使用间接命令或高权限绕过。
 - 改用权限更低的默认沙箱执行同一测试，raw exit 1，唯一错误为 `MSB4184`：访问 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 被拒绝；未进入测试程序集。子任务冻结前已有目标 7/0/0、旧完整 75/0/0，但新增两项后的预期 77 全套尚未由主线程权威执行。
 - 影响：UI 第一切片不得提交或宣称完整回归通过；源码保持冻结。解除方式是用户在获知本次审批断线后再次允许仓库本地 `.tools/dotnet` 的 App.Tests test，随后主线程只重跑该冻结命令，不重做实现。
+- 连续阻塞审计：该同一条件已跨三个连续目标轮次存在。期间所有不依赖执行权限的工作已完成并提交：完整目标审计、离线恢复 App 安全协议、鼠标回放 UI 协议、Storage fixed snapshot/cursor/seal-reason v1 协议。继续实现会扩大未验证代码面，已无可安全推进的独立实现项。
+- 精确恢复命令：`& '.\.tools\dotnet\dotnet.exe' test tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-build --no-restore --logger 'console;verbosity=minimal'`。用户在看到本阻塞后明确授权即可解除；预期只需验证冻结的 77 项，不重新实现或修改测试。
 
 ## B-014：已验证 CI 修正无法推送到 GitHub（用户明确暂缓，不阻塞本地交付）
 
