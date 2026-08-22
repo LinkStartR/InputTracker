@@ -4,14 +4,14 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：Input Core PR #2 已合并为 `main@f6136c3`；Storage 写入/查询与 UI 首次真实链路已在 `codex/ui-storage-integration` 集成并通过本地判卷，等待第一次用户现场测试；Portable、删除/备份恢复和终验仍待完成。
+- 当前阶段：`codex/ui-storage-integration@a1a16ba` 已通过本地 321/0/0 与 Portable 45 gates 并交付首次复测包；用户明确暂缓 GitHub。继续补齐 UI 页面、主题、物理键盘热力图、鼠标轨迹回放与现场证据；范围删除执行保持 B-011。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | C1 | Git/GitHub 同步 | 状态、意图文件、提交与 PR 协调 | 常驻 | Git 状态、分支、PR | `codex/ui-storage-integration` 已 push；draft PR #3 | 是：`019fd04e-0c1c-77c2-ad74-c25eb4298b09` | luna / medium | 常规 Git 卫生；冲突时升级 | GitHub 网络已恢复；PR #3 为不可直接合并的依赖栈，B-007/B-008 和真实硬件仍待验 |
 | C12 | Git/GitHub 同步 | UI 阻断修复提交前只读 Git 审查 | 已完成 | `codex/ui` 11 文件 | `codex/ui@3c84012` | 是：`/root/git_review` | luna / medium | 常规白名单与提交边界 | 最终增量复核通过；无越界依赖、测试或权限风险，允许主任务提交 |
 | C13 | 用户测试与下一步建议 | UI 阻断修复提交前只读 QA | 已完成 | `codex/ui` 状态披露与关闭生命周期 | `codex/ui@3c84012` | 是：`/root/ui_qa` | terra / high | 用户可见隐私与 WPF 生命周期 | 动态披露、Cancel→Hide、SessionEnding 受控退出与 16/0/0 通过；GUI/真实注销/硬件仍 not-run |
-| C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | chunk slice 只读验收完成 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | InputCore `03985a4`；Storage final gate/API seam 尚未落文件 | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | 现有 slice 单元验收充分但非 final；等 ingestion/query/export/delete API 稳定后落 Storage Acceptance 与非零 corruption 红→绿 |
+| C2 | 用户测试与下一步建议 | 验收、反向验证、人工测试与下一步 | 当前完整目标只读审计完成 | `tests/Acceptance/**`, `scripts/verify.ps1`, QA 文档 | 当前审计 `a1a16ba`；既有判卷 `67ac9a2` | 是：`019fd04e-0c1c-77c2-ad74-c27a65676fd6` | terra / high | 跨模块、权限、迁移和平台矩阵 | 判定为可记录 alpha：321/25/45 不替代硬件/系统/视觉；恢复接线、删除执行、真实热力图/回放/深色仍缺 |
 | C3 | Bootstrap | 最小 WPF、CI、单实例、托盘暂停 | 已集成 | `src/**`, 常规 `tests/**`, `.github/**`, solution/Directory 文件 | PR #1 已合并，merge `1fc6177` | 是：`019fd04e-0c87-71e0-b2e1-bfa363a691df` | gpt-5.6-sol / xhigh | 首个架构与权限边界 | 自动/CI/受控桌面状态链通过；普通用户可视启动/UAC/截图仍为 B-005 |
 | C4 | Input Core | Raw Input、多设备、有界队列 | 已合并 | 输入模块及普通测试 | PR #2，merge `f6136c3` | 是：`019fd04e-0c7c-7c22-9135-1b53679805f1` | sol / high | 并发、设备身份、不丢事件 | 自动化进入 main；真实多设备/1000Hz 终验仍为 B-003 |
 | C5 | Storage Stats | 轨迹块、SQLite、统计、导出、恢复删除 | chunk 与 Storage Service A 已集成；下一步 mouse ingestion | `src/InputTracker.Storage/**`、普通 Storage tests/docs | chunk `ff1c250`；Service A `9c88d1c` | 是：`019fd04e-21df-7482-a248-99deb1617a5f` | terra / high | 数据安全、迁移、时区 | 集成快照 solution 144/0/0、verify 144/12/23；B-007/B-008/B-009 与硬件/物理断电未解除 |
@@ -32,6 +32,7 @@
 | C27 | Portable | 首次告知、Startup 授权、锁屏/挂起、数据位置和卸载 | 已完成，待现场终验 | `src/InputTracker.App/**`、普通 App tests、`docs/portable/**`、README | `codex/ui-storage-integration` Portable 提交待生成 | 是：`/root/portable_completion` | luna / medium；系统生命周期 high | 常规本地功能，权限与会话边界需升级审查 | 58/0/0；四元快捷方式所有权与同步 pause barrier 经独立复审放行；真实 Startup/锁屏/挂起/普通用户/双系统仍 pending |
 | C28 | 用户测试与下一步建议 | Storage/Portable 判卷基线单调更新、反向验证与首次可用性复核 | 已完成 | `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`、测试结论 | `67ac9a2` | 是：`/root/user_testing_next_steps` | terra / high | 跨模块验收、数据损坏注入与平台证据需要高推理 | baseline 321/25/39；chunk CRC 与 aggregate mismatch 两条红测均原始 exit 1、0 skipped；最终 Portable 绿证据 321/25/45，产品 SHA 未变 |
 | C29 | Git/GitHub 同步 | 首次可用性修复与 Storage/Portable 验收切片的提交边界审查 | 已完成 | Git 状态、diff、分支、提交规划 | `06ecdf0..67ac9a2` | 是：`/root/git_github_sync` | luna / medium | 混合但可分组的常规 Git 卫生与提交规划 | A App+普通测试 → B Acceptance/verify → C 进度文档；最终 321/25/0/0、45 gates 证据覆盖 timer 修复；无越界依赖或权限变更 |
+| C30 | UI 完成度 | 页面/主题/物理键盘热力图/鼠标轨迹回放的独立切片 | 第一切片完成，待主机全套验证 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | `/root/ui_completion`；基线 `a1a16ba`；未提交 | 是：`/root/ui_completion` | terra / high | WPF 布局、可视数据语义与缩放矩阵为跨状态 UI 工作 | 六页/主题/物理热力图已冻结；build 0w/0e、目标7/0/0，完整77因B-015未权威执行；回放仍待下一切片 |
 
 ## 协调说明
 

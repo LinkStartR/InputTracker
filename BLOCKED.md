@@ -1,5 +1,12 @@
 # BLOCKED
 
+## B-015：UI 第一切片完整 App.Tests 主机执行审批流断线
+
+- 2026-08-22 `a1a16ba` 后的 UI 第一切片已冻结；主线程权威 `dotnet build tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-restore` exit 0，0 warnings / 0 errors，1.40 秒。
+- 随后的完整 `dotnet test ... --no-build --no-restore` 主机执行在等待输出时被审批服务以响应流断开拒绝，未获得可采信的最终退出码。没有使用间接命令或高权限绕过。
+- 改用权限更低的默认沙箱执行同一测试，raw exit 1，唯一错误为 `MSB4184`：访问 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 被拒绝；未进入测试程序集。子任务冻结前已有目标 7/0/0、旧完整 75/0/0，但新增两项后的预期 77 全套尚未由主线程权威执行。
+- 影响：UI 第一切片不得提交或宣称完整回归通过；源码保持冻结。解除方式是用户在获知本次审批断线后再次允许仓库本地 `.tools/dotnet` 的 App.Tests test，随后主线程只重跑该冻结命令，不重做实现。
+
 ## B-014：已验证 CI 修正无法推送到 GitHub（用户明确暂缓，不阻塞本地交付）
 
 - 2026-08-22 本地提交 `d4b8a54 test: make dashboard background assertion deterministic` 已完成，提交前本地主机证据为 focused 10/10、App 70/0/0、solution 321/0/0、Portable 321/25/45 全绿；工作树提交后 clean，分支只比 origin ahead 1。

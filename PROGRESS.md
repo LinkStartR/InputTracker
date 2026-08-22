@@ -1062,3 +1062,16 @@
 - Push 三连败：同一 `git push origin codex/ui-storage-integration` 三次 raw exit 1；依次为 `Recv failure: Connection was reset`（40.3 秒）、两次 `Failed to connect to github.com port 443`（各约 21 秒）。按停止重试规则建立 B-014；本地分支 `ahead 1`，远端仍是 `b62e0b8`，没有伪报 CI。
 - 交付状态：唯一复测包仍为 `.tools/publish/first-test-20260822-live-refresh/InputTracker.exe`；本轮仅改普通测试与文档，产品二进制未变化。下一步不依赖 GitHub：用户可立即从该目录复测 2 秒自动统计刷新与鼠标轨迹手动刷新；网络恢复后只推现有本地提交并等待 PR CI。
 - 用户范围调整：2026-08-22 明确“不用管 GitHub，本地能运行即可”。停止所有 push/PR/CI 重试；本地交付依据保持为 SDK 10.0.302、build 0 warnings / 0 errors、solution 321/0/0、Portable 321/25/45、published self-check exit 0。下一步由用户只运行唯一复测包验证真实键鼠记录可见性。
+
+## 2026-08-22 完整目标完成度复核与 UI 收口启动
+
+- 权威状态：`codex/ui-storage-integration@a1a16ba`；工作树在复核前 clean。最新 Portable 证据 `.tools/verification/20260822-112041-564/verification.json` 为 321 total / 25 Acceptance / 0 failed / 0 skipped / 45 gates，但明确 `releaseEligible=false`，不能替代现场硬件、系统与视觉验收。
+- 已证实：Raw Input → Storage → UI 真实链路、设备筛选、日/周/月/年统计、2 秒键盘刷新、完整鼠标流读取与有界静态绘制、CSV/PNG 导出、备份创建、首次授权、托盘暂停、Startup 控制、自包含绿色发布。
+- 明确缺功能：App 只检查备份而未执行恢复；范围删除仍只有预览且 `ExecuteDeletion` fail closed；键盘热力图只是固定色键码标签；鼠标只有静态轨迹；没有独立页面、深色主题、设备别名/历史 merge/split UI。
+- 现场缺证据：两键盘两鼠标前后台 2 小时、1000Hz 30 分钟 CPU/内存/UI/磁盘、普通用户 Win10/11、Startup/锁屏/挂起/注销、运行时网络/注册表/目录外写入、1440×900/1920×1080 与 100%/150% 浅深色截图、领导视觉确认、物理断电均为 not-run。
+- 优先级：P0 继续用户 5 分钟无破坏复测；P1 UI 页面/主题/物理键盘热力图和轨迹回放；P2 离线恢复接线；P3 单独设计版本化精确删除协议。删除与恢复不得使用真实用户数据试验，范围删除 B-011 未解除。
+- 编排：C30 `/root/ui_completion` 已创建并确认可定位，推荐 `terra/high`；第一切片只改 App UI/普通测试，实现页面化、浅深主题和物理键盘热力图，不碰 Storage/Input/Acceptance/verify/Git。主任务已登记线程索引，等待红→绿回报后权威验证。
+- C30 红→绿：新增 7 个无 skip 展示测试；初始 test exit 1，`CS0246/CS0103` 明确缺 `KeyboardLayoutModel` / `KeyboardHeatScale`。实现首轮 build exit 1、0 warnings / 4 errors（WPF/WinForms `Color` 二义），全限定 WPF 类型后子任务 build exit 0、0 warnings / 0 errors，目标 7/0/0；补充前完整 App 75/0/0。
+- UI 结果：六页导航（总览、键盘热力图、鼠标轨迹、数据工具、设置、隐私）；页面外全局采集状态与暂停/恢复；浅/深动态资源；常见 Windows 物理扫描码主区/修饰/导航/方向/数字键盘布局；E0/E1 独立；未知键进入其他键；六级热力及两主题逐级文字对比度 ≥4.5:1。未实现鼠标播放、恢复/删除执行。
+- 主线程冻结验证：App.Tests Release build raw exit 0、0 warnings / 0 errors、1.40 秒。完整 test 的主机审批流断线；低权限同命令 raw exit 1，仅 `MSB4184` 访问 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 被拒，未进入测试程序集。建立 B-015，冻结 App/test 文件；预期 77 全套未权威验证前不提交 UI 切片。
+- 下一步：用户在获知审批断线后再次允许仓库本地 App.Tests test；只重跑冻结的 `dotnet test tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-build --no-restore`。绿后审查、提交 UI 第一切片与独立文档记录，再进入鼠标回放。
