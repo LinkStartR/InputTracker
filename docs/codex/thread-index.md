@@ -35,6 +35,7 @@
 | C30 | UI 完成度 | 页面/主题/物理键盘热力图/鼠标轨迹回放的独立切片 | 第一切片完成，待主机全套验证 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | `/root/ui_completion`；基线 `a1a16ba`；未提交 | 是：`/root/ui_completion` | terra / high | WPF 布局、可视数据语义与缩放矩阵为跨状态 UI 工作 | 六页/主题/物理热力图已冻结；build 0w/0e、目标7/0/0，完整77因B-015未权威执行；回放仍待下一切片 |
 | C31 | 用户测试与下一步建议 | 离线恢复执行接线安全设计 | 已完成 | 只读 App/Storage 生命周期与恢复协议 | `docs/storage/offline-restore-app-design.md`；基线 `7835edf` | 是：`/root/user_testing_next_steps` | 最高可用 / xhigh | 用户数据替换、writer lock、journal 与进程生命周期为最高风险 | 仅设计；未接 UI、未执行真实数据。先完成 facade/lease/单owner/临时A-B往返与故障回滚，按钮才可启用 |
 | C32 | UI 完成度 | 鼠标轨迹完整回放与 Storage 游标前置设计 | 已完成 | 只读 App/Storage 查询与 UI 状态机 | `docs/ui/mouse-playback-design.md`；基线 `7835edf` | 是：`/root/ui_completion` | terra / high | 百万点有界处理、异步 generation 与数据语义交叉 | 现有固定水位流支持从头播放；任意 seek 需独立 snapshot/cursor/segment seam，禁止用2048点概览冒充原始回放 |
+| C33 | Storage Stats | 鼠标回放固定快照、稳定游标与边界迁移设计 | 已完成 | 只读 Storage query/schema/ingestion | `docs/storage/mouse-playback-snapshot-v1.md`；基线 `bc25821` | 是：主线程可定位文档 | terra / high；schema migration 实施时 xhigh | 固定水位、同UTC零重漏、百万点有界与seal reason迁移为数据正确性门 | 仅设计未改代码；v1需新增seal_reason，legacy/recovery unknown均强制断段，任意seek在seam绿前禁用 |
 
 ## 协调说明
 

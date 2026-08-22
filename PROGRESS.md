@@ -1081,3 +1081,6 @@
 - 鼠标回放只读设计完成：明确区分“完整枚举后生成 ≤2048 点的轨迹概览”和“每条原始记录都参与顺序/计数/hash/积分/按钮滚轮状态的完整回放”；回放预取队列 ≤4096、UI 尾迹 ≤2048、按帧批量 Dispatcher，落后时显示追赶且不得丢点。
 - Storage 核对：现有 `CreateMouseSnapshot` 已固定 durable watermark、按 first sequence 排序、校验全段/chunk/目录前缀/UTC 不倒退，再逐条 yield，足以安全从头完整播放；但 public API 不暴露固定快照句柄、稳定 `(UtcMicroseconds, Sequence)` 游标或 calibration/pause/stop 分段，不能安全启用任意 seek/无缝续播。
 - 设计文档：`docs/ui/mouse-playback-design.md`。下一实现必须先提供窄 Storage playback snapshot/cursor seam；在此之前只允许 forward-only 完整播放和只读进度，不允许用现有概览点冒充原始回放或声称任意拖动零重漏。
+- Storage playback snapshot v1 只读协议完成：公开 `SnapshotInfo/Cursor/PlaybackRecord` 与 snapshot lifetime，Open 时在 worker 全量 fail-closed 验证后才返回；seek 使用 `(UtcMicroseconds, Sequence)` 精确元组且 cursor 绑定 `SnapshotId`，相同 UTC 不折叠，cross-snapshot/伪造/out-of-range fail closed。
+- 迁移前置：现有 `MouseChunkBuilder` 产生 seal reason，但 `MouseIngestion.Publish` 在 spool 目录提交时丢弃它；v1 需版本化新增 `mouse_spool_segments.seal_reason`。正常发布写精确 reason，既有行迁为 `LegacyUnknown`，崩溃采用为 `RecoveryUnknown`，所有段边界一律断段且不得凭空声称 pause/stop 原因。
+- 设计文档：`docs/storage/mouse-playback-snapshot-v1.md`。该协议不重写 mouse payload/sequence；实现需先做 migration/checksum/future fail-closed、百万点有界 scan、同 timestamp cursor 零重漏、snapshot read lease 与隐私公开契约测试。当前未改 Storage 代码。
