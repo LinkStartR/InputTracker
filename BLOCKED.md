@@ -8,6 +8,7 @@
 - 影响：UI 第一切片不得提交或宣称完整回归通过；源码保持冻结。解除方式是用户在获知本次审批断线后再次允许仓库本地 `.tools/dotnet` 的 App.Tests test，随后主线程只重跑该冻结命令，不重做实现。
 - 连续阻塞审计：该同一条件已跨三个连续目标轮次存在。期间所有不依赖执行权限的工作已完成并提交：完整目标审计、离线恢复 App 安全协议、鼠标回放 UI 协议、Storage fixed snapshot/cursor/seal-reason v1 协议。继续实现会扩大未验证代码面，已无可安全推进的独立实现项。
 - 精确恢复命令：`& '.\.tools\dotnet\dotnet.exe' test tests\InputTracker.App.Tests\InputTracker.App.Tests.csproj -c Release --no-build --no-restore --logger 'console;verbosity=minimal'`。用户在看到本阻塞后明确授权即可解除；预期只需验证冻结的 77 项，不重新实现或修改测试。
+- 2026-08-24 已解除：用户明确允许继续本地 build/test；冻结 UI 先以 77/0/0 转绿，视觉收敛后新增深色 ComboBox 主题回归，最终 App build exit 0、0 warnings / 0 errors，App.Tests 78 passed / 0 failed / 0 skipped。B-015 不再阻塞 UI 本地提交与复测；真实桌面缩放矩阵及领导视觉确认仍归 B-003。
 
 ## B-014：已验证 CI 修正无法推送到 GitHub（用户明确暂缓，不阻塞本地交付）
 

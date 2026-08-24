@@ -1086,3 +1086,21 @@
 - 设计文档：`docs/storage/mouse-playback-snapshot-v1.md`。该协议不重写 mouse payload/sequence；实现需先做 migration/checksum/future fail-closed、百万点有界 scan、同 timestamp cursor 零重漏、snapshot read lease 与隐私公开契约测试。当前未改 Storage 代码。
 - B-015 三轮阻塞收口：第 1 轮主机 App test 审批响应流断开、低权限仅 `MSB4184`；第 2 轮完成并提交 restore/playback 设计；第 3 轮完成并提交 Storage snapshot/cursor/seal-reason v1。当前仍只有 6 个冻结 UI 文件未提交，产品 build 已 0 warnings / 0 errors，目标 UI 7/0/0，但新增后完整 77 项未获主线程权威退出码。
 - 已无安全旁路：恢复与删除涉及真实用户数据，Storage snapshot 属迁移，继续编码而不跑 tests 会违反数据正确与稳定优先级。按连续三轮阻塞规则停下；恢复时只执行冻结 App.Tests 77 项，绿后提交 UI 第一切片并继续 snapshot migration/回放，不重做任何已完成设计。
+
+## 2026-08-22 本地复测路径修复
+
+- 用户反馈此前聊天中的本地 exe 链接提示路径不存在。只读核对确认 `.tools/publish/first-test-20260822-live-refresh/InputTracker.exe` 实际存在，发布目录及其他历史目录均未丢失；问题属于聊天本地链接解析，不是产物删除。
+- `explorer.exe /select,"E:\Projects\InputTracker 20260704\.tools\publish\first-test-20260822-live-refresh\InputTracker.exe"` 已发出；Explorer 外层等待进程不自行退出，主任务只终止等待 cell，未关闭 Explorer。
+- 启动命令 `Start-Process -FilePath 'E:\Projects\InputTracker 20260704\.tools\publish\first-test-20260822-live-refresh\InputTracker.exe'` raw exit 0。随后 `Get-Process InputTracker` 返回 PID `32692`、`Responding=True`、Path 精确指向上述 exe；当前无路径缺失。下一步由用户在可见窗口/托盘完成真实输入增长、暂停/恢复和重开持久化复测。
+
+## 2026-08-24 UI 视觉收敛与本地绿色包
+
+- 范围：继续 `codex/ui-storage-integration` 的冻结 UI 第一切片，仅改 `src/InputTracker.App/**`、普通 `tests/InputTracker.App.Tests/**`、`BLOCKED.md` 与本进度；未改 Input/Storage/Acceptance/verify/依赖、权限或运行时网络。
+- 视觉结果：旧顶部 TabControl 收敛为左侧六页导航；顶部采集状态和暂停/恢复始终可见；统一 8px 系列间距、Segoe UI Variable、单一靛蓝强调色、圆角主次按钮、浅/深色动态资源与信息层级。总览、物理键盘热力图、鼠标轨迹、数据工具、设置、隐私页均保留原行为与命名。
+- 热力图：常见主区/功能/导航/方向/数字键盘以物理扫描码布局显示，E0/E1 独立，未知键保留在“其他物理键”；六级色阶文字对比度测试保持两主题逐级 ≥4.5:1，画布使用等比缩放避免窄窗口横向截断。
+- 第一轮完整 App 绿：主机 `dotnet test ... --no-build --no-restore` 为 77 passed / 0 failed / 0 skipped。视觉改版缩短开机启动披露后出现 76/1 红；恢复“启用/关闭开机启动”与完整绿色目录说明后 77/0/0，未放宽原断言。
+- 像素 QA：被忽略的 `.tools/ui-renderer` 直接实例化同一 WPF `MainWindow`，生成 `.tools/build/ui-visual/` 下 6 页 × 浅/深两主题共 12 张 1200×760 PNG。首个深色截图发现系统 ComboBox 浅底白字；补动态主题模板后第二张仍发现选中值继承深色前景，再去除嵌套 ContentPresenter 后第三张像素复核可读。
+- 最终红→绿：新增 ComboBox 主题链回归使 App 测试数 77→78；一次因测试仍要求旧直接资源链为 77/1 红，改为同时锁定 `DynamicResource PrimaryTextBrush` 与 `TemplateBinding Foreground` 后最终 78 passed / 0 failed / 0 skipped。最终 App build exit 0，0 warnings / 0 errors。
+- 发布：`dotnet publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\local-ui-test-20260824` exit 0；同步 `Start-Process ... --self-check -Wait` 返回 `SELF_CHECK_EXIT=0`。旧预览 PID 3908 仍在独立目录运行，未强杀以避免碰其测试数据；人工复测前必须先从旧托盘退出，再启动新包，避免双实例同时采集。
+- 未验证：真实桌面 1440×900/1920×1080、100%/150% 与浅/深色人工截图矩阵、领导视觉确认、两键盘两鼠标 2 小时、1000Hz 30 分钟仍为 B-003；自动 RenderTargetBitmap 不能冒充现场截图。
+- 下一步：精确审查/stage/commit 本 UI 切片；用户从新包确认视觉与真实输入记录。通过后继续 Storage playback snapshot seam 与逐记录鼠标回放，不用当前 2048 点概览冒充原始回放。

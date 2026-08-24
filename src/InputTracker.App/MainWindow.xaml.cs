@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly DashboardViewModel? _dashboard;
     private readonly StartupShortcutManager? _startup;
     private readonly AppStorageDataToolsController? _dataTools;
+    private readonly KeyboardLayoutModel _keyboardLayout = KeyboardLayoutModel.CreateDefault();
     private readonly DispatcherTimer _dashboardRefreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private bool _dashboardRefreshInProgress;
     private bool _dashboardRefreshPending;
@@ -39,6 +40,9 @@ public partial class MainWindow : Window
         _dashboardRefreshTimer.Tick += DashboardRefreshTimer_Tick;
         IsVisibleChanged += MainWindow_IsVisibleChanged;
         Closed += MainWindow_Closed;
+        KeyboardHeatmapPresentation emptyHeatmap = KeyboardHeatmapPresentation.Create(_keyboardLayout, []);
+        HeatmapItems.ItemsSource = emptyHeatmap.PhysicalKeys;
+        OtherHeatmapItems.ItemsSource = emptyHeatmap.OtherKeys;
         Render(_collection.Current);
         bool dataToolsAvailable = _dataTools is not null;
         ExportKeyboardButton.IsEnabled = dataToolsAvailable;
@@ -125,6 +129,19 @@ public partial class MainWindow : Window
     private void EnableStartupButton_Click(object sender, RoutedEventArgs e) => ChangeStartup(enable: true);
 
     private void DisableStartupButton_Click(object sender, RoutedEventArgs e) => ChangeStartup(enable: false);
+
+    private void LightThemeButton_Click(object sender, RoutedEventArgs e) => ApplyTheme(UiThemeKind.Light);
+
+    private void DarkThemeButton_Click(object sender, RoutedEventArgs e) => ApplyTheme(UiThemeKind.Dark);
+
+    private void ApplyTheme(UiThemeKind theme)
+    {
+        UiThemeController.Apply(System.Windows.Application.Current.Resources, theme);
+        ThemeStatusText.Text = theme == UiThemeKind.Dark
+            ? "当前为深色主题。"
+            : "当前为浅色主题。";
+        if (_dashboard is not null) RenderMouse(_dashboard.MousePoints);
+    }
 
     private void ChangeStartup(bool enable)
     {
@@ -371,12 +388,18 @@ public partial class MainWindow : Window
                     _updatingDeviceSelectors = false;
                 }
 
-                KeyboardSummary.Text = $"按键 {_dashboard.TotalPressCount:N0} 次 · 按住 {_dashboard.TotalHoldDurationMicroseconds / 1_000_000d:N1} 秒";
-                HeatmapItems.ItemsSource = _dashboard.Heatmap.Select(cell =>
-                    $"{(cell.IsE0 ? "E0-" : cell.IsE1 ? "E1-" : string.Empty)}{cell.MakeCode:X2}  {cell.PressCount:N0}");
-                MouseSummary.Text = _dashboard.SelectedMouseDeviceId is null
+                string keyboardSummary = $"按键 {_dashboard.TotalPressCount:N0} 次 · 按住 {_dashboard.TotalHoldDurationMicroseconds / 1_000_000d:N1} 秒";
+                KeyboardSummary.Text = keyboardSummary;
+                OverviewKeyboardSummary.Text = keyboardSummary;
+                KeyboardHeatmapPresentation heatmap = KeyboardHeatmapPresentation.Create(
+                    _keyboardLayout, _dashboard.Heatmap);
+                HeatmapItems.ItemsSource = heatmap.PhysicalKeys;
+                OtherHeatmapItems.ItemsSource = heatmap.OtherKeys;
+                string mouseSummary = _dashboard.SelectedMouseDeviceId is null
                     ? "选择鼠标后读取完整原始轨迹"
                     : $"已完整读取 {_dashboard.TotalMousePointCount:N0} 个原始点 · 绘制 {_dashboard.MousePoints.Count:N0} 个有界显示点";
+                MouseSummary.Text = mouseSummary;
+                OverviewMouseSummary.Text = mouseSummary;
                 if (refreshMouse) RenderMouse(_dashboard.MousePoints);
                 DashboardRefreshStatusText.Text = $"已刷新 {DateTime.Now:HH:mm:ss} · 采集状态以页面顶部为准";
                 refreshMouse = false;
@@ -403,6 +426,21 @@ public partial class MainWindow : Window
         DeviceChoice[] current = selector.Items.Cast<DeviceChoice>().ToArray();
         if (!current.SequenceEqual(choices)) selector.ItemsSource = choices;
         selector.SelectedValue = selectedDeviceId;
+    }
+
+    private void NavigationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Source, NavigationList)
+            || NavigationList.SelectedItem is not TabItem selected
+            || !string.Equals(selected.Tag?.ToString(), "MousePlayback", StringComparison.Ordinal)
+            || _dashboard is null)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            () => RenderMouse(_dashboard.MousePoints),
+            DispatcherPriority.Loaded);
     }
 
     private void RenderMouse(IReadOnlyList<MouseDisplayPoint> points)

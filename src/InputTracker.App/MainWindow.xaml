@@ -2,144 +2,864 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="InputTracker"
-        Width="960" Height="640" MinWidth="760" MinHeight="520"
+        Width="1200" Height="760" MinWidth="880" MinHeight="560"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource SurfaceBrush}"
+        Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI"
-        Foreground="{StaticResource TextBrush}"
+        Foreground="{DynamicResource PrimaryTextBrush}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
         StateChanged="Window_StateChanged"
         Closing="Window_Closing">
     <Window.Resources>
         <Style TargetType="Button">
-            <Setter Property="Padding" Value="20,10" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="MinWidth" Value="88" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonChrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Opacity" Value="0.86" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonChrome" Property="Opacity" Value="0.42" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
+
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <Style x:Key="SoftButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+
+        <Style x:Key="QuietButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinWidth" Value="72" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="DropDownToggle"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          Foreground="{DynamicResource PrimaryTextBrush}"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="ComboChrome"
+                                                Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="9">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="34" />
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Margin="11,0,4,0"
+                                                                  VerticalAlignment="Center"
+                                                                  Content="{TemplateBinding Content}"
+                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                                                <Path Grid.Column="1"
+                                                      Width="8" Height="5"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      Data="M 0 0 L 4 4 L 8 0"
+                                                      Stroke="{DynamicResource SecondaryTextBrush}"
+                                                      StrokeThickness="1.5"
+                                                      StrokeStartLineCap="Round"
+                                                      StrokeEndLineCap="Round" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   PopupAnimation="Fade">
+                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="320"
+                                        Margin="0,4,0,0"
+                                        Padding="4"
+                                        Background="{DynamicResource CardBackgroundBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <ScrollViewer CanContentScroll="True">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="DropDownToggle" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemChrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7">
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="ItemChrome" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Padding" Value="24" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style x:Key="CompactCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="CornerRadius" Value="12" />
+        </Style>
+
+        <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI" />
+            <Setter Property="FontSize" Value="26" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+        </Style>
+
+        <Style x:Key="PageSubtitleStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <Style x:Key="NavigationTabItemStyle" TargetType="TabItem">
+            <Setter Property="Width" Value="196" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="NavigationChrome"
+                                Background="Transparent"
+                                CornerRadius="10"
+                                Cursor="Hand">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="4" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="SelectionIndicator"
+                                        Width="4" Height="22"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource AccentBrush}"
+                                        CornerRadius="2"
+                                        Visibility="Collapsed" />
+                                <ContentPresenter Grid.Column="1"
+                                                  Margin="14,0,12,0"
+                                                  VerticalAlignment="Center"
+                                                  ContentSource="Header" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavigationChrome" Property="Background" Value="{DynamicResource SubtleBackgroundBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="NavigationChrome" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                <Setter TargetName="SelectionIndicator" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="NavigationChrome" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavigationTabControlStyle" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource NavigationTabItemStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid KeyboardNavigation.TabNavigation="Local">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0"
+                                    Padding="12"
+                                    Background="{DynamicResource SidebarBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Margin="10,6,0,0"
+                                               Text="浏览"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    <TabPanel Grid.Row="2" IsItemsHost="True" />
+                                    <Border Grid.Row="3"
+                                            Margin="4,12,4,4"
+                                            Padding="12"
+                                            Background="{DynamicResource SubtleBackgroundBrush}"
+                                            CornerRadius="10">
+                                        <StackPanel>
+                                            <TextBlock Text="本地绿色版" FontSize="12" FontWeight="SemiBold" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Text="数据留在程序目录"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            <Border Grid.Column="2" Background="Transparent">
+                                <AdornerDecorator>
+                                    <ContentPresenter ContentSource="SelectedContent" />
+                                </AdornerDecorator>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="KeyboardKeyTemplate">
+            <Border Width="{Binding Width}" Height="{Binding Height}"
+                    Padding="4" CornerRadius="7"
+                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                    ToolTip="{Binding AccessibleLabel}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{DynamicResource HeatmapLevel0Brush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="1"><Setter Property="Background" Value="{DynamicResource HeatmapLevel1Brush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="2"><Setter Property="Background" Value="{DynamicResource HeatmapLevel2Brush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="3"><Setter Property="Background" Value="{DynamicResource HeatmapLevel3Brush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="4"><Setter Property="Background" Value="{DynamicResource HeatmapLevel4Brush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="5"><Setter Property="Background" Value="{DynamicResource HeatmapLevel5Brush}" /></DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Border.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource HeatmapLevel0TextBrush}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="1"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel1TextBrush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="2"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel2TextBrush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="3"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel3TextBrush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="4"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel4TextBrush}" /></DataTrigger>
+                            <DataTrigger Binding="{Binding HeatLevel}" Value="5"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel5TextBrush}" /></DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Resources>
+                <Grid>
+                    <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Top" />
+                    <TextBlock Text="{Binding CountText}" FontSize="10"
+                               HorizontalAlignment="Center" VerticalAlignment="Bottom" />
+                </Grid>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <Grid Margin="40">
+
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="24" />
+            <RowDefinition Height="16" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="24" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="18" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="16" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="16" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="16" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0">
-            <TextBlock Text="InputTracker" FontSize="32" FontWeight="SemiBold" />
-            <TextBlock Margin="0,8,0,0" Text="本地输入统计 · 采集边界始终可见" FontSize="15" Foreground="{StaticResource MutedTextBrush}" />
-        </StackPanel>
-
-        <Border Grid.Row="2" Padding="24" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
-            <StackPanel>
-                <TextBlock x:Name="StatusLabel" FontSize="24" FontWeight="SemiBold" />
-                <TextBlock x:Name="StatusExplanation" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="15" Foreground="{StaticResource MutedTextBrush}" />
-                <TextBlock x:Name="DirectoryText" Margin="0,16,0,0" TextWrapping="Wrap" FontFamily="Consolas" FontSize="13" />
-                <StackPanel Margin="0,24,0,0" Orientation="Horizontal">
-                    <Button x:Name="PauseButton" Click="PauseButton_Click" Content="暂停" />
-                    <Button x:Name="ResumeButton" Click="ResumeButton_Click" Content="恢复" />
-                    <Button Click="HideButton_Click" Content="隐藏到托盘" />
-                </StackPanel>
-            </StackPanel>
-        </Border>
-
-        <Border Grid.Row="4" Padding="24" CornerRadius="12" Background="#FFF1F5F9">
-            <StackPanel>
-                <TextBlock Text="隐私边界" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="PrivacyExplanation" Margin="0,12,0,0" TextWrapping="Wrap"
-                           Foreground="{StaticResource MutedTextBrush}" />
-            </StackPanel>
-        </Border>
-
-        <Grid Grid.Row="6">
+        <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Border Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
-                <StackPanel>
-                    <TextBlock Text="真实统计" FontSize="18" FontWeight="SemiBold" />
-                    <WrapPanel Margin="0,12,0,0">
-                        <ComboBox x:Name="PeriodSelector" Width="120" SelectionChanged="QuerySelection_Changed">
-                            <ComboBoxItem Content="日" Tag="Day" IsSelected="True" />
-                            <ComboBoxItem Content="周" Tag="Week" />
-                            <ComboBoxItem Content="月" Tag="Month" />
-                            <ComboBoxItem Content="年" Tag="Year" />
-                        </ComboBox>
-                        <ComboBox x:Name="KeyboardDeviceSelector" Width="220" Margin="8,0,0,0" DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" SelectionChanged="QuerySelection_Changed" />
-                        <Button x:Name="RefreshDashboardButton" Margin="8,0,0,0" Click="RefreshDashboardButton_Click" Content="刷新统计" />
-                    </WrapPanel>
-                    <TextBlock x:Name="DashboardRefreshStatusText" Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource MutedTextBrush}"
-                               Text="统计会每 2 秒自动刷新；鼠标完整轨迹在选择设备或点击刷新时更新。" TextWrapping="Wrap" />
-                    <TextBlock x:Name="KeyboardSummary" Margin="0,12,0,0" Text="尚无键盘聚合" TextWrapping="Wrap" />
-                    <ItemsControl x:Name="HeatmapItems" Margin="0,8,0,0">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,8,8" Padding="8" MinWidth="72" Background="#FFE2E8F0" CornerRadius="6">
-                                    <TextBlock Text="{Binding}" Foreground="#FF172033" />
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+            <StackPanel Orientation="Horizontal">
+                <Border Width="44" Height="44"
+                        Background="{DynamicResource AccentBrush}"
+                        CornerRadius="13">
+                    <TextBlock Text="IT"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontFamily="Segoe UI Variable Display, Segoe UI"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource AccentTextBrush}" />
+                </Border>
+                <StackPanel Margin="12,1,0,0">
+                    <TextBlock Text="InputTracker"
+                               FontFamily="Segoe UI Variable Display, Segoe UI"
+                               FontSize="22"
+                               FontWeight="SemiBold" />
+                    <TextBlock Margin="0,3,0,0"
+                               Text="你的输入活动，只留在本机"
+                               FontSize="12"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
                 </StackPanel>
-            </Border>
-            <Border Grid.Column="2" Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
-                <StackPanel>
-                    <TextBlock Text="逐设备鼠标轨迹" FontSize="18" FontWeight="SemiBold" />
-                    <ComboBox x:Name="MouseDeviceSelector" Width="220" Margin="0,12,0,0" HorizontalAlignment="Left" DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" SelectionChanged="QuerySelection_Changed" />
-                    <TextBlock x:Name="MouseSummary" Margin="0,12,0,0" Text="选择鼠标后读取完整原始轨迹" TextWrapping="Wrap" />
-                    <Canvas x:Name="MouseCanvas" Height="128" Margin="0,12,0,0" Background="#FFF8FAFC" ClipToBounds="True" />
-                    <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource MutedTextBrush}" Text="绘制副本按时间合并为最多 2048 个显示点；Storage 原始点读取不抽样。" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+            </StackPanel>
+            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                <Button Style="{StaticResource QuietButtonStyle}" Click="HideButton_Click" Content="隐藏" />
+                <Button Style="{StaticResource QuietButtonStyle}" Click="ExitButton_Click" Content="退出" />
+            </WrapPanel>
         </Grid>
 
-        <Border Grid.Row="8" Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
-            <StackPanel>
-                <TextBlock Text="绿色版与开机启动" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock x:Name="StartupStatusText" Margin="0,12,0,0" TextWrapping="Wrap" />
-                <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                    <Button Click="EnableStartupButton_Click" Content="启用开机启动" />
-                    <Button Click="DisableStartupButton_Click" Content="关闭开机启动" />
+        <Border x:Name="GlobalCollectionBar"
+                Grid.Row="2"
+                Padding="18,14"
+                Background="{DynamicResource AccentSoftBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Width="10" Height="10"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource AccentBrush}"
+                        CornerRadius="5" />
+                <StackPanel Grid.Column="2">
+                    <TextBlock x:Name="StatusLabel" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock x:Name="StatusExplanation"
+                               Margin="0,3,16,0"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                    <TextBlock x:Name="DirectoryText"
+                               Margin="0,3,16,0"
+                               TextWrapping="Wrap"
+                               FontFamily="Cascadia Mono, Consolas"
+                               FontSize="10"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
                 </StackPanel>
-                <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
-                           Text="数据、配置、日志和备份均位于上方显示的程序目录。卸载前先退出 InputTracker 并关闭开机启动；需要保留数据时先备份整个程序目录，然后删除该绿色目录即可。不要在程序运行时移动或删除数据文件。" />
-            </StackPanel>
-        </Border>
-
-        <Border Grid.Row="10" Padding="20" CornerRadius="12" Background="{StaticResource CardBrush}" BorderBrush="#1A172033" BorderThickness="1">
-            <StackPanel>
-                <TextBlock Text="本地数据工具" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}"
-                           Text="导出和备份写入程序目录。删除当前只提供精确影响预览，当前存储格式阻塞实际删除。恢复只检查程序目录内备份并二次确认，离线恢复执行尚未接通。" />
-                <WrapPanel Margin="0,12,0,0">
-                    <Button x:Name="ExportKeyboardButton" Click="ExportKeyboardButton_Click" Content="导出键盘 CSV + PNG" />
-                    <Button x:Name="CreateBackupButton" Click="CreateBackupButton_Click" Content="创建备份" />
-                    <Button x:Name="PreviewKeyboardDeletionButton" Click="PreviewKeyboardDeletionButton_Click" Content="预览所选键盘删除" />
-                    <Button x:Name="PreviewMouseDeletionButton" Click="PreviewMouseDeletionButton_Click" Content="预览所选鼠标删除" />
-                    <Button x:Name="ValidateRestoreButton" Click="ValidateRestoreButton_Click" Content="选择并检查恢复备份" />
+                <WrapPanel Grid.Column="3" VerticalAlignment="Center">
+                    <Button x:Name="PauseButton"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Click="PauseButton_Click"
+                            Content="暂停采集" />
+                    <Button x:Name="ResumeButton"
+                            Click="ResumeButton_Click"
+                            Content="恢复采集" />
                 </WrapPanel>
-                <TextBlock x:Name="DataToolsStatusText" Margin="0,12,0,0" Text="尚未执行数据操作。" TextWrapping="Wrap" />
-            </StackPanel>
+            </Grid>
         </Border>
 
-        <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Click="ExitButton_Click" Content="退出" />
-        </StackPanel>
+        <Grid x:Name="PageContentHost" Grid.Row="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="14" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Style="{StaticResource CompactCardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center" Text="统计周期" FontSize="12" FontWeight="SemiBold" />
+                    <ComboBox x:Name="PeriodSelector" Grid.Column="2" Width="104"
+                              SelectionChanged="QuerySelection_Changed">
+                        <ComboBoxItem Content="日" Tag="Day" IsSelected="True" />
+                        <ComboBoxItem Content="周" Tag="Week" />
+                        <ComboBoxItem Content="月" Tag="Month" />
+                        <ComboBoxItem Content="年" Tag="Year" />
+                    </ComboBox>
+                    <Button x:Name="RefreshDashboardButton"
+                            Grid.Column="4"
+                            Style="{StaticResource SoftButtonStyle}"
+                            Margin="0"
+                            Click="RefreshDashboardButton_Click"
+                            Content="立即刷新" />
+                    <TextBlock x:Name="DashboardRefreshStatusText"
+                               Grid.Column="6"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="统计每 2 秒自动刷新"
+                               TextWrapping="Wrap" />
+                </Grid>
+            </Border>
+
+            <TabControl x:Name="NavigationList"
+                        Grid.Row="2"
+                        TabStripPlacement="Left"
+                        Style="{StaticResource NavigationTabControlStyle}"
+                        SelectionChanged="NavigationList_SelectionChanged">
+                <TabItem Header="总览" Tag="Overview">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="2,2,6,16">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="活动概览" />
+                            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                                       Text="当前周期内的键盘与鼠标活动，按设备独立统计。" />
+                            <Grid Margin="0,20,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="键盘活动" />
+                                        <TextBlock x:Name="OverviewKeyboardSummary"
+                                                   Margin="0,14,0,0"
+                                                   Text="尚无键盘聚合"
+                                                   FontSize="20"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,12,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="在热力图中查看每个物理键位的强度与次数。"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="鼠标活动" />
+                                        <TextBlock x:Name="OverviewMouseSummary"
+                                                   Margin="0,14,0,0"
+                                                   Text="尚未选择鼠标"
+                                                   FontSize="20"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,12,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="选择设备后查看当前周期内的完整原始轨迹。"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Border Margin="0,16,0,0"
+                                    Style="{StaticResource CompactCardStyle}"
+                                    Background="{DynamicResource SubtleBackgroundBrush}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="32" Height="32"
+                                            Background="{DynamicResource AccentSoftBrush}"
+                                            CornerRadius="16">
+                                        <TextBlock Text="✓" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontSize="15" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="隐私边界持续生效" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,3,0,0"
+                                                   Text="键盘不保存文字、按键顺序、窗口或进程信息。"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="键盘热力图" Tag="KeyboardHeatmap">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="2,2,6,16">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="键盘热力图" />
+                            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                                       Text="按物理扫描码查看使用强度，不保存文字和按键顺序。" />
+                            <Border Margin="0,20,0,0" Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="所选设备" />
+                                            <TextBlock x:Name="KeyboardSummary" Margin="0,8,16,0"
+                                                       Text="尚无键盘聚合" FontSize="16" FontWeight="SemiBold"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="KeyboardDeviceSelector" Grid.Column="1" Width="260"
+                                                  DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId"
+                                                  SelectionChanged="QuerySelection_Changed" />
+                                    </Grid>
+                                    <Grid Margin="0,18,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="11"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        <WrapPanel Grid.Column="1" Margin="8,0,0,0">
+                                            <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel0Brush}" CornerRadius="3" />
+                                            <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel1Brush}" CornerRadius="3" />
+                                            <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel2Brush}" CornerRadius="3" />
+                                            <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel3Brush}" CornerRadius="3" />
+                                            <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel4Brush}" CornerRadius="3" />
+                                            <Border Width="30" Height="10" Margin="0,0,8,0" Background="{DynamicResource HeatmapLevel5Brush}" CornerRadius="3" />
+                                            <TextBlock Margin="0,-3,0,0" Text="高" FontSize="11"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        </WrapPanel>
+                                    </Grid>
+                                    <Border Margin="0,18,0,0"
+                                            Padding="14"
+                                            Background="{DynamicResource SubtleBackgroundBrush}"
+                                            CornerRadius="12">
+                                        <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                                            <ItemsControl x:Name="HeatmapItems"
+                                                          Width="1180" Height="340"
+                                                          ItemTemplate="{StaticResource KeyboardKeyTemplate}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemContainerStyle>
+                                                    <Style TargetType="ContentPresenter">
+                                                        <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                                    </Style>
+                                                </ItemsControl.ItemContainerStyle>
+                                            </ItemsControl>
+                                        </Viewbox>
+                                    </Border>
+                                    <TextBlock Margin="0,18,0,0" Text="其他物理键" FontWeight="SemiBold" />
+                                    <TextBlock Margin="0,4,0,10"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="未识别的扫描码仍会显示在这里，不会从聚合中丢失。" />
+                                    <ItemsControl x:Name="OtherHeatmapItems" ItemTemplate="{StaticResource KeyboardKeyTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="鼠标轨迹" Tag="MousePlayback">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="2,2,6,16">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="鼠标轨迹" />
+                            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                                       Text="逐设备查看当前周期内的完整原始移动轨迹。" />
+                            <Border Margin="0,20,0,0" Style="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="轨迹画布" />
+                                            <TextBlock x:Name="MouseSummary" Margin="0,8,16,0"
+                                                       Text="选择鼠标后读取完整原始轨迹"
+                                                       FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="MouseDeviceSelector" Grid.Column="1" Width="260"
+                                                  DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId"
+                                                  SelectionChanged="QuerySelection_Changed" />
+                                    </Grid>
+                                    <Border Margin="0,18,0,0"
+                                            Padding="1"
+                                            Background="{DynamicResource BorderBrush}"
+                                            CornerRadius="13">
+                                        <Canvas x:Name="MouseCanvas" Height="320"
+                                                Background="{DynamicResource SubtleBackgroundBrush}"
+                                                ClipToBounds="True" />
+                                    </Border>
+                                    <TextBlock Margin="0,10,0,0"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="显示层最多保留 2048 个绘制点；Storage 原始轨迹不抽样。时间轴播放仍在开发中。"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="数据工具" Tag="DataTools">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="2,2,6,16">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="数据工具" />
+                            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                                       Text="导出、备份和数据范围预览均只使用程序目录。" />
+                            <Grid Margin="0,20,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="导出与备份" />
+                                        <TextBlock Margin="0,8,0,0" Text="创建可携带的本地副本" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,6,0,16"
+                                                   Text="导出当前键盘统计，或备份整个本地数据集。"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" />
+                                        <Button x:Name="ExportKeyboardButton" Style="{StaticResource PrimaryButtonStyle}"
+                                                HorizontalAlignment="Left" Click="ExportKeyboardButton_Click"
+                                                Content="导出 CSV + PNG" />
+                                        <Button x:Name="CreateBackupButton" HorizontalAlignment="Left"
+                                                Click="CreateBackupButton_Click" Content="创建完整备份" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="敏感操作" />
+                                        <TextBlock Margin="0,8,0,0" Text="先预览，再由你确认" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,6,0,16"
+                                                   Text="当前版本只预览删除影响；恢复只检查备份，不会更改现有数据。"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" />
+                                        <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
+                                                Click="PreviewKeyboardDeletionButton_Click" Content="预览键盘删除" />
+                                        <Button x:Name="PreviewMouseDeletionButton" HorizontalAlignment="Left"
+                                                Click="PreviewMouseDeletionButton_Click" Content="预览鼠标删除" />
+                                        <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"
+                                                Click="ValidateRestoreButton_Click" Content="检查恢复备份" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Border Margin="0,16,0,0"
+                                    Style="{StaticResource CompactCardStyle}"
+                                    Background="{DynamicResource SubtleBackgroundBrush}">
+                                <StackPanel>
+                                    <TextBlock Text="操作状态" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    <TextBlock x:Name="DataToolsStatusText" Margin="0,5,0,0"
+                                               Text="尚未执行数据操作。" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="设置" Tag="Settings">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="2,2,6,16">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="设置" />
+                            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                                       Text="外观和开机启动都由你明确控制。" />
+                            <Border Margin="0,20,0,0" Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="外观" />
+                                        <TextBlock Margin="0,8,0,0" Text="界面主题" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="ThemeStatusText" Margin="0,5,0,0"
+                                                   Text="当前为浅色主题。"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </StackPanel>
+                                    <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource SoftButtonStyle}" Click="LightThemeButton_Click" Content="浅色" />
+                                        <Button Click="DarkThemeButton_Click" Content="深色" />
+                                    </WrapPanel>
+                                </Grid>
+                            </Border>
+                            <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="Windows 启动" />
+                                        <TextBlock Margin="0,8,0,0" Text="随 Windows 启动" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="StartupStatusText" Margin="0,5,24,0"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </StackPanel>
+                                    <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource PrimaryButtonStyle}" Click="EnableStartupButton_Click" Content="启用开机启动" />
+                                        <Button Click="DisableStartupButton_Click" Content="关闭开机启动" />
+                                    </WrapPanel>
+                                </Grid>
+                            </Border>
+                            <TextBlock Margin="4,16,4,0"
+                                       Text="数据、配置、日志和备份均位于上方显示的程序目录。卸载前先退出 InputTracker 并关闭开机启动；需要保留数据时先备份整个程序目录，然后删除该绿色目录即可。"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="隐私" Tag="Privacy">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="2,2,6,16">
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="隐私与控制" />
+                            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                                       Text="你始终知道采集状态，也可以随时暂停或退出。" />
+                            <Border Margin="0,20,0,0"
+                                    Style="{StaticResource CardStyle}"
+                                    Background="{DynamicResource AccentSoftBrush}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource CardTitleStyle}" Text="当前采集边界" />
+                                    <TextBlock x:Name="PrivacyExplanation"
+                                               Margin="0,10,0,0"
+                                               FontSize="15"
+                                               LineHeight="24"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource CompactCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="键盘" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="只累计设备、物理键、日期的次数与时长。"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Style="{StaticResource CompactCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="鼠标" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="原始轨迹按设备保存在程序目录，直到你主动删除。"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </Grid>
     </Grid>
-    </ScrollViewer>
 </Window>
