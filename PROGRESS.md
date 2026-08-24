@@ -1104,3 +1104,13 @@
 - 发布：`dotnet publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\local-ui-test-20260824` exit 0；同步 `Start-Process ... --self-check -Wait` 返回 `SELF_CHECK_EXIT=0`。旧预览 PID 3908 仍在独立目录运行，未强杀以避免碰其测试数据；人工复测前必须先从旧托盘退出，再启动新包，避免双实例同时采集。
 - 未验证：真实桌面 1440×900/1920×1080、100%/150% 与浅/深色人工截图矩阵、领导视觉确认、两键盘两鼠标 2 小时、1000Hz 30 分钟仍为 B-003；自动 RenderTargetBitmap 不能冒充现场截图。
 - 下一步：精确审查/stage/commit 本 UI 切片；用户从新包确认视觉与真实输入记录。通过后继续 Storage playback snapshot seam 与逐记录鼠标回放，不用当前 2048 点概览冒充原始回放。
+
+## 2026-08-24 Storage 鼠标回放固定快照
+
+- 分支/提交：`codex/ui-storage-integration@7fce302`，提交 `feat: add immutable mouse playback snapshots`；10 个文件，仅 `src/InputTracker.Storage/**` 与普通 `tests/InputTracker.Storage.Tests/**`，未改 App/Input/Acceptance/verify、依赖、权限或用户数据。
+- 数据协议：schema v5 为 `mouse_spool_segments` 版本化增加 `seal_reason`；正常封口精确记录原因，v4 旧行迁为 `LegacyUnknown`，崩溃或旧文件收养为 `RecoveryUnknown`。公开回放 DTO 不含设备原始身份、键盘文字、窗口、进程或应用字段。
+- 快照语义：Open 在 worker 上验证固定 durable watermark 下全部 spool/chunk 后才返回；live append 不进入已打开快照。游标绑定 SnapshotId，并以 `(UtcMicroseconds, Sequence)` 精确校验，相同 UTC 不合并；伪造、跨快照、损坏尾段均 fail closed。读租约覆盖精确 spool/chunk 路径，Dispose 取消枚举并释放，不停止采集。
+- 子任务红→绿：接口未实现时 build `CS0246` 红；schema v5 首轮 non-Spike 177 passed / 12 failed，原因是既有 schema=4 期望与 v5 shape 校验未同步。修复后子任务 build exit 0、0 warnings / 0 errors；Storage non-Spike 195/0/0；`git diff --check` exit 0。
+- 主线程复核：Storage.Tests build exit 0、0 warnings / 0 errors、0.77s；`MousePlaybackSnapshotTests` 8 passed / 0 failed / 0 skipped、9.586s，其中百万记录逐条 hash、顺序与 managed memory 增长 ≤128MiB；`Category!=StorageSpike` 195/0/0、12s；solution Release build exit 0、7 项目、0 warnings / 0 errors、2.58s。
+- 未验证：本切片未重跑 4 分钟 StorageSpike、统一 solution test/verify/publish；真实两鼠标、1000Hz、物理掉电仍为现场阻塞，内存租约要求未来清理路径调用 `MousePlaybackReadLease.IsLeased` 后才能删除文件。
+- 下一步：App 使用该快照做每条原始记录都参与的有界回放，预取队列 ≤4096、UI 尾迹 ≤2048，提供播放/暂停、0.25/0.5/1/2/4 倍速、精确进度和 seek；完成后运行 App 普通测试、统一 solution test、Portable verify 与本地自包含发布。

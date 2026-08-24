@@ -4,7 +4,7 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：`codex/ui-storage-integration@7461ceb` 已提交六页侧边导航、浅深主题与物理键盘热力图，App 78/0/0、本地绿色包 self-check exit 0；用户明确暂缓 GitHub。当前按已冻结协议实现 Storage playback snapshot/cursor/seal-reason seam，随后接逐记录鼠标回放；范围删除执行保持 B-011。
+- 当前阶段：`codex/ui-storage-integration@7fce302` 已提交 Storage playback snapshot/cursor/seal-reason seam；Storage 定向 8/0/0、非尖峰 195/0/0、solution build 0 warnings / 0 errors。下一步接入逐记录鼠标回放；用户明确暂缓 GitHub，范围删除执行保持 B-011。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -36,7 +36,7 @@
 | C31 | 用户测试与下一步建议 | 离线恢复执行接线安全设计 | 已完成 | 只读 App/Storage 生命周期与恢复协议 | `docs/storage/offline-restore-app-design.md`；基线 `7835edf` | 是：`/root/user_testing_next_steps` | 最高可用 / xhigh | 用户数据替换、writer lock、journal 与进程生命周期为最高风险 | 仅设计；未接 UI、未执行真实数据。先完成 facade/lease/单owner/临时A-B往返与故障回滚，按钮才可启用 |
 | C32 | UI 完成度 | 鼠标轨迹完整回放与 Storage 游标前置设计 | 已完成 | 只读 App/Storage 查询与 UI 状态机 | `docs/ui/mouse-playback-design.md`；基线 `7835edf` | 是：`/root/ui_completion` | terra / high | 百万点有界处理、异步 generation 与数据语义交叉 | 现有固定水位流支持从头播放；任意 seek 需独立 snapshot/cursor/segment seam，禁止用2048点概览冒充原始回放 |
 | C33 | Storage Stats | 鼠标回放固定快照、稳定游标与边界迁移设计 | 已完成 | 只读 Storage query/schema/ingestion | `docs/storage/mouse-playback-snapshot-v1.md`；基线 `bc25821` | 是：主线程可定位文档 | terra / high；schema migration 实施时 xhigh | 固定水位、同UTC零重漏、百万点有界与seal reason迁移为数据正确性门 | 仅设计未改代码；v1需新增seal_reason，legacy/recovery unknown均强制断段，任意seek在seam绿前禁用 |
-| C34 | Storage 回放快照 | 实现固定快照、精确游标、边界原因迁移与只读租约 | 进行中 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**`、必要 Storage docs | `/root/storage_playback_snapshot`；基线 `7461ceb` | 是：`/root/storage_playback_snapshot` | terra / high；主线程 xhigh 复审迁移 | schema migration、同 UTC 零重漏、百万点有界与并发快照为高风险数据正确性工作 | 不改 App/Input/Acceptance/verify/Git，不操作真实数据；seam 全绿后才允许 UI seek/逐记录回放 |
+| C34 | Storage 回放快照 | 实现固定快照、精确游标、边界原因迁移与只读租约 | 已完成并提交 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | `7fce302` | 是：`/root/storage_playback_snapshot` | terra / high；主线程 xhigh 复审迁移 | schema migration、同 UTC 零重漏、百万点有界与并发快照为高风险数据正确性工作 | schema v5、legacy/recovery 原因、异步 fail-closed 游标、live append 隔离与 lease 释放完成；8/0/0、195/0/0，物理硬件/掉电仍 pending |
 
 ## 协调说明
 
