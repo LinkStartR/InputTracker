@@ -189,6 +189,22 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public async Task<StorageMousePlaybackSnapshot> OpenMousePlaybackSnapshotAsync(
+        Guid deviceId,
+        StorageUtcRange utcRange,
+        CancellationToken cancellationToken = default)
+    {
+        StorageQuery.MouseQuerySnapshot snapshot;
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            snapshot = StorageQuery.CaptureMouseSnapshot(_database, deviceId, utcRange);
+        }
+
+        return await StorageMousePlaybackSnapshot.OpenAsync(snapshot, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public StorageExportArtifact ExportKeyboardCsv(
         StorageKeyboardPeriodResult result,
         string relativePath)

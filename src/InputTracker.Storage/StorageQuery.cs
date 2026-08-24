@@ -102,11 +102,19 @@ internal static class StorageQuery
         return StreamMouseSnapshot(snapshot, cancellationToken);
     }
 
-    private static MouseQuerySnapshot CaptureMouseSnapshot(
+    internal static MouseQuerySnapshot CaptureMouseSnapshot(
         StorageDatabase database,
         Guid deviceId,
         StorageUtcRange utcRange)
     {
+        ArgumentNullException.ThrowIfNull(database);
+        if (deviceId == Guid.Empty)
+        {
+            throw new ArgumentException("A mouse device identifier must be non-empty.", nameof(deviceId));
+        }
+
+        utcRange.Validate();
+        EnsureDeviceKind(database.Connection, deviceId, StorageDeviceKind.Mouse);
         long watermark = database.ReadMouseDeviceWatermarks()
             .TryGetValue(deviceId, out long sequence) ? sequence : 0;
         var segments = new List<MouseQuerySegment>();
@@ -114,7 +122,7 @@ internal static class StorageQuery
         command.CommandText = """
             SELECT s.spool_segment_id, s.calibration_segment_id, s.relative_path,
                    s.first_sequence, s.last_sequence, s.record_count, s.committed_length,
-                   s.spool_file_sha256, s.canonical_sha256,
+                   s.spool_file_sha256, s.canonical_sha256, s.seal_reason,
                    c.session_id, cs.frequency, c.monotonic_anchor, c.utc_anchor_us,
                    c.uncertainty_ticks, c.time_zone_id
             FROM mouse_spool_segments s
@@ -131,7 +139,7 @@ internal static class StorageQuery
         {
             if (!Guid.TryParseExact(reader.GetString(0), "N", out Guid segmentId)
                 || segmentId == Guid.Empty
-                || !Guid.TryParseExact(reader.GetString(9), "N", out Guid sessionId)
+                || !Guid.TryParseExact(reader.GetString(10), "N", out Guid sessionId)
                 || sessionId == Guid.Empty)
             {
                 throw new InvalidDataException("A mouse query directory identity is invalid.");
@@ -139,11 +147,11 @@ internal static class StorageQuery
 
             var calibration = new TimeCalibrationSegment(
                 sessionId,
-                reader.GetInt64(10),
                 reader.GetInt64(11),
                 reader.GetInt64(12),
                 reader.GetInt64(13),
-                reader.GetString(14));
+                reader.GetInt64(14),
+                reader.GetString(15));
             StorageKeyboardTime.ValidateCalibration(calibration);
             segments.Add(new MouseQuerySegment(
                 segmentId,
@@ -156,6 +164,7 @@ internal static class StorageQuery
                 reader.GetInt64(6),
                 reader.GetString(7),
                 reader.GetString(8),
+                ReadSealReason(reader.GetInt64(9)),
                 calibration));
         }
 
@@ -209,7 +218,7 @@ internal static class StorageQuery
         }
     }
 
-    private static void ValidateAllSegments(
+    internal static void ValidateAllSegments(
         MouseQuerySnapshot snapshot,
         CancellationToken cancellationToken)
     {
@@ -234,7 +243,7 @@ internal static class StorageQuery
         }
     }
 
-    private static MouseSpoolSegment ReadAndValidateSegment(
+    internal static MouseSpoolSegment ReadAndValidateSegment(
         MouseQuerySnapshot snapshot,
         MouseQuerySegment row)
     {
@@ -261,6 +270,28 @@ internal static class StorageQuery
 
         ValidateEquivalentChunk(snapshot, row, segment.Records, canonicalHash);
         return segment;
+    }
+
+    internal static IReadOnlyList<string> GetReadLeasePaths(MouseQuerySnapshot snapshot)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (MouseQuerySegment segment in snapshot.Segments)
+        {
+            paths.Add(ResolveContainedFile(
+                snapshot.Layout.SpoolDirectory,
+                segment.RelativePath,
+                segment.SegmentId.ToString("N") + ".mspool"));
+        }
+
+        foreach (MouseChunkCatalogEntry chunk in snapshot.Chunks)
+        {
+            paths.Add(ResolveContainedFile(
+                snapshot.Layout.ChunkDirectory,
+                chunk.RelativePath,
+                chunk.ChunkId.ToString("N") + ".mchunk"));
+        }
+
+        return paths.Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static void ValidateChunkRanges(MouseQuerySnapshot snapshot)
@@ -421,7 +452,7 @@ internal static class StorageQuery
     private static string FormatDate(DateOnly value) =>
         value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    private sealed record MouseQuerySnapshot(
+    internal sealed record MouseQuerySnapshot(
         StorageLayout Layout,
         Guid DeviceId,
         StorageUtcRange UtcRange,
@@ -429,7 +460,7 @@ internal static class StorageQuery
         IReadOnlyList<MouseQuerySegment> Segments,
         IReadOnlyList<MouseChunkCatalogEntry> Chunks);
 
-    private sealed record MouseQuerySegment(
+    internal sealed record MouseQuerySegment(
         Guid SegmentId,
         Guid DeviceId,
         long CalibrationSegmentId,
@@ -440,6 +471,13 @@ internal static class StorageQuery
         long CommittedLength,
         string SpoolFileSha256,
         string CanonicalSha256,
+        StorageMousePlaybackBoundaryReason BoundaryReason,
         TimeCalibrationSegment Calibration);
+
+    private static StorageMousePlaybackBoundaryReason ReadSealReason(long value) =>
+        value is >= (long)StorageMousePlaybackBoundaryReason.RangeStart
+            and <= (long)StorageMousePlaybackBoundaryReason.RecoveryUnknown
+            ? (StorageMousePlaybackBoundaryReason)value
+            : throw new InvalidDataException("A mouse spool segment boundary reason is invalid.");
 
 }

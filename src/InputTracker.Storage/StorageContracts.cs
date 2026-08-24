@@ -195,3 +195,42 @@ public readonly record struct StorageMouseRecord(
     ushort ButtonChanges,
     short VerticalWheelDelta,
     short HorizontalWheelDelta);
+
+public enum StorageMousePlaybackBoundaryReason
+{
+    RangeStart = 0,
+    DurationLimit = 1,
+    EventLimit = 2,
+    CanonicalSizeLimit = 3,
+    DeviceBoundary = 4,
+    CalibrationBoundary = 5,
+    PauseBoundary = 6,
+    ExplicitFlush = 7,
+    LegacyUnknown = 8,
+    RecoveryUnknown = 9
+}
+
+public readonly record struct StorageMousePlaybackCursor(
+    Guid SnapshotId,
+    long Sequence,
+    long UtcMicroseconds);
+
+public sealed record StorageMousePlaybackSnapshotInfo(
+    Guid SnapshotId,
+    Guid DeviceId,
+    StorageUtcRange UtcRange,
+    long DurableWatermark,
+    long RecordCount,
+    StorageMousePlaybackCursor? First,
+    StorageMousePlaybackCursor? Last);
+
+/// <summary>
+/// One exact mouse record in a playback snapshot. <see cref="BoundaryReason"/> is the
+/// persisted reason for its containing spool segment; consumers treat it as a display
+/// discontinuity only when <see cref="StartsNewSegment"/> is true.
+/// </summary>
+public readonly record struct StorageMousePlaybackRecord(
+    StorageMouseRecord Record,
+    bool StartsNewSegment,
+    StorageMousePlaybackBoundaryReason BoundaryReason,
+    StorageMousePlaybackCursor Cursor);

@@ -5,7 +5,7 @@ namespace InputTracker.Storage;
 
 internal static class StorageSchema
 {
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     public const string Version1Sql = """
         CREATE TABLE schema_migrations (
@@ -171,4 +171,14 @@ internal static class StorageSchema
 
     public static string Version4Checksum { get; } = Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(Version4Sql)));
+
+    public const string Version5Sql = """
+        ALTER TABLE mouse_spool_segments ADD COLUMN seal_reason INTEGER NOT NULL DEFAULT 8
+            CHECK (seal_reason IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+
+        PRAGMA user_version = 5;
+        """;
+
+    public static string Version5Checksum { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(Version5Sql)));
 }

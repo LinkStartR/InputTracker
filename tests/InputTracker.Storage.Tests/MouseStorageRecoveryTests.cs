@@ -516,7 +516,7 @@ public sealed class MouseStorageRecoveryTests
             DROP TABLE mouse_device_watermarks;
             DROP TABLE mouse_spool_segments;
             DELETE FROM store_metadata WHERE key = 'mouse.v3-adoption-complete';
-            DELETE FROM schema_migrations WHERE version = 4;
+            DELETE FROM schema_migrations WHERE version >= 4;
             PRAGMA user_version = 3;
             """;
         command.ExecuteNonQuery();

@@ -248,7 +248,8 @@ internal sealed class MouseIngestion : IDisposable
 
         StorageMousePrefixCommit committed = _database.CommitMouseSpoolSegment(
             segment,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000);
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000,
+            ToPlaybackBoundaryReason(batch.Reason));
         _ordinals = new StorageServiceOrdinals(
             committed.CommitOrdinal,
             committed.KeyboardAggregateCommitOrdinal);
@@ -389,7 +390,10 @@ internal sealed class MouseIngestion : IDisposable
 
         foreach (MouseSpoolSegment segment in unpublished)
         {
-            _database.CommitMouseSpoolSegment(segment, GetUtcMicroseconds());
+            _database.CommitMouseSpoolSegment(
+                segment,
+                GetUtcMicroseconds(),
+                StorageMousePlaybackBoundaryReason.RecoveryUnknown);
         }
 
         RefreshPublishedState();
@@ -499,7 +503,10 @@ internal sealed class MouseIngestion : IDisposable
             }
 
             MouseSpoolSegment segment = MouseSpoolSegmentReader.Read(path);
-            _database.CommitMouseSpoolSegment(segment, GetUtcMicroseconds());
+            _database.CommitMouseSpoolSegment(
+                segment,
+                GetUtcMicroseconds(),
+                StorageMousePlaybackBoundaryReason.RecoveryUnknown);
         }
     }
 
@@ -835,6 +842,19 @@ internal sealed class MouseIngestion : IDisposable
         long calibrationSegmentId,
         IReadOnlyList<MouseSpoolRecord> records) =>
         MouseChunkCodec.Encode(Guid.NewGuid(), deviceId, calibrationSegmentId, records).CanonicalSha256;
+
+    private static StorageMousePlaybackBoundaryReason ToPlaybackBoundaryReason(MouseChunkSealReason reason) =>
+        reason switch
+        {
+            MouseChunkSealReason.DurationLimit => StorageMousePlaybackBoundaryReason.DurationLimit,
+            MouseChunkSealReason.EventLimit => StorageMousePlaybackBoundaryReason.EventLimit,
+            MouseChunkSealReason.CanonicalSizeLimit => StorageMousePlaybackBoundaryReason.CanonicalSizeLimit,
+            MouseChunkSealReason.DeviceBoundary => StorageMousePlaybackBoundaryReason.DeviceBoundary,
+            MouseChunkSealReason.CalibrationBoundary => StorageMousePlaybackBoundaryReason.CalibrationBoundary,
+            MouseChunkSealReason.PauseBoundary => StorageMousePlaybackBoundaryReason.PauseBoundary,
+            MouseChunkSealReason.ExplicitFlush => StorageMousePlaybackBoundaryReason.ExplicitFlush,
+            _ => throw new InvalidDataException("Mouse chunk seal reason is invalid.")
+        };
 
     private static long GetUtcMicroseconds() =>
         checked(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000);

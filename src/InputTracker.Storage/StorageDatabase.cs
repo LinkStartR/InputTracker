@@ -293,9 +293,15 @@ public sealed class StorageDatabase : IDisposable
 
     internal StorageMousePrefixCommit CommitMouseSpoolSegment(
         MouseSpoolSegment segment,
-        long updatedUtcMicroseconds)
+        long updatedUtcMicroseconds,
+        StorageMousePlaybackBoundaryReason sealReason = StorageMousePlaybackBoundaryReason.LegacyUnknown)
     {
         ArgumentNullException.ThrowIfNull(segment);
+        if (sealReason is < StorageMousePlaybackBoundaryReason.RangeStart
+            or > StorageMousePlaybackBoundaryReason.RecoveryUnknown)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sealReason));
+        }
         if (segment.Records.Count == 0
             || segment.ValidLength != MouseSpoolHeaderCodec.HeaderSize
                 + (long)segment.Records.Count * MouseSpoolRecordCodec.RecordSize
@@ -368,11 +374,11 @@ public sealed class StorageDatabase : IDisposable
                     spool_segment_id, device_id, calibration_segment_id, relative_path,
                     first_sequence, last_sequence,
                     first_monotonic_timestamp, last_monotonic_timestamp,
-                    record_count, committed_length, spool_file_sha256, canonical_sha256, created_utc_us)
+                    record_count, committed_length, spool_file_sha256, canonical_sha256, created_utc_us, seal_reason)
                 VALUES (
                     $segment, $device, $calibration, $path,
                     $first, $last, $firstTimestamp, $lastTimestamp,
-                    $count, $length, $fileHash, $canonicalHash, $created);
+                    $count, $length, $fileHash, $canonicalHash, $created, $sealReason);
                 """;
             insert.Parameters.AddWithValue("$segment", segment.Header.SegmentId.ToString("N"));
             insert.Parameters.AddWithValue("$device", segment.Header.DeviceId.ToString("N"));
@@ -387,6 +393,7 @@ public sealed class StorageDatabase : IDisposable
             insert.Parameters.AddWithValue("$fileHash", segment.SpoolFileSha256);
             insert.Parameters.AddWithValue("$canonicalHash", canonical.CanonicalSha256);
             insert.Parameters.AddWithValue("$created", updatedUtcMicroseconds);
+            insert.Parameters.AddWithValue("$sealReason", (int)sealReason);
             insert.ExecuteNonQuery();
         }
 
@@ -836,7 +843,26 @@ public sealed class StorageDatabase : IDisposable
         }
 
         VerifyMigrationChecksum(connection, 4, StorageSchema.Version4Checksum);
-        ValidateVersionFourShape(connection);
+        if (version == 4)
+        {
+            ValidateVersionFourShape(connection);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Execute(connection, StorageSchema.Version5Sql, transaction);
+            using SqliteCommand record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (5, 'mouse-playback-seal-reason', $checksum, $applied);
+                """;
+            record.Parameters.AddWithValue("$checksum", StorageSchema.Version5Checksum);
+            record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
+            record.ExecuteNonQuery();
+            transaction.Commit();
+            version = 5;
+        }
+
+        VerifyMigrationChecksum(connection, 5, StorageSchema.Version5Checksum);
+        ValidateVersionFiveShape(connection);
     }
 
     private static void ValidateVersionFourShape(SqliteConnection connection)
@@ -880,6 +906,59 @@ public sealed class StorageDatabase : IDisposable
             || markerShape != 1)
         {
             throw new InvalidDataException("Storage schema version 4 shape or adoption marker is invalid.");
+        }
+    }
+
+    private static void ValidateVersionFiveShape(SqliteConnection connection)
+    {
+        const string spoolColumns = "spool_segment_id:TEXT:1:1|device_id:TEXT:1:0|calibration_segment_id:INTEGER:1:0|relative_path:TEXT:1:0|first_sequence:INTEGER:1:0|last_sequence:INTEGER:1:0|first_monotonic_timestamp:INTEGER:1:0|last_monotonic_timestamp:INTEGER:1:0|record_count:INTEGER:1:0|committed_length:INTEGER:1:0|spool_file_sha256:TEXT:1:0|canonical_sha256:TEXT:1:0|created_utc_us:INTEGER:1:0|seal_reason:INTEGER:1:0";
+        const string watermarkColumns = "device_id:TEXT:1:1|durable_sequence:INTEGER:1:0|updated_utc_us:INTEGER:1:0";
+        string actualSpoolColumns = Scalar<string>(connection, """
+            SELECT group_concat(name || ':' || type || ':' || "notnull" || ':' || pk, '|')
+            FROM (SELECT name, type, "notnull", pk FROM pragma_table_info('mouse_spool_segments') ORDER BY cid);
+            """);
+        long reasonCheck = Scalar<long>(connection, """
+            SELECT COUNT(*)
+            FROM sqlite_schema
+            WHERE type = 'table'
+              AND name = 'mouse_spool_segments'
+              AND sql LIKE '%seal_reason INTEGER NOT NULL DEFAULT 8%'
+              AND sql LIKE '%seal_reason IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)%';
+            """);
+        string actualWatermarkColumns = Scalar<string>(connection, """
+            SELECT group_concat(name || ':' || type || ':' || "notnull" || ':' || pk, '|')
+            FROM (SELECT name, type, "notnull", pk FROM pragma_table_info('mouse_device_watermarks') ORDER BY cid);
+            """);
+        string indexColumns = Scalar<string>(connection, """
+            SELECT group_concat(name, '|')
+            FROM (SELECT name FROM pragma_index_info('mouse_spool_segments_device_sequence') ORDER BY seqno);
+            """);
+        long spoolShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name = 'mouse_spool_segments' AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long watermarkShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name = 'mouse_device_watermarks' AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long indexShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_index_list('mouse_spool_segments')
+            WHERE name = 'mouse_spool_segments_device_sequence' AND "unique" = 0 AND origin = 'c';
+            """);
+        long markerShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM store_metadata
+            WHERE key = 'mouse.v3-adoption-complete' AND value IN ('0', '1');
+            """);
+        if (!string.Equals(actualSpoolColumns, spoolColumns, StringComparison.Ordinal)
+            || !string.Equals(actualWatermarkColumns, watermarkColumns, StringComparison.Ordinal)
+            || !string.Equals(indexColumns, "device_id|first_sequence|last_sequence", StringComparison.Ordinal)
+            || reasonCheck != 1
+            || spoolShape != 1
+            || watermarkShape != 1
+            || indexShape != 1
+            || markerShape != 1)
+        {
+            throw new InvalidDataException("Storage schema version 5 mouse playback shape is invalid.");
         }
     }
 
