@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private AppStorageCoordinator? _storageCoordinator;
     private PortableSystemEventBridge? _systemEvents;
     private AppStorageDataToolsController? _dataTools;
+    private MousePlaybackController? _mousePlayback;
     private bool _disposeStorageOnExit = true;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -74,6 +75,7 @@ public partial class App : System.Windows.Application
 
         string? storageStartupError = null;
         DashboardViewModel? dashboard = null;
+        MousePlaybackController? mousePlayback = null;
         if (directory.IsWritable && collectionConsentGranted)
         {
             try
@@ -91,6 +93,8 @@ public partial class App : System.Windows.Application
                     new RawDeviceInfoProvider(),
                     _storageCoordinator);
                 dashboard = new DashboardViewModel(new StorageDashboardDataSource(_storage));
+                mousePlayback = new MousePlaybackController(new StorageMousePlaybackDataSource(_storage));
+                _mousePlayback = mousePlayback;
             }
             catch (Exception error)
             {
@@ -118,7 +122,7 @@ public partial class App : System.Windows.Application
                 collectionControl,
                 directory.DirectoryPath)
             : null;
-        var window = new MainWindow(_collection, directory, dashboard, startup, _dataTools);
+        var window = new MainWindow(_collection, directory, dashboard, startup, _dataTools, mousePlayback);
 
         _trayIcon = new TrayIconController(
             _collection,
@@ -164,6 +168,7 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            _mousePlayback?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             AppShutdown.Run(
                 _capture is null && _systemEvents is null
                     ? null

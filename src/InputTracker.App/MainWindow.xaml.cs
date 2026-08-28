@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -16,19 +17,25 @@ public partial class MainWindow : Window
     private readonly DashboardViewModel? _dashboard;
     private readonly StartupShortcutManager? _startup;
     private readonly AppStorageDataToolsController? _dataTools;
+    private readonly MousePlaybackController? _mousePlayback;
     private readonly KeyboardLayoutModel _keyboardLayout = KeyboardLayoutModel.CreateDefault();
     private readonly DispatcherTimer _dashboardRefreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private readonly DispatcherTimer _mousePlaybackFrameTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
     private bool _dashboardRefreshInProgress;
     private bool _dashboardRefreshPending;
     private bool _dashboardRefreshPendingIncludesMouse;
     private bool _updatingDeviceSelectors;
+    private bool _updatingPlaybackProgress;
+    private bool _playbackUiUpdateQueued;
+    private long _mousePlaybackFrameTimestamp;
 
     internal MainWindow(
         CollectionController collection,
         DirectoryProbeResult directory,
         DashboardViewModel? dashboard = null,
         StartupShortcutManager? startup = null,
-        AppStorageDataToolsController? dataTools = null)
+        AppStorageDataToolsController? dataTools = null,
+        MousePlaybackController? mousePlayback = null)
     {
         InitializeComponent();
         _collection = collection;
@@ -36,8 +43,11 @@ public partial class MainWindow : Window
         _dashboard = dashboard;
         _startup = startup;
         _dataTools = dataTools;
+        _mousePlayback = mousePlayback;
         _collection.Changed += Collection_Changed;
         _dashboardRefreshTimer.Tick += DashboardRefreshTimer_Tick;
+        _mousePlaybackFrameTimer.Tick += MousePlaybackFrameTimer_Tick;
+        if (_mousePlayback is not null) _mousePlayback.Changed += MousePlayback_Changed;
         IsVisibleChanged += MainWindow_IsVisibleChanged;
         Closed += MainWindow_Closed;
         KeyboardHeatmapPresentation emptyHeatmap = KeyboardHeatmapPresentation.Create(_keyboardLayout, []);
@@ -53,6 +63,14 @@ public partial class MainWindow : Window
         if (!dataToolsAvailable)
         {
             DataToolsStatusText.Text = "Storage 未安全启动，本地数据工具不可用。";
+        }
+        MousePlaybackPlayButton.IsEnabled = mousePlayback is not null;
+        MousePlaybackPauseButton.IsEnabled = false;
+        MousePlaybackSpeedSelector.IsEnabled = mousePlayback is not null;
+        MousePlaybackProgress.IsEnabled = false;
+        if (mousePlayback is null)
+        {
+            MousePlaybackStatus.Text = "Storage 未安全启动，无法打开固定轨迹快照。";
         }
         Loaded += MainWindow_Loaded;
     }
@@ -141,6 +159,65 @@ public partial class MainWindow : Window
             ? "当前为深色主题。"
             : "当前为浅色主题。";
         if (_dashboard is not null) RenderMouse(_dashboard.MousePoints);
+        if (_mousePlayback is not null) RenderMousePlayback(_mousePlayback.ActiveTail);
+    }
+
+    private async void MousePlaybackPlayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mousePlayback is null) return;
+        try
+        {
+            _mousePlayback.Resume(MousePlaybackPauseReason.User);
+            await _mousePlayback.PlayAsync();
+            ResetMousePlaybackClock();
+            _mousePlaybackFrameTimer.Start();
+            UpdateMousePlaybackUi();
+        }
+        catch (Exception error)
+        {
+            MousePlaybackStatus.Text = $"无法开始回放：{error.Message}";
+        }
+    }
+
+    private void MousePlaybackPauseButton_Click(object sender, RoutedEventArgs e)
+    {
+        _mousePlayback?.Pause(MousePlaybackPauseReason.User);
+        _mousePlaybackFrameTimer.Stop();
+        ResetMousePlaybackClock();
+        UpdateMousePlaybackUi();
+    }
+
+    private void MousePlaybackSpeedSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_mousePlayback is null || MousePlaybackSpeedSelector.SelectedItem is not ComboBoxItem selected
+            || !Enum.TryParse(selected.Tag?.ToString(), out MousePlaybackSpeed speed))
+        {
+            return;
+        }
+        _mousePlayback.SetSpeed(speed);
+    }
+
+    private async void MousePlaybackProgress_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingPlaybackProgress || _mousePlayback is null || !MousePlaybackProgress.IsMouseCaptureWithin)
+        {
+            return;
+        }
+        MousePlaybackDiagnostics diagnostics = _mousePlayback.Diagnostics;
+        StorageMousePlaybackSnapshotInfo? snapshot = diagnostics.Snapshot;
+        if (snapshot is null || snapshot.RecordCount == 0) return;
+        try
+        {
+            Int128 span = snapshot.UtcRange.EndUtcMicroseconds - snapshot.UtcRange.StartUtcMicroseconds;
+            long target = checked(snapshot.UtcRange.StartUtcMicroseconds + (long)((double)span * e.NewValue));
+            await _mousePlayback.SeekToUtcAsync(target);
+            ResetMousePlaybackClock();
+            _mousePlaybackFrameTimer.Start();
+        }
+        catch (Exception error)
+        {
+            MousePlaybackStatus.Text = $"定位失败，未丢弃任何回放记录：{error.Message}";
+        }
     }
 
     private void ChangeStartup(bool enable)
@@ -312,6 +389,14 @@ public partial class MainWindow : Window
     {
         _dashboardRefreshTimer.Stop();
         _dashboardRefreshTimer.Tick -= DashboardRefreshTimer_Tick;
+        _mousePlaybackFrameTimer.Stop();
+        ResetMousePlaybackClock();
+        _mousePlaybackFrameTimer.Tick -= MousePlaybackFrameTimer_Tick;
+        if (_mousePlayback is not null)
+        {
+            _mousePlayback.Changed -= MousePlayback_Changed;
+            _ = _mousePlayback.DisposeAsync();
+        }
         IsVisibleChanged -= MainWindow_IsVisibleChanged;
         _collection.Changed -= Collection_Changed;
     }
@@ -322,11 +407,20 @@ public partial class MainWindow : Window
         if (!IsVisible)
         {
             _dashboardRefreshTimer.Stop();
+            _mousePlayback?.Pause(MousePlaybackPauseReason.WindowHidden);
+            _mousePlaybackFrameTimer.Stop();
+            ResetMousePlaybackClock();
             return;
         }
 
+        _mousePlayback?.Resume(MousePlaybackPauseReason.WindowHidden);
         await RefreshDashboardAsync(includeMouse: false);
         _dashboardRefreshTimer.Start();
+        if (_mousePlayback?.Diagnostics.State == MousePlaybackState.Playing)
+        {
+            ResetMousePlaybackClock();
+            _mousePlaybackFrameTimer.Start();
+        }
     }
 
     private async void DashboardRefreshTimer_Tick(object? sender, EventArgs e) =>
@@ -401,6 +495,7 @@ public partial class MainWindow : Window
                 MouseSummary.Text = mouseSummary;
                 OverviewMouseSummary.Text = mouseSummary;
                 if (refreshMouse) RenderMouse(_dashboard.MousePoints);
+                if (refreshMouse) await RefreshMousePlaybackAsync();
                 DashboardRefreshStatusText.Text = $"已刷新 {DateTime.Now:HH:mm:ss} · 采集状态以页面顶部为准";
                 refreshMouse = false;
             }
@@ -428,6 +523,134 @@ public partial class MainWindow : Window
         selector.SelectedValue = selectedDeviceId;
     }
 
+    private async Task RefreshMousePlaybackAsync()
+    {
+        if (_mousePlayback is null || _dashboard?.SelectedMouseDeviceId is not Guid deviceId
+            || _dashboard.ResolvedPeriod is not { } period)
+        {
+            MousePlaybackStatus.Text = "选择鼠标后载入固定快照；回放逐条处理。";
+            return;
+        }
+        _mousePlaybackFrameTimer.Stop();
+        ResetMousePlaybackClock();
+        try
+        {
+            MousePlaybackStatus.Text = "正在校验并打开固定轨迹快照…";
+            await _mousePlayback.LoadAsync(deviceId, period.UtcRange);
+            UpdateMousePlaybackUi();
+        }
+        catch (Exception error)
+        {
+            MousePlaybackStatus.Text = $"无法安全打开回放快照：{error.Message}";
+        }
+    }
+
+    private async void MousePlaybackFrameTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_mousePlayback is null || _playbackUiUpdateQueued) return;
+        _playbackUiUpdateQueued = true;
+        try
+        {
+            long currentTimestamp = Stopwatch.GetTimestamp();
+            long previousTimestamp = Interlocked.Exchange(ref _mousePlaybackFrameTimestamp, currentTimestamp);
+            TimeSpan elapsed = previousTimestamp == 0
+                ? TimeSpan.Zero
+                : Stopwatch.GetElapsedTime(previousTimestamp, currentTimestamp);
+            await _mousePlayback.AdvanceByAsync(elapsed);
+            RenderMousePlayback(_mousePlayback.ActiveTail);
+            UpdateMousePlaybackUi();
+            if (_mousePlayback.Diagnostics.State is MousePlaybackState.Completed or MousePlaybackState.Faulted)
+            {
+                _mousePlaybackFrameTimer.Stop();
+            }
+        }
+        catch (Exception error)
+        {
+            MousePlaybackStatus.Text = $"回放失败，采集没有被暂停：{error.Message}";
+            _mousePlaybackFrameTimer.Stop();
+            ResetMousePlaybackClock();
+        }
+        finally
+        {
+            _playbackUiUpdateQueued = false;
+        }
+    }
+
+    private void ResetMousePlaybackClock() =>
+        Interlocked.Exchange(ref _mousePlaybackFrameTimestamp, 0);
+
+    private void MousePlayback_Changed(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.HasShutdownStarted && !Dispatcher.HasShutdownFinished)
+        {
+            _ = Dispatcher.BeginInvoke(UpdateMousePlaybackUi, DispatcherPriority.Background);
+        }
+    }
+
+    private void UpdateMousePlaybackUi()
+    {
+        if (_mousePlayback is null || !IsLoaded) return;
+        MousePlaybackDiagnostics diagnostics = _mousePlayback.Diagnostics;
+        MousePlaybackPlayButton.IsEnabled = diagnostics.State is MousePlaybackState.Ready or MousePlaybackState.Paused;
+        MousePlaybackPauseButton.IsEnabled = diagnostics.State is MousePlaybackState.Playing or MousePlaybackState.Seeking;
+        MousePlaybackSpeedSelector.IsEnabled = diagnostics.State is not MousePlaybackState.Empty and not MousePlaybackState.Disposed;
+        MousePlaybackProgress.IsEnabled = diagnostics.Snapshot is { RecordCount: > 0 }
+            && diagnostics.State is not MousePlaybackState.Loading and not MousePlaybackState.Faulted;
+        if (diagnostics.Snapshot is { First: { } first, Last: { } last } && diagnostics.Cursor is { } cursor
+            && last.Sequence > first.Sequence)
+        {
+            _updatingPlaybackProgress = true;
+            try
+            {
+                MousePlaybackProgress.Value = Math.Clamp(
+                    (cursor.Sequence - first.Sequence) / (double)(last.Sequence - first.Sequence), 0, 1);
+            }
+            finally
+            {
+                _updatingPlaybackProgress = false;
+            }
+        }
+
+        string state = diagnostics.State switch
+        {
+            MousePlaybackState.Loading => "正在校验固定快照",
+            MousePlaybackState.Ready => "固定快照已就绪",
+            MousePlaybackState.Playing when diagnostics.IsCatchingUp => "正在追赶（逐条处理，不丢点）",
+            MousePlaybackState.Playing => "正在逐条回放",
+            MousePlaybackState.Paused => "回放已暂停",
+            MousePlaybackState.Seeking => "正在精确定位",
+            MousePlaybackState.Completed => "回放完成",
+            MousePlaybackState.Faulted => "回放已安全停止",
+            _ => "选择鼠标后载入固定快照"
+        };
+        string progress = diagnostics.Snapshot is { } snapshot
+            ? $" · 精确进度 {diagnostics.PositionCount:N0}/{snapshot.RecordCount:N0} 条"
+            : string.Empty;
+        string calibration = diagnostics.HasUncalibratedAbsolute
+            ? $" · {MousePlaybackRenderer.UncalibratedAbsoluteDisclosure}"
+            : string.Empty;
+        MousePlaybackStatus.Text = state + progress + calibration
+            + (diagnostics.Fault is null ? string.Empty : $" · {diagnostics.Fault}");
+    }
+
+    private void RenderMousePlayback(IReadOnlyList<MouseDisplayPoint> points)
+    {
+        MouseCanvas.Children.Clear();
+        if (points.Count == 0) return;
+        foreach (MousePlaybackRenderSegment segment in MousePlaybackRenderer.BuildSegments(
+            points, MouseCanvas.ActualWidth, MouseCanvas.Height))
+        {
+            if (segment.Points.Count == 0) continue;
+            var line = new Polyline
+            {
+                Stroke = (System.Windows.Media.Brush)FindResource("AccentBrush"),
+                StrokeThickness = 1.5
+            };
+            foreach (System.Windows.Point point in segment.Points) line.Points.Add(point);
+            MouseCanvas.Children.Add(line);
+        }
+    }
+
     private void NavigationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ReferenceEquals(e.Source, NavigationList)
@@ -439,7 +662,17 @@ public partial class MainWindow : Window
         }
 
         Dispatcher.BeginInvoke(
-            () => RenderMouse(_dashboard.MousePoints),
+            () =>
+            {
+                if (_mousePlayback is { ActiveTail.Count: > 0 } playback)
+                {
+                    RenderMousePlayback(playback.ActiveTail);
+                }
+                else
+                {
+                    RenderMouse(_dashboard.MousePoints);
+                }
+            },
             DispatcherPriority.Loaded);
     }
 

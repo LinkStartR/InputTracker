@@ -689,10 +689,38 @@
                                                 Background="{DynamicResource SubtleBackgroundBrush}"
                                                 ClipToBounds="True" />
                                     </Border>
+                                    <Grid Margin="0,14,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="MousePlaybackPlayButton" Grid.Column="0"
+                                                Style="{StaticResource PrimaryButtonStyle}"
+                                                Click="MousePlaybackPlayButton_Click" Content="播放" />
+                                        <Button x:Name="MousePlaybackPauseButton" Grid.Column="1"
+                                                Click="MousePlaybackPauseButton_Click" Content="暂停" />
+                                        <ComboBox x:Name="MousePlaybackSpeedSelector" Grid.Column="2" Width="82"
+                                                  SelectedIndex="2" SelectionChanged="MousePlaybackSpeedSelector_SelectionChanged">
+                                            <ComboBoxItem Tag="Quarter" Content="0.25×" />
+                                            <ComboBoxItem Tag="Half" Content="0.5×" />
+                                            <ComboBoxItem Tag="One" Content="1×" />
+                                            <ComboBoxItem Tag="Double" Content="2×" />
+                                            <ComboBoxItem Tag="Four" Content="4×" />
+                                        </ComboBox>
+                                        <Slider x:Name="MousePlaybackProgress" Grid.Column="4" Minimum="0" Maximum="1"
+                                                SmallChange="0.01" LargeChange="0.1"
+                                                ValueChanged="MousePlaybackProgress_ValueChanged" />
+                                    </Grid>
+                                    <TextBlock x:Name="MousePlaybackStatus" Margin="0,10,0,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap"
+                                               Text="选择鼠标后载入固定快照；回放逐条处理。" />
                                     <TextBlock Margin="0,10,0,0"
                                                FontSize="11"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               Text="显示层最多保留 2048 个绘制点；Storage 原始轨迹不抽样。时间轴播放仍在开发中。"
+                                               Text="概览为完整枚举后的有界显示（最多 2048 点）；回放逐条处理每个原始记录，尾迹显示同样有界。"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
