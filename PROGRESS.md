@@ -1114,3 +1114,15 @@
 - 主线程复核：Storage.Tests build exit 0、0 warnings / 0 errors、0.77s；`MousePlaybackSnapshotTests` 8 passed / 0 failed / 0 skipped、9.586s，其中百万记录逐条 hash、顺序与 managed memory 增长 ≤128MiB；`Category!=StorageSpike` 195/0/0、12s；solution Release build exit 0、7 项目、0 warnings / 0 errors、2.58s。
 - 未验证：本切片未重跑 4 分钟 StorageSpike、统一 solution test/verify/publish；真实两鼠标、1000Hz、物理掉电仍为现场阻塞，内存租约要求未来清理路径调用 `MousePlaybackReadLease.IsLeased` 后才能删除文件。
 - 下一步：App 使用该快照做每条原始记录都参与的有界回放，预取队列 ≤4096、UI 尾迹 ≤2048，提供播放/暂停、0.25/0.5/1/2/4 倍速、精确进度和 seek；完成后运行 App 普通测试、统一 solution test、Portable verify 与本地自包含发布。
+
+## 2026-08-28 UI 逐记录鼠标轨迹回放
+
+- 分支/提交：`codex/ui-storage-integration@a9b0dd4`，提交 `feat: add complete mouse trajectory playback`；5 个文件，仅 `src/InputTracker.App/**` 与普通 `tests/InputTracker.App.Tests/**`，未改 Storage/Input/Acceptance/verify、依赖、权限或真实用户数据。
+- 实现：Storage immutable snapshot 经容量 4096 的 bounded Channel 逐条读入；每条记录都进入顺序检查、rolling hash、坐标积分与计数，UI 每帧批处理，活动尾迹和测试诊断序列均最多 2048。支持播放/暂停、0.25/0.5/1/2/4 倍速、精确 `(UTC, sequence)` seek、设备/刷新 generation 取消与 User/WindowHidden/Seeking 暂停原因组合。
+- 事实披露：概览明确为“完整枚举后的有界显示”，回放明确“逐条处理”；队列落后只显示追赶并背压，不丢记录。absolute/virtual 坐标因现有 Storage 未提供桌面校准而不绘制伪屏幕位置，持久显示“绝对坐标未校准”；隐藏窗口只暂停回放单调时钟，不调用采集暂停。
+- 首红与修复：最初 build exit 1，缺 `IMousePlaybackDataSource` / `IMousePlaybackSnapshot`，`CS0246` 3 errors；中间 `Int128 * double` 为 `CS0019` 1 error。主线程复审又发现 User pause 无法由播放按钮解除、每记录 Dispatcher 通知、seek 旧 producer 串计数、sequence gap 不 fail、固定 16ms 时钟和 absolute 提示滑出尾迹等边界；逐项补 7 条回归后修复，未放宽旧断言。
+- 主线程定向验证：App.Tests Release build exit 0、0 warnings / 0 errors、1.17s；`MousePlaybackControllerTests` 16 passed / 0 failed / 0 skipped、4.7861s；完整 App.Tests 94/0/0、3s。百万记录断言 produced=processed=1,000,000、orderFailures=0、hash 精确闭合、queue≤4096、tail≤2048。
+- 统一五命令：`dotnet restore InputTracker.sln` exit 0；solution Release build exit 0、7 projects、0 warnings / 0 errors；solution test exit 0，App 94 + Input 38 + Acceptance 25 + Storage 196 = 353 passed / 0 failed / 0 skipped（Storage 约 5m）；`verify.ps1 -Stage Portable` exit 0，353/25/0/0、45 gates、publish/self-check 0、second-instance 2，证据 `.tools/verification/20260828-185637-706/verification.json`；原样 `dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true` exit 0。
+- 视觉证据：被忽略的 WPF 渲染器在 1440×900 生成 6 页 × 浅/深共 12 张图；`mouse-light.png` 与 `mouse-dark.png` 显示播放、暂停、1×选择和进度条无重叠且深色可读。它不替代 150% 缩放、1920×1080 与领导现场确认。
+- 新本地包：`.tools/publish/local-playback-test-20260828/InputTracker.exe`；484 files，self-check exit 0，未创建 data，残留进程 0，SHA-256 `2FDCB901AB9551AD7DCF63D8ADC58512B42A9A0B04ADAC8C22C4B5328A2FC03C`。未覆盖任何旧包。
+- 未验证/下一步：真实两鼠标逐设备回放、1000Hz 30 分钟、2 小时零串线、150%/1920×1080、Win10/11 与领导视觉确认仍为 B-003；离线恢复仍只完成安全设计，精确范围删除执行仍为 B-011。先让用户用新包完成最短真实回放复测，再接离线恢复 facade/coordinator 的可丢弃目录测试，不操作真实 store。
