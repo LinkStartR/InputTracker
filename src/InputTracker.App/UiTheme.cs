@@ -19,6 +19,9 @@ internal sealed record UiThemePalette(
     string Accent,
     string AccentSoft,
     string SidebarBackground,
+    string SidebarText,
+    string SidebarMutedText,
+    string SidebarSelection,
     string AccentText,
     IReadOnlyList<string> HeatFills,
     IReadOnlyList<string> HeatTexts);
@@ -26,14 +29,16 @@ internal sealed record UiThemePalette(
 internal static class UiThemeCatalog
 {
     public static UiThemePalette Light { get; } = new(
-        "#FFF8FAFC", "#FFFFFFFF", "#FFF1F5F9", "#FF0F172A", "#FF475569",
-        "#FFE2E8F0", "#FF4F46E5", "#FFEEF2FF", "#FFFFFFFF", "#FFFFFFFF",
+        "#FFF4F6FB", "#FFFFFFFF", "#FFF0F3F8", "#FF18212F", "#FF647084",
+        "#FFDDE3EC", "#FF635BFF", "#FFECEBFF", "#FF121827", "#FFF8FAFC",
+        "#FFAAB3C2", "#FF2B2B55", "#FFFFFFFF",
         ["#FFE2E8F0", "#FFDBEAFE", "#FF93C5FD", "#FF3B82F6", "#FF1D4ED8", "#FF172554"],
         ["#FF0F172A", "#FF0F172A", "#FF0F172A", "#FF0F172A", "#FFFFFFFF", "#FFFFFFFF"]);
 
     public static UiThemePalette Dark { get; } = new(
-        "#FF0F172A", "#FF111827", "#FF1E293B", "#FFF8FAFC", "#FFCBD5E1",
-        "#FF334155", "#FF818CF8", "#FF1E1B4B", "#FF111827", "#FF0F172A",
+        "#FF0A0F1C", "#FF111827", "#FF182235", "#FFF8FAFC", "#FFA8B3C7",
+        "#FF26334A", "#FF8B7CFF", "#FF24204D", "#FF070B14", "#FFF8FAFC",
+        "#FF94A3B8", "#FF292451", "#FF0A0F1C",
         ["#FF1E293B", "#FF1E3A5F", "#FF1D4ED8", "#FF2563EB", "#FF60A5FA", "#FFBFDBFE"],
         ["#FFF8FAFC", "#FFF8FAFC", "#FFFFFFFF", "#FFFFFFFF", "#FF0F172A", "#FF0F172A"]);
 }
@@ -54,6 +59,9 @@ internal static class UiThemeController
         SetColor(resources, "AccentColor", palette.Accent);
         SetColor(resources, "AccentSoftColor", palette.AccentSoft);
         SetColor(resources, "SidebarBackgroundColor", palette.SidebarBackground);
+        SetColor(resources, "SidebarTextColor", palette.SidebarText);
+        SetColor(resources, "SidebarMutedTextColor", palette.SidebarMutedText);
+        SetColor(resources, "SidebarSelectionColor", palette.SidebarSelection);
         SetColor(resources, "AccentTextColor", palette.AccentText);
 
         SetBrush(resources, "WindowBackgroundBrush", palette.WindowBackground);
@@ -65,6 +73,9 @@ internal static class UiThemeController
         SetBrush(resources, "AccentBrush", palette.Accent);
         SetBrush(resources, "AccentSoftBrush", palette.AccentSoft);
         SetBrush(resources, "SidebarBackgroundBrush", palette.SidebarBackground);
+        SetBrush(resources, "SidebarTextBrush", palette.SidebarText);
+        SetBrush(resources, "SidebarMutedTextBrush", palette.SidebarMutedText);
+        SetBrush(resources, "SidebarSelectionBrush", palette.SidebarSelection);
         SetBrush(resources, "AccentTextBrush", palette.AccentText);
 
         for (int level = 0; level < KeyboardHeatScale.LevelCount; level++)

@@ -636,6 +636,7 @@ public partial class MainWindow : Window
     private void RenderMousePlayback(IReadOnlyList<MouseDisplayPoint> points)
     {
         MouseCanvas.Children.Clear();
+        MouseCanvasEmptyState.Visibility = points.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (points.Count == 0) return;
         foreach (MousePlaybackRenderSegment segment in MousePlaybackRenderer.BuildSegments(
             points, MouseCanvas.ActualWidth, MouseCanvas.Height))
@@ -679,6 +680,7 @@ public partial class MainWindow : Window
     private void RenderMouse(IReadOnlyList<MouseDisplayPoint> points)
     {
         MouseCanvas.Children.Clear();
+        MouseCanvasEmptyState.Visibility = points.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (points.Count == 0) return;
         foreach (IReadOnlyList<System.Windows.Point> segment in ProjectMouseSegments(
             points, MouseCanvas.ActualWidth, MouseCanvas.Height))

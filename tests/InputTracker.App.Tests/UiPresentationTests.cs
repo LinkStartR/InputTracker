@@ -75,6 +75,23 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
+    public void VisualShellUsesDedicatedNavigationPaletteAndRestrainedElevation()
+    {
+        string appXaml = LoadXaml("App.xaml").ToString(SaveOptions.DisableFormatting);
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("x:Key=\"SidebarTextBrush\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SidebarMutedTextBrush\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"SidebarSelectionBrush\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"CardShadowEffect\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"NavigationGlyph\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("ContentSource=\"SelectedContent\" TextElement.Foreground=\"{DynamicResource PrimaryTextBrush}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"MouseCanvasGrid\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"GlobalCollectionBar\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DirectoryText\"", windowXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultKeyboardLayoutCoversMainModifiersNavigationArrowsAndNumpad()
     {
         KeyboardLayoutModel layout = KeyboardLayoutModel.CreateDefault();

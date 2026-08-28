@@ -4,20 +4,23 @@
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <!-- The named source colors make both palettes auditable without starting WPF. -->
-        <Color x:Key="LightWindowBackgroundColor">#FFF8FAFC</Color>
-        <Color x:Key="LightPrimaryTextColor">#FF0F172A</Color>
-        <Color x:Key="DarkWindowBackgroundColor">#FF0F172A</Color>
+        <Color x:Key="LightWindowBackgroundColor">#FFF4F6FB</Color>
+        <Color x:Key="LightPrimaryTextColor">#FF18212F</Color>
+        <Color x:Key="DarkWindowBackgroundColor">#FF0A0F1C</Color>
         <Color x:Key="DarkPrimaryTextColor">#FFF8FAFC</Color>
 
-        <Color x:Key="WindowBackgroundColor">#FFF8FAFC</Color>
+        <Color x:Key="WindowBackgroundColor">#FFF4F6FB</Color>
         <Color x:Key="CardBackgroundColor">#FFFFFFFF</Color>
-        <Color x:Key="SubtleBackgroundColor">#FFF1F5F9</Color>
-        <Color x:Key="PrimaryTextColor">#FF0F172A</Color>
-        <Color x:Key="SecondaryTextColor">#FF475569</Color>
-        <Color x:Key="BorderColor">#FFCBD5E1</Color>
-        <Color x:Key="AccentColor">#FF4F46E5</Color>
-        <Color x:Key="AccentSoftColor">#FFEEF2FF</Color>
-        <Color x:Key="SidebarBackgroundColor">#FFFFFFFF</Color>
+        <Color x:Key="SubtleBackgroundColor">#FFF0F3F8</Color>
+        <Color x:Key="PrimaryTextColor">#FF18212F</Color>
+        <Color x:Key="SecondaryTextColor">#FF647084</Color>
+        <Color x:Key="BorderColor">#FFDDE3EC</Color>
+        <Color x:Key="AccentColor">#FF635BFF</Color>
+        <Color x:Key="AccentSoftColor">#FFECEBFF</Color>
+        <Color x:Key="SidebarBackgroundColor">#FF121827</Color>
+        <Color x:Key="SidebarTextColor">#FFF8FAFC</Color>
+        <Color x:Key="SidebarMutedTextColor">#FFAAB3C2</Color>
+        <Color x:Key="SidebarSelectionColor">#FF2B2B55</Color>
         <Color x:Key="AccentTextColor">#FFFFFFFF</Color>
 
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{DynamicResource WindowBackgroundColor}" />
@@ -29,6 +32,9 @@
         <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}" />
         <SolidColorBrush x:Key="AccentSoftBrush" Color="{DynamicResource AccentSoftColor}" />
         <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="{DynamicResource SidebarBackgroundColor}" />
+        <SolidColorBrush x:Key="SidebarTextBrush" Color="{DynamicResource SidebarTextColor}" />
+        <SolidColorBrush x:Key="SidebarMutedTextBrush" Color="{DynamicResource SidebarMutedTextColor}" />
+        <SolidColorBrush x:Key="SidebarSelectionBrush" Color="{DynamicResource SidebarSelectionColor}" />
         <SolidColorBrush x:Key="AccentTextBrush" Color="{DynamicResource AccentTextColor}" />
 
         <SolidColorBrush x:Key="HeatmapLevel0Brush" Color="#FFE2E8F0" />
