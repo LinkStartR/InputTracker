@@ -38,6 +38,7 @@
 | C33 | Storage Stats | 鼠标回放固定快照、稳定游标与边界迁移设计 | 已完成 | 只读 Storage query/schema/ingestion | `docs/storage/mouse-playback-snapshot-v1.md`；基线 `bc25821` | 是：主线程可定位文档 | terra / high；schema migration 实施时 xhigh | 固定水位、同UTC零重漏、百万点有界与seal reason迁移为数据正确性门 | 仅设计未改代码；v1需新增seal_reason，legacy/recovery unknown均强制断段，任意seek在seam绿前禁用 |
 | C34 | Storage 回放快照 | 实现固定快照、精确游标、边界原因迁移与只读租约 | 已完成并提交 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | `7fce302` | 是：`/root/storage_playback_snapshot` | terra / high；主线程 xhigh 复审迁移 | schema migration、同 UTC 零重漏、百万点有界与并发快照为高风险数据正确性工作 | schema v5、legacy/recovery 原因、异步 fail-closed 游标、live append 隔离与 lease 释放完成；8/0/0、195/0/0，物理硬件/掉电仍 pending |
 | C35 | UI 鼠标回放 | 将固定 Storage 快照接为逐记录、有界、可暂停/倍速/精确 seek 的鼠标回放 | 已完成并提交；视觉跟进只读复审完成 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | 回放 `a9b0dd4`；视觉主线程 `01d0ca8` | 是：`/root/ui_mouse_playback` | terra / high | WPF 状态、异步 generation、百万点零丢失与 Storage 游标交叉 | 回放协议完成；后续只读复审指出状态条、侧栏密度、强调色和空画布层级问题，主线程按 48 张布局矩阵修复。App 95/0/0；真实硬件与真实系统 DPI 仍 pending |
+| C36 | Storage 离线恢复 facade | 收敛 public offline restore API，并用可丢弃 A/B store 证明 owner lock、恢复往返和自动恢复前备份 | 待开始 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | 基线 `a282444` | 是：`/root/offline_restore_facade` | gpt-5.6-sol / xhigh | 用户数据替换、writer lock、journal 与长期恢复兼容属于最高风险 | 只允许临时 store；不得改 App/Input/Acceptance/verify，不得对任何现有发布目录或用户数据执行恢复 |
 
 ## 协调说明
 
