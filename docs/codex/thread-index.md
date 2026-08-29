@@ -1,10 +1,10 @@
 # Codex 线程索引
 
-最后更新：2026-08-28
+最后更新：2026-08-30
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：`codex/ui-storage-integration@a9b0dd4` 已提交逐记录鼠标回放；统一 353/0/0、Portable 353/25/45，本地新绿色包 self-check exit 0。用户明确暂缓 GitHub；下一步为首次真实鼠标回放复测、离线恢复接线与仍 blocked 的精确范围删除。
+- 当前阶段：`codex/ui-storage-integration@01d0ca8` 已提交 UI 视觉二次收口；统一 354/0/0、Portable 354/25/45，新绿色包 self-check exit 0。用户明确暂缓 GitHub；下一步为新版 UI 与真实输入/回放复测、离线恢复接线与仍 blocked 的精确范围删除。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -37,7 +37,7 @@
 | C32 | UI 完成度 | 鼠标轨迹完整回放与 Storage 游标前置设计 | 已完成 | 只读 App/Storage 查询与 UI 状态机 | `docs/ui/mouse-playback-design.md`；基线 `7835edf` | 是：`/root/ui_completion` | terra / high | 百万点有界处理、异步 generation 与数据语义交叉 | 现有固定水位流支持从头播放；任意 seek 需独立 snapshot/cursor/segment seam，禁止用2048点概览冒充原始回放 |
 | C33 | Storage Stats | 鼠标回放固定快照、稳定游标与边界迁移设计 | 已完成 | 只读 Storage query/schema/ingestion | `docs/storage/mouse-playback-snapshot-v1.md`；基线 `bc25821` | 是：主线程可定位文档 | terra / high；schema migration 实施时 xhigh | 固定水位、同UTC零重漏、百万点有界与seal reason迁移为数据正确性门 | 仅设计未改代码；v1需新增seal_reason，legacy/recovery unknown均强制断段，任意seek在seam绿前禁用 |
 | C34 | Storage 回放快照 | 实现固定快照、精确游标、边界原因迁移与只读租约 | 已完成并提交 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | `7fce302` | 是：`/root/storage_playback_snapshot` | terra / high；主线程 xhigh 复审迁移 | schema migration、同 UTC 零重漏、百万点有界与并发快照为高风险数据正确性工作 | schema v5、legacy/recovery 原因、异步 fail-closed 游标、live append 隔离与 lease 释放完成；8/0/0、195/0/0，物理硬件/掉电仍 pending |
-| C35 | UI 鼠标回放 | 将固定 Storage 快照接为逐记录、有界、可暂停/倍速/精确 seek 的鼠标回放 | 已完成并提交 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | `a9b0dd4` | 是：`/root/ui_mouse_playback` | terra / high | WPF 状态、异步 generation、百万点零丢失与 Storage 游标交叉 | 4096 Channel、2048 尾迹、真实单调时钟、5档倍速、精确 seek、generation/暂停原因/绝对坐标披露完成；16/0/0、App 94/0/0，真实硬件仍 pending |
+| C35 | UI 鼠标回放 | 将固定 Storage 快照接为逐记录、有界、可暂停/倍速/精确 seek 的鼠标回放 | 已完成并提交；视觉跟进只读复审完成 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | 回放 `a9b0dd4`；视觉主线程 `01d0ca8` | 是：`/root/ui_mouse_playback` | terra / high | WPF 状态、异步 generation、百万点零丢失与 Storage 游标交叉 | 回放协议完成；后续只读复审指出状态条、侧栏密度、强调色和空画布层级问题，主线程按 48 张布局矩阵修复。App 95/0/0；真实硬件与真实系统 DPI 仍 pending |
 
 ## 协调说明
 

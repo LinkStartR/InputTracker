@@ -1126,3 +1126,15 @@
 - 视觉证据：被忽略的 WPF 渲染器在 1440×900 生成 6 页 × 浅/深共 12 张图；`mouse-light.png` 与 `mouse-dark.png` 显示播放、暂停、1×选择和进度条无重叠且深色可读。它不替代 150% 缩放、1920×1080 与领导现场确认。
 - 新本地包：`.tools/publish/local-playback-test-20260828/InputTracker.exe`；484 files，self-check exit 0，未创建 data，残留进程 0，SHA-256 `2FDCB901AB9551AD7DCF63D8ADC58512B42A9A0B04ADAC8C22C4B5328A2FC03C`。未覆盖任何旧包。
 - 未验证/下一步：真实两鼠标逐设备回放、1000Hz 30 分钟、2 小时零串线、150%/1920×1080、Win10/11 与领导视觉确认仍为 B-003；离线恢复仍只完成安全设计，精确范围删除执行仍为 B-011。先让用户用新包完成最短真实回放复测，再接离线恢复 facade/coordinator 的可丢弃目录测试，不操作真实 store。
+
+## 2026-08-30 UI 视觉二次收口与本地绿色包
+
+- 分支/提交：`codex/ui-storage-integration@01d0ca8`，提交 `style: refine desktop visual hierarchy`；仅 4 个 App UI 文件与 1 个普通 App 展示测试，未改 Input/Storage/Acceptance/verify、依赖、权限、运行时网络或用户数据。
+- 用户反馈与视觉判断：旧版功能可用但观感仍像工程工具。二次收口改为独立深色导航层、Fluent 图标、紧凑全局采集状态与统计工具栏、单一紫色强调、低饱和卡片标签、克制阴影、概览图标指标卡和带网格/空状态的鼠标播放工作区；数据路径、暂停/恢复、退出和隐私披露均保留。
+- 首红：新增 `VisualShellUsesDedicatedNavigationPaletteAndRestrainedElevation` 后，定向测试 raw exit 1，1 failed / 0 skipped，明确缺 `SidebarTextBrush`。实现后 App build exit 0、0 warnings / 0 errors，App 95/0/0。
+- 像素红→绿：首轮浅色截图发现选中侧栏的白色前景继承到页面内容，导致总览数值和隐私说明近乎不可读；补精确前景隔离断言后定向测试 raw exit 1，再将侧栏标签前景限制在模板内部，App 95/0/0。随后 960×600 逻辑布局发现 1440×900/150% 下页脚与设置/隐私重叠；删除重复页脚、导航行收至 38px 后重新渲染无重叠。
+- 视觉矩阵：ignored `.tools/ui-renderer` 生成 6 页 × 浅/深 × 1440×900/1920×1080 × 100%/150% 逻辑布局，共 48 张 `.tools/build/ui-visual/*.png`；自动像素复核无截断、重叠或不可读文字。该矩阵是 WPF 逻辑尺寸模拟，不冒充真实 Windows DPI/显示器截图，领导现场确认仍为 B-003。
+- 统一回归：`dotnet restore InputTracker.sln` exit 0；`dotnet build InputTracker.sln -c Release --no-restore` exit 0、7 projects、0 warnings / 0 errors；`dotnet test InputTracker.sln -c Release --no-build --no-restore` exit 0，App 95 + Input 38 + Acceptance 25 + Storage 196 = 354 passed / 0 failed / 0 skipped，StorageSpike 4m51s。
+- 最高判卷：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Portable` exit 0；SDK 10.0.302、354 total / 25 Acceptance / 0 failed / 0 skipped / 45 gates，publish/self-check exit 0、second-instance exit 2；证据 `.tools/verification/20260828-193131-372/verification.json`。真实硬件、系统、网络和视觉终验仍明确 `not-run` / `releaseEligible=false`。
+- 发布：原样 `dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true` exit 0；另生成 `.tools/publish/local-ui-refresh-20260828/InputTracker.exe`，484 files，self-check exit 0、未创建 data、残留进程 0，SHA-256 `289983CBCE162E19C4F159A555E6250E9EB408A9C8F8D7FD7D202D5D51801F6C`。未覆盖旧包或任何用户数据。
+- 下一步：用户退出旧托盘实例后从新目录测试浅/深色、真实输入增长与逐设备鼠标回放；视觉认可后继续离线恢复 facade/coordinator 的可丢弃 A/B store 测试。范围删除执行继续受 B-011 阻塞，不操作真实 store。
