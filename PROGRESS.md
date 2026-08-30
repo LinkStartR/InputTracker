@@ -1148,3 +1148,14 @@
 - 最终命令：Storage.Tests Release build exit 0、0 warnings / 0 errors、1.21s；`FullyQualifiedName~StorageOfflineRestoreTests` 为 9 passed / 0 failed / 0 skipped、837ms；`Category!=StorageSpike` 为 204 passed / 0 failed / 0 skipped、19s；`git diff --check` exit 0（仅 LF→CRLF 提示）。
 - 未验证：App restore coordinator、可转交 operation lease、二次确认、精确 teardown 顺序、restore 终态退出与统一五命令尚未完成；真实用户目录恢复继续禁止，人工恢复只能在完整绿色目录的可丢弃副本中进行。
 - 下一步：基于 `babc1ba` 实现 App coordinator 普通测试与 UI 请求接线；严格按“停止刷新/禁用数据工具 → 注销系统事件 → await capture dispose → 校验 diagnostics → Stop/Dispose Storage → offline restore → 终态提示并单次退出”执行，任何不确定状态都阻止 restore 且不自动恢复采集。
+
+## 2026-08-30 App 离线恢复生命周期接线
+
+- 分支/提交：`codex/ui-storage-integration@fd13f4c`，提交 `feat: wire safe offline restore lifecycle`；精确 11 个 `src/InputTracker.App/**` 与普通 `tests/InputTracker.App.Tests/**` 文件，未改 Storage/Input/Acceptance/verify、依赖、权限或真实数据。
+- 授权门：恢复 selection 只可验证一次并绑定同一 interaction；最终 transfer 强制 `PauseReason.User`、Capture=Paused、Storage=Paused 且 `AcceptingWrites=false`、最终二次确认。lease 单次消费后 controller 永久 closing，第二恢复、导出、备份、删除预览、显式退出与 session-ending 均不得取得第二 lifecycle owner。
+- 执行链：MainWindow 只选择/确认/raise request；App coordinator 按 UI 停表禁控件 → system events → capture barrier 与 diagnostics → Storage stop/health → owner dispose/字段清空 → public offline facade → 真实终态 → 单次 shutdown。失败仍尽力停采/释放，但 restore 调用为 0，不 reopen、不 resume。
+- 生命周期/事实状态：restore-active 时普通 `OnExit` 不再并发第二条 capture/storage/playback 清理链；SessionEnding 只请求一次终止。恢复使用启动时保存的 canonical `StorageLayout`；recovery journal 路径为 `<program>/data/restore-journal.json`。Restoring 不提前宣称已停止；diagnostics 未确认关闭时显示 Raw Input 状态不确定并正在退出。
+- 红→绿：初始主机功能红为 App.Tests build exit 1、0 warnings / 16 errors，明确缺 restore phase、lease、runtime 与终态；中间 App.Tests 为 118 passed / 1 failed，暴露重复 transfer 的异常契约；修复后冻结版 App build exit 0、0 warnings / 0 errors、1.37s，App.Tests 125 passed / 0 failed / 0 skipped、3s。
+- 统一命令：`dotnet restore InputTracker.sln` exit 0；Release solution build exit 0、7 projects、0 warnings / 0 errors、1.60s；solution test exit 0，App 125 + Input 38 + Acceptance 25 + Storage 205 = 393 passed / 0 failed / 0 skipped，StorageSpike 4m42s。
+- 最高判卷：`scripts/verify.ps1 -Stage Portable` exit 0；SDK 10.0.302、393 total / 25 Acceptance / 0 failed / 0 skipped / 45 gates，publish/self-check exit 0、second-instance exit 2；证据 `.tools/verification/20260830-083430-116/verification.json`。原样 `dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true` exit 0。
+- 未验证/下一步：没有对现有发布目录或用户 store 执行恢复；真实 WPF 点击、SessionEnding、可丢弃完整绿色副本的 A/B restore/restart 与恢复前备份往返仍 pending。先由固定“用户测试与下一步建议”角色补不可跳过的 Acceptance/人工 runbook 门，再生成新包；门未绿前不把恢复按钮交给用户实际使用。
