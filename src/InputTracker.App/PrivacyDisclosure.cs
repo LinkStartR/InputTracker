@@ -15,7 +15,12 @@ internal static class PrivacyDisclosure
             CollectionMode.StartFailed => "采集启动失败，当前未接收物理键盘或鼠标事件。",
             CollectionMode.RejectedProgramDirectory => "程序目录不可写，采集已拒绝，当前未接收物理键盘或鼠标事件。",
             CollectionMode.StorageStartFailed => "Storage 启动失败，Raw Input 未启动，当前未接收物理键盘或鼠标事件。",
-            CollectionMode.Paused or CollectionMode.IntegrityFault => "采集已停止，当前未接收物理键盘或鼠标事件。",
+            CollectionMode.Restoring => "正在停止采集；尚未确认 Raw Input 已完全关闭，请等待当前进程退出。",
+            CollectionMode.RestoreControlUncertainAwaitExit => "恢复停止边界失败，Raw Input 是否完全关闭仍不确定；InputTracker 正在退出。",
+            CollectionMode.Paused or CollectionMode.IntegrityFault
+                or CollectionMode.RestoreSucceededAwaitExit
+                or CollectionMode.RestoreFailedAwaitExit
+                or CollectionMode.RestoreRecoveryRequired => "采集已停止，当前未接收物理键盘或鼠标事件。",
             CollectionMode.ControlUncertain => "采集控制状态不确定；是否仍在接收输入以顶部状态说明为准，请退出 InputTracker 以结束采集。",
             CollectionMode.Starting => "正在启动采集；只有顶部状态显示“采集中”时，Raw Input 才在后台接收输入。",
             _ => "当前未接收物理键盘或鼠标事件。"

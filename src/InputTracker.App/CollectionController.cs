@@ -13,7 +13,12 @@ public enum CollectionMode
     StartFailed,
     StorageStartFailed,
     ConsentRequired,
-    RejectedProgramDirectory
+    RejectedProgramDirectory,
+    Restoring,
+    RestoreSucceededAwaitExit,
+    RestoreFailedAwaitExit,
+    RestoreRecoveryRequired,
+    RestoreControlUncertainAwaitExit
 }
 
 public sealed record CollectionSnapshot(
@@ -27,6 +32,7 @@ public sealed class CollectionController : IDisposable
 {
     private readonly IInputCaptureControl? _capture;
     private readonly SynchronizationContext? _synchronizationContext;
+    private bool _offlineRestoreActive;
 
     public CollectionController(
         DirectoryProbeResult directory,
@@ -151,6 +157,45 @@ public sealed class CollectionController : IDisposable
         await _capture.SetPauseReasonAsync(PauseReason.User, false);
     }
 
+    internal void HandleOfflineRestoreStatus(AppOfflineRestoreStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        _offlineRestoreActive = true;
+        Set(status.Phase switch
+        {
+            AppOfflineRestorePhase.Restoring => new CollectionSnapshot(
+                CollectionMode.Restoring,
+                "正在停止采集 · 恢复准备中",
+                $"尚未确认 Raw Input 已完全关闭。{status.Message}",
+                CanPause: false,
+                CanResume: false),
+            AppOfflineRestorePhase.SucceededAwaitExit => new CollectionSnapshot(
+                CollectionMode.RestoreSucceededAwaitExit,
+                "恢复成功 · 正在退出",
+                status.Message,
+                CanPause: false,
+                CanResume: false),
+            AppOfflineRestorePhase.RecoveryRequired => new CollectionSnapshot(
+                CollectionMode.RestoreRecoveryRequired,
+                "恢复中断 · 正在退出",
+                $"可能需要下次启动恢复一致状态。{status.Message}",
+                CanPause: false,
+                CanResume: false),
+            AppOfflineRestorePhase.FailedAwaitExit when !status.CaptureConfirmedClosed => new CollectionSnapshot(
+                CollectionMode.RestoreControlUncertainAwaitExit,
+                "恢复停止边界失败 · 正在退出",
+                $"Raw Input 是否完全关闭仍不确定；InputTracker 正在退出且不会恢复采集。{status.Message}",
+                CanPause: false,
+                CanResume: false),
+            _ => new CollectionSnapshot(
+                CollectionMode.RestoreFailedAwaitExit,
+                "恢复失败 · 正在退出",
+                status.Message,
+                CanPause: false,
+                CanResume: false)
+        });
+    }
+
     public void Dispose()
     {
         if (_capture is not null)
@@ -161,6 +206,7 @@ public sealed class CollectionController : IDisposable
 
     private void Capture_StatusChanged(object? sender, InputCaptureStatus status)
     {
+        if (_offlineRestoreActive) return;
         if (_synchronizationContext is not null && SynchronizationContext.Current != _synchronizationContext)
         {
             _synchronizationContext.Post(_ => Set(FromCapture(status)), null);

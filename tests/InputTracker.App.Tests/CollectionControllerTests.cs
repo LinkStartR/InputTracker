@@ -148,6 +148,57 @@ public sealed class CollectionControllerTests
         Assert.DoesNotContain("已停止", controller.Current.Label + controller.Current.Explanation);
     }
 
+    [Theory]
+    [InlineData((int)AppOfflineRestorePhase.Restoring, CollectionMode.Restoring, "正在停止采集")]
+    [InlineData((int)AppOfflineRestorePhase.SucceededAwaitExit, CollectionMode.RestoreSucceededAwaitExit, "恢复成功")]
+    [InlineData((int)AppOfflineRestorePhase.FailedAwaitExit, CollectionMode.RestoreFailedAwaitExit, "恢复失败")]
+    [InlineData((int)AppOfflineRestorePhase.RecoveryRequired, CollectionMode.RestoreRecoveryRequired, "下次启动")]
+    public void OfflineRestoreStatesAreTerminalAndCannotPauseOrResume(
+        int phaseValue,
+        CollectionMode expectedMode,
+        string expectedText)
+    {
+        var capture = new FakeCapture(InputCaptureState.Paused);
+        using var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null), capture);
+
+        controller.HandleOfflineRestoreStatus(new AppOfflineRestoreStatus(
+            (AppOfflineRestorePhase)phaseValue,
+            "details",
+            null,
+            CaptureConfirmedClosed: true));
+
+        Assert.Equal(expectedMode, controller.Current.Mode);
+        Assert.Contains(expectedText, controller.Current.Label + controller.Current.Explanation);
+        Assert.False(controller.Current.CanPause);
+        Assert.False(controller.Current.CanResume);
+        if ((AppOfflineRestorePhase)phaseValue == AppOfflineRestorePhase.Restoring)
+        {
+            Assert.Contains("尚未确认 Raw Input 已完全关闭", controller.Current.Explanation);
+            Assert.DoesNotContain("采集已停止", controller.Current.Label + controller.Current.Explanation);
+        }
+    }
+
+    [Fact]
+    public void FailedRestoreWithOpenCaptureNeverClaimsCollectionStopped()
+    {
+        var capture = new FakeCapture(InputCaptureState.Paused);
+        using var controller = new CollectionController(
+            new DirectoryProbeResult(true, @"C:\portable", null), capture);
+
+        controller.HandleOfflineRestoreStatus(new AppOfflineRestoreStatus(
+            AppOfflineRestorePhase.FailedAwaitExit,
+            "diagnostics remained open",
+            null,
+            CaptureConfirmedClosed: false));
+
+        Assert.Equal(CollectionMode.RestoreControlUncertainAwaitExit, controller.Current.Mode);
+        Assert.Contains("是否完全关闭仍不确定", controller.Current.Explanation);
+        Assert.DoesNotContain("采集已停止", controller.Current.Label + controller.Current.Explanation);
+        Assert.False(controller.Current.CanPause);
+        Assert.False(controller.Current.CanResume);
+    }
+
     private sealed class FakeCapture(InputCaptureState initialState) : IInputCaptureControl
     {
         public InputCaptureStatus CurrentStatus { get; private set; } = new(initialState, PauseReason.None, null);

@@ -1,12 +1,13 @@
 using System.Windows;
 using System.IO;
+using System.Diagnostics;
 using InputTracker.Input;
 using InputTracker.Input.Win32;
 using InputTracker.Storage;
 
 namespace InputTracker;
 
-public partial class App : System.Windows.Application
+public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
 {
     private SingleInstanceGuard? _singleInstance;
     private TrayIconController? _trayIcon;
@@ -17,7 +18,10 @@ public partial class App : System.Windows.Application
     private PortableSystemEventBridge? _systemEvents;
     private AppStorageDataToolsController? _dataTools;
     private MousePlaybackController? _mousePlayback;
+    private StorageLayout? _storageLayout;
     private bool _disposeStorageOnExit = true;
+    private InputCaptureService? _releasedCaptureForRestore;
+    private readonly AppOfflineRestoreLifecycleGate _offlineRestoreLifecycle = new();
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -80,7 +84,8 @@ public partial class App : System.Windows.Application
         {
             try
             {
-                _storage = StorageService.Open(StorageLayout.Create(AppContext.BaseDirectory));
+                _storageLayout = StorageLayout.Create(AppContext.BaseDirectory);
+                _storage = StorageService.Open(_storageLayout);
                 Guid calibrationSession = Guid.NewGuid();
                 _storage.Start(TimeCalibrationSegment.Capture(calibrationSession, SystemStorageClock.Instance));
                 _storageCoordinator = new AppStorageCoordinator(
@@ -134,6 +139,16 @@ public partial class App : System.Windows.Application
 
         window.MinimizeToTrayRequested += (_, _) => window.Hide();
         window.ExitRequested += (_, _) => TryExplicitExit(window);
+        window.OfflineRestoreRequested += async (_, request) =>
+        {
+            if (!_offlineRestoreLifecycle.TryBeginRestore())
+            {
+                return;
+            }
+
+            var coordinator = new AppOfflineRestoreCoordinator(this, Stopwatch.GetTimestamp);
+            await coordinator.ExecuteAsync(request.Lease);
+        };
         MainWindow = window;
         window.Show();
 
@@ -166,14 +181,16 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        bool normalResourceCleanup = _offlineRestoreLifecycle.AllowsNormalExitResourceCleanup;
         try
         {
-            _mousePlayback?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            if (normalResourceCleanup)
+                _mousePlayback?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             AppShutdown.Run(
-                _capture is null && _systemEvents is null
+                !normalResourceCleanup || (_capture is null && _systemEvents is null)
                     ? null
                     : () => StopCaptureAndSystemEventsAsync(_capture, _systemEvents),
-                _disposeStorageOnExit ? _storage : null,
+                normalResourceCleanup && _disposeStorageOnExit ? _storage : null,
                 _collection,
                 _trayIcon,
                 _singleInstance);
@@ -194,6 +211,13 @@ public partial class App : System.Windows.Application
 
         if (MainWindow is MainWindow window)
         {
+            if (_offlineRestoreLifecycle.RestoreActive)
+            {
+                _ = window.PrepareForOfflineRestore();
+                window.PrepareForSessionEnding();
+                if (_offlineRestoreLifecycle.TryRequestShutdown()) Shutdown(0);
+                return;
+            }
             _disposeStorageOnExit = _dataTools?.BeginSessionEnding(TimeSpan.FromSeconds(2)) ?? true;
             window.PrepareForSessionEnding();
         }
@@ -255,5 +279,83 @@ public partial class App : System.Windows.Application
             throw new AggregateException(
                 "System lifecycle notification and capture cleanup completed with a failure.", first);
         }
+    }
+
+    async ValueTask IAppOfflineRestoreRuntime.QuiesceUiAsync()
+    {
+        if (MainWindow is not MainWindow window)
+            throw new InvalidOperationException("Offline restore requires the active MainWindow lifecycle owner.");
+        MousePlaybackController? windowPlayback = window.PrepareForOfflineRestore();
+        MousePlaybackController? appPlayback = AppOfflineRestoreOwnership.Take(ref _mousePlayback);
+        if (windowPlayback is not null && appPlayback is not null
+            && !ReferenceEquals(windowPlayback, appPlayback))
+        {
+            throw new InvalidOperationException("Mouse playback ownership changed during offline restore teardown.");
+        }
+        MousePlaybackController? playback = appPlayback ?? windowPlayback;
+        if (playback is not null) await playback.DisposeAsync();
+    }
+
+    void IAppOfflineRestoreRuntime.ReleaseSystemEventBridge()
+    {
+        PortableSystemEventBridge owner = AppOfflineRestoreOwnership.Take(ref _systemEvents)
+            ?? throw new InvalidOperationException("System event bridge ownership was unavailable during offline restore.");
+        owner.Dispose();
+    }
+
+    async ValueTask IAppOfflineRestoreRuntime.ReleaseCaptureAsync()
+    {
+        InputCaptureService owner = AppOfflineRestoreOwnership.Take(ref _capture)
+            ?? throw new InvalidOperationException("Capture ownership was unavailable during offline restore.");
+        _releasedCaptureForRestore = owner;
+        await owner.DisposeAsync();
+    }
+
+    DiagnosticsSnapshot IAppOfflineRestoreRuntime.CaptureDiagnostics =>
+        _releasedCaptureForRestore?.Diagnostics
+        ?? throw new InvalidOperationException("Capture diagnostics were unavailable after owner release.");
+
+    StorageServiceHealth IAppOfflineRestoreRuntime.StorageHealth =>
+        _storage?.Health
+        ?? throw new InvalidOperationException("Storage ownership was unavailable during offline restore.");
+
+    void IAppOfflineRestoreRuntime.StopStorage(long monotonicTimestamp)
+    {
+        StorageService owner = _storage
+            ?? throw new InvalidOperationException("Storage ownership was unavailable during offline restore stop.");
+        owner.Stop(monotonicTimestamp);
+    }
+
+    void IAppOfflineRestoreRuntime.ReleaseStorageOwner()
+    {
+        StorageService owner = AppOfflineRestoreOwnership.Take(ref _storage)
+            ?? throw new InvalidOperationException("Storage ownership was unavailable during offline restore disposal.");
+        _storageCoordinator = null;
+        _dataTools = null;
+        _disposeStorageOnExit = false;
+        owner.Dispose();
+    }
+
+    Task<StorageRestoreResult> IAppOfflineRestoreRuntime.RestoreOfflineAsync(string relativeBackupPath)
+    {
+        StorageLayout layout = _storageLayout
+            ?? throw new InvalidOperationException("The startup Storage layout is unavailable for offline restore.");
+        return Task.Run(() => StorageOfflineRestore.RestoreOffline(layout, relativeBackupPath));
+    }
+
+    bool IAppOfflineRestoreRuntime.IsRecoveryRequired =>
+        File.Exists(AppOfflineRestorePaths.GetJournalPath(AppContext.BaseDirectory));
+
+    void IAppOfflineRestoreRuntime.PublishStatus(AppOfflineRestoreStatus status)
+    {
+        _collection?.HandleOfflineRestoreStatus(status);
+        if (MainWindow is MainWindow window) window.ShowOfflineRestoreStatus(status);
+    }
+
+    void IAppOfflineRestoreRuntime.RequestShutdown()
+    {
+        if (!_offlineRestoreLifecycle.TryRequestShutdown()) return;
+        if (MainWindow is MainWindow window) window.PrepareForExplicitExit();
+        Shutdown(0);
     }
 }

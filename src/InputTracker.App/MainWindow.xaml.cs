@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     private readonly DashboardViewModel? _dashboard;
     private readonly StartupShortcutManager? _startup;
     private readonly AppStorageDataToolsController? _dataTools;
-    private readonly MousePlaybackController? _mousePlayback;
+    private MousePlaybackController? _mousePlayback;
     private readonly KeyboardLayoutModel _keyboardLayout = KeyboardLayoutModel.CreateDefault();
     private readonly DispatcherTimer _dashboardRefreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly DispatcherTimer _mousePlaybackFrameTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
@@ -77,6 +77,7 @@ public partial class MainWindow : Window
 
     public event EventHandler? MinimizeToTrayRequested;
     public event EventHandler? ExitRequested;
+    internal event EventHandler<OfflineRestoreRequestedEventArgs>? OfflineRestoreRequested;
 
     internal void PrepareForExplicitExit() => _closePolicy.RequestExplicitExit();
 
@@ -88,6 +89,40 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    internal MousePlaybackController? PrepareForOfflineRestore()
+    {
+        _dashboardRefreshTimer.Stop();
+        _dashboardRefreshPending = false;
+        _dashboardRefreshPendingIncludesMouse = false;
+        _mousePlaybackFrameTimer.Stop();
+        ResetMousePlaybackClock();
+        SetDataToolsEnabled(false);
+        RefreshDashboardButton.IsEnabled = false;
+        PeriodSelector.IsEnabled = false;
+        KeyboardDeviceSelector.IsEnabled = false;
+        MouseDeviceSelector.IsEnabled = false;
+        MousePlaybackPlayButton.IsEnabled = false;
+        MousePlaybackPauseButton.IsEnabled = false;
+        MousePlaybackSpeedSelector.IsEnabled = false;
+        MousePlaybackProgress.IsEnabled = false;
+        PauseButton.IsEnabled = false;
+        ResumeButton.IsEnabled = false;
+        DataToolsStatusText.Text = "正在停止采集并释放本地数据所有权，准备离线恢复…";
+
+        MousePlaybackController? playback = _mousePlayback;
+        if (playback is not null) playback.Changed -= MousePlayback_Changed;
+        _mousePlayback = null;
+        return playback;
+    }
+
+    internal void ShowOfflineRestoreStatus(AppOfflineRestoreStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        DataToolsStatusText.Text = status.PreRestoreBackupPath is null
+            ? status.Message
+            : $"{status.Message} 自动生成的恢复前备份：{status.PreRestoreBackupPath}";
     }
 
     private void Collection_Changed(object? sender, CollectionSnapshot snapshot) => Render(snapshot);
@@ -314,36 +349,49 @@ public partial class MainWindow : Window
             return;
         }
 
+        bool transferred = false;
         SetDataToolsEnabled(false);
         try
         {
             using AppStorageDataToolsController.RestoreInteraction interaction = _dataTools.TryBeginInteraction();
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "选择 InputTracker 备份（仅检查，不执行恢复）",
+                Title = "选择程序目录内的 InputTracker 恢复备份",
                 Filter = "InputTracker backup (*.itbackup)|*.itbackup",
                 InitialDirectory = System.IO.Path.Combine(_directory.DirectoryPath, "backups"),
                 CheckFileExists = true,
                 Multiselect = false
             };
             if (dialog.ShowDialog(this) != true) return;
+            RestoreSelection selection = interaction.Validate(dialog.FileName);
+            DataToolsStatusText.Text = selection.Status;
             MessageBoxResult confirmation = System.Windows.MessageBox.Show(
-                "只检查此备份的路径和文件边界。当前版本不会执行恢复，也不会更改现有数据。是否继续二次确认？",
-                "恢复检查 · 不执行",
+                "即将执行离线恢复：当前采集会停止，现有数据将被替换，InputTracker 会自动生成恢复前备份；成功或失败后 InputTracker 都会退出。是否确认继续？",
+                "最终确认 · 恢复本地备份",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);
-            RestoreSelection result = interaction.Validate(dialog.FileName, confirmation == MessageBoxResult.Yes);
-            if (IsLoaded && !_dataTools.IsClosing) DataToolsStatusText.Text = result.Status;
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                DataToolsStatusText.Text = "已取消恢复；保持当前用户暂停状态，未停止服务或更改数据。";
+                return;
+            }
+            if (OfflineRestoreRequested is null)
+                throw new InvalidOperationException("离线恢复生命周期协调器不可用，未执行恢复。");
+            AppStorageDataToolsController.RestoreLease lease = interaction.TransferToRestore(
+                selection,
+                finalConfirmed: true);
+            transferred = true;
+            OfflineRestoreRequested?.Invoke(this, new OfflineRestoreRequestedEventArgs(lease));
         }
         catch (Exception error)
         {
             if (IsLoaded && !_dataTools.IsClosing)
-                DataToolsStatusText.Text = $"恢复检查失败，未更改数据：{error.Message}";
+                DataToolsStatusText.Text = $"恢复请求失败，未停止服务或更改数据：{error.Message}";
         }
         finally
         {
-            if (IsLoaded && !_dataTools.IsClosing) SetDataToolsEnabled(true);
+            if (!transferred && IsLoaded && !_dataTools.IsClosing) SetDataToolsEnabled(true);
         }
     }
 
@@ -751,4 +799,11 @@ public partial class MainWindow : Window
             return new DeviceChoice(value.DeviceId, $"{value.Alias ?? value.DeviceId.ToString("N")[..8]} · {confidence}");
         }
     }
+}
+
+internal sealed class OfflineRestoreRequestedEventArgs(
+    AppStorageDataToolsController.RestoreLease lease) : EventArgs
+{
+    public AppStorageDataToolsController.RestoreLease Lease { get; } = lease
+        ?? throw new ArgumentNullException(nameof(lease));
 }

@@ -76,7 +76,7 @@ public sealed class AppStorageDataToolsTests
     }
 
     [Fact]
-    public void RestoreSelectionRequiresContainedBackupAndConfirmationButNeverExecutes()
+    public void RestoreSelectionRequiresContainedBackupBeforeFinalConfirmation()
     {
         using var temporary = new TemporaryDirectory();
         string backup = Path.Combine(temporary.Path, "backups", "chosen.itbackup");
@@ -87,15 +87,15 @@ public sealed class AppStorageDataToolsTests
 
         RestoreSelection result;
         using (AppStorageDataToolsController.RestoreInteraction interaction = controller.TryBeginInteraction())
-            result = interaction.Validate(backup, confirmed: true);
+            result = interaction.Validate(backup);
 
         Assert.False(result.CanExecute);
-        Assert.True(result.Confirmed);
-        Assert.Contains("离线恢复执行尚未接通", result.Status);
+        Assert.False(result.Confirmed);
+        Assert.Contains("已验证", result.Status);
         Assert.Equal(Path.GetRelativePath(temporary.Path, backup), result.RelativePath);
         using AppStorageDataToolsController.RestoreInteraction outsideInteraction = controller.TryBeginInteraction();
         Assert.Throws<InvalidDataException>(() => outsideInteraction.Validate(
-            Path.Combine(Path.GetPathRoot(temporary.Path)!, "outside.itbackup"), true));
+            Path.Combine(Path.GetPathRoot(temporary.Path)!, "outside.itbackup")));
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class AppStorageDataToolsTests
 
         using AppStorageDataToolsController.RestoreInteraction interaction = controller.TryBeginInteraction();
         Assert.Throws<InvalidDataException>(() => interaction.Validate(
-            Path.Combine(link, "outside.itbackup"), confirmed: true));
+            Path.Combine(link, "outside.itbackup")));
         Assert.Equal("external", File.ReadAllText(externalBackup));
         Directory.Delete(link);
     }
@@ -178,6 +178,90 @@ public sealed class AppStorageDataToolsTests
         Assert.True(controller.TryBeginExplicitExit());
     }
 
+    [Theory]
+    [InlineData(PauseReason.None, InputCaptureState.Running, StorageServiceState.Paused, false, true)]
+    [InlineData(PauseReason.SessionLocked, InputCaptureState.Paused, StorageServiceState.Paused, false, true)]
+    [InlineData(PauseReason.SystemSuspend, InputCaptureState.Paused, StorageServiceState.Paused, false, true)]
+    [InlineData(PauseReason.User, InputCaptureState.Paused, StorageServiceState.Running, true, true)]
+    [InlineData(PauseReason.User, InputCaptureState.Paused, StorageServiceState.Paused, true, true)]
+    [InlineData(PauseReason.User, InputCaptureState.Paused, StorageServiceState.Paused, false, false)]
+    public void RestoreTransferRejectsUnsafeBoundaryWithoutClosingController(
+        PauseReason reasons,
+        InputCaptureState captureState,
+        StorageServiceState storageState,
+        bool acceptingWrites,
+        bool finalConfirmed)
+    {
+        using var temporary = new TemporaryDirectory();
+        string backup = CreateBackupFixture(temporary.Path);
+        var storage = new FakeStorageTools(storageState, acceptingWrites);
+        var capture = new FakeCaptureControl(reasons, captureState);
+        var controller = new AppStorageDataToolsController(storage, capture, temporary.Path, Clock);
+
+        using (AppStorageDataToolsController.RestoreInteraction interaction = controller.TryBeginInteraction())
+        {
+            RestoreSelection selection = interaction.Validate(backup);
+            Assert.Throws<InvalidOperationException>(() =>
+                interaction.TransferToRestore(selection, finalConfirmed));
+        }
+
+        Assert.False(controller.IsClosing);
+        using AppStorageDataToolsController.RestoreInteraction retry = controller.TryBeginInteraction();
+    }
+
+    [Fact]
+    public async Task RestoreLeaseIsSingleUseAndPermanentlyBlocksOtherLifecycleOwners()
+    {
+        using var temporary = new TemporaryDirectory();
+        string backup = CreateBackupFixture(temporary.Path);
+        var controller = new AppStorageDataToolsController(
+            new FakeStorageTools(),
+            new FakeCaptureControl(PauseReason.User, InputCaptureState.Paused),
+            temporary.Path,
+            Clock);
+        AppStorageDataToolsController.RestoreInteraction interaction = controller.TryBeginInteraction();
+        RestoreSelection selection = interaction.Validate(backup);
+
+        AppStorageDataToolsController.RestoreLease lease = interaction.TransferToRestore(selection, finalConfirmed: true);
+        interaction.Dispose();
+
+        Assert.Equal(selection.RelativePath, lease.Consume().RelativePath);
+        Assert.Throws<InvalidOperationException>(() => lease.Consume());
+        Assert.True(controller.IsClosing);
+        Assert.False(controller.TryBeginExplicitExit());
+        Assert.False(controller.BeginSessionEnding(TimeSpan.Zero));
+        Assert.Throws<InvalidOperationException>(() => controller.TryBeginInteraction());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.ExportKeyboardAsync(SamplePeriod()));
+    }
+
+    [Fact]
+    public void RestoreTransferRejectsForgedCrossInteractionAndRepeatedSelection()
+    {
+        using var temporary = new TemporaryDirectory();
+        string backup = CreateBackupFixture(temporary.Path);
+        var controller = new AppStorageDataToolsController(
+            new FakeStorageTools(),
+            new FakeCaptureControl(PauseReason.User, InputCaptureState.Paused),
+            temporary.Path,
+            Clock);
+
+        RestoreSelection firstSelection;
+        using (AppStorageDataToolsController.RestoreInteraction first = controller.TryBeginInteraction())
+        {
+            firstSelection = first.Validate(backup);
+            Assert.Throws<InvalidOperationException>(() => first.Validate(backup));
+            var forged = firstSelection with { Status = "forged" };
+            Assert.Throws<InvalidOperationException>(() => first.TransferToRestore(forged, finalConfirmed: true));
+        }
+
+        using AppStorageDataToolsController.RestoreInteraction second = controller.TryBeginInteraction();
+        RestoreSelection secondSelection = second.Validate(backup);
+        Assert.Throws<InvalidOperationException>(() => second.TransferToRestore(firstSelection, finalConfirmed: true));
+        AppStorageDataToolsController.RestoreLease lease = second.TransferToRestore(secondSelection, finalConfirmed: true);
+        Assert.ThrowsAny<InvalidOperationException>(() => second.TransferToRestore(secondSelection, finalConfirmed: true));
+        Assert.Equal(secondSelection.RelativePath, lease.Consume().RelativePath);
+    }
+
     [Fact]
     public async Task PreviewRejectsDifferentReturnedRangeAndDeviceKind()
     {
@@ -197,6 +281,14 @@ public sealed class AppStorageDataToolsTests
 
     private static DateTimeOffset Clock() => new(2026, 8, 13, 12, 34, 56, TimeSpan.Zero);
 
+    private static string CreateBackupFixture(string root)
+    {
+        string backup = Path.Combine(root, "backups", "chosen.itbackup");
+        Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+        File.WriteAllText(backup, "fixture");
+        return backup;
+    }
+
     private static StorageKeyboardPeriodResult SamplePeriod() => new(
         new StorageResolvedPeriod(
             StoragePeriodKind.Day,
@@ -207,7 +299,9 @@ public sealed class AppStorageDataToolsTests
         [],
         ["UTC"]);
 
-    private sealed class FakeStorageTools : IAppStorageDataTools
+    private sealed class FakeStorageTools(
+        StorageServiceState state = StorageServiceState.Paused,
+        bool acceptingWrites = false) : IAppStorageDataTools
     {
         public string? CsvPath { get; private set; }
         public string? PngPath { get; private set; }
@@ -258,17 +352,19 @@ public sealed class AppStorageDataToolsTests
         ];
 
         public StorageServiceHealth Health => new(
-            StorageServiceState.Paused,
-            false,
+            state,
+            acceptingWrites,
             new StorageDurableWatermark(0, 0, new Dictionary<Guid, long>(), StorageDurabilityScope.SQLiteCommitted),
             null);
     }
 
-    private sealed class FakeCaptureControl(PauseReason reasons = PauseReason.None) : IInputCaptureControl
+    private sealed class FakeCaptureControl(
+        PauseReason reasons = PauseReason.None,
+        InputCaptureState? state = null) : IInputCaptureControl
     {
         public List<string> Operations { get; } = [];
         public InputCaptureStatus CurrentStatus { get; private set; } = new(
-            reasons == PauseReason.None ? InputCaptureState.Running : InputCaptureState.Paused, reasons, null);
+            state ?? (reasons == PauseReason.None ? InputCaptureState.Running : InputCaptureState.Paused), reasons, null);
         public DiagnosticsSnapshot Diagnostics => throw new NotSupportedException();
         public event EventHandler<InputCaptureStatus>? StatusChanged;
 

@@ -841,7 +841,7 @@
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="敏感操作" />
                                         <TextBlock Margin="0,8,0,0" Text="先预览，再由你确认" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="当前版本只预览删除影响；恢复只检查备份，不会更改现有数据。"
+                                                   Text="当前版本只预览删除影响；恢复需要用户暂停并再次确认，完成或失败后都会退出。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
@@ -849,7 +849,7 @@
                                         <Button x:Name="PreviewMouseDeletionButton" HorizontalAlignment="Left"
                                                 Click="PreviewMouseDeletionButton_Click" Content="预览鼠标删除" />
                                         <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"
-                                                Click="ValidateRestoreButton_Click" Content="检查恢复备份" />
+                                                Click="ValidateRestoreButton_Click" Content="恢复本地备份" />
                                     </StackPanel>
                                 </Border>
                             </Grid>

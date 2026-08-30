@@ -6,6 +6,8 @@ public sealed class MainWindowPrivacyTests
     [InlineData(CollectionMode.Collecting, "正在后台接收物理键盘和鼠标事件")]
     [InlineData(CollectionMode.StartFailed, "采集启动失败，当前未接收物理键盘或鼠标事件")]
     [InlineData(CollectionMode.RejectedProgramDirectory, "采集已拒绝，当前未接收物理键盘或鼠标事件")]
+    [InlineData(CollectionMode.Restoring, "尚未确认 Raw Input 已完全关闭")]
+    [InlineData(CollectionMode.RestoreControlUncertainAwaitExit, "Raw Input 是否完全关闭仍不确定")]
     public void PrivacyBoundaryMatchesVisibleCollectionState(CollectionMode mode, string expectedState)
     {
         var snapshot = new CollectionSnapshot(mode, "status", "explanation", false, false);
@@ -56,6 +58,25 @@ public sealed class MainWindowPrivacyTests
 
         string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "PortableSettings.cs"));
         Assert.Contains("当前测试版尚未提供范围删除", consent);
+    }
+
+    [Fact]
+    public void RestoreUiRequiresFinalDestructiveConfirmationAndRaisesRequestOnlyAfterLeaseTransfer()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string xaml = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "MainWindow.xaml"));
+        string code = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("恢复本地备份", xaml);
+        Assert.Contains("当前采集会停止", code);
+        Assert.Contains("现有数据将被替换", code);
+        Assert.Contains("自动生成恢复前备份", code);
+        Assert.Contains("成功或失败后 InputTracker 都会退出", code);
+        Assert.Contains("TransferToRestore", code);
+        Assert.Contains("OfflineRestoreRequested?.Invoke", code);
+        Assert.Contains("_dashboardRefreshTimer.Stop()", code);
+        Assert.Contains("_mousePlaybackFrameTimer.Stop()", code);
+        Assert.Contains("SetDataToolsEnabled(false)", code);
     }
 
     private static string FindRepositoryRoot()

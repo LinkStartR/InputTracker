@@ -49,6 +49,8 @@ internal sealed record RestoreSelection(
     bool CanExecute,
     string Status);
 
+internal sealed record AppOfflineRestoreRequest(string RelativePath);
+
 internal sealed class AppStorageDataToolsController
 {
     private const int HeatmapWidth = 1440;
@@ -145,7 +147,7 @@ internal sealed class AppStorageDataToolsController
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private RestoreSelection ValidateRestoreSelectionCore(string selectedPath, bool confirmed)
+    private RestoreSelection ValidateRestoreSelectionCore(string selectedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
         string fullPath = Path.GetFullPath(selectedPath);
@@ -162,11 +164,40 @@ internal sealed class AppStorageDataToolsController
         if (!File.Exists(fullPath)) throw new FileNotFoundException("恢复文件不存在。", fullPath);
         return new RestoreSelection(
             relative,
-            confirmed,
+            Confirmed: false,
             CanExecute: false,
-            confirmed
-                ? "已完成选择检查和二次确认；离线恢复执行尚未接通，不会更改当前数据。"
-                : "已完成选择检查；需要二次确认。离线恢复执行尚未接通，不会更改当前数据。");
+            "恢复备份已验证；尚未停止采集或更改数据。请阅读最终确认后再继续。");
+    }
+
+    private RestoreLease TransferToRestoreCore(RestoreSelection selection, bool finalConfirmed)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        if (!finalConfirmed)
+            throw new InvalidOperationException("离线恢复需要明确的最终二次确认。");
+
+        InputCaptureStatus capture = _capture.CurrentStatus;
+        if (capture.State != InputCaptureState.Paused
+            || (capture.PauseReasons & PauseReason.User) == 0)
+        {
+            throw new InvalidOperationException(
+                "离线恢复前必须由用户明确暂停；锁屏或系统挂起不构成恢复授权。");
+        }
+
+        StorageServiceHealth storage = _storage.Health;
+        if (storage.State != StorageServiceState.Paused || storage.AcceptingWrites)
+        {
+            throw new InvalidOperationException(
+                "Storage 未到达暂停且拒绝新写入的离线恢复边界。");
+        }
+
+        lock (_lifecycleGate)
+        {
+            if (_closing)
+                throw new InvalidOperationException("InputTracker 正在退出，不再接受恢复请求。");
+            _closing = true;
+        }
+
+        return new RestoreLease(new AppOfflineRestoreRequest(selection.RelativePath));
     }
 
     public RestoreInteraction TryBeginInteraction()
@@ -241,12 +272,28 @@ internal sealed class AppStorageDataToolsController
     internal sealed class RestoreInteraction(AppStorageDataToolsController owner) : IDisposable
     {
         private AppStorageDataToolsController? _owner = owner;
-        public RestoreSelection Validate(string selectedPath, bool confirmed)
+        private RestoreSelection? _validatedSelection;
+
+        public RestoreSelection Validate(string selectedPath)
         {
             AppStorageDataToolsController current = _owner
                 ?? throw new ObjectDisposedException(nameof(RestoreInteraction));
+            if (_validatedSelection is not null)
+                throw new InvalidOperationException("同一次恢复交互只能验证一个备份选择。");
             current.ThrowIfClosing();
-            return current.ValidateRestoreSelectionCore(selectedPath, confirmed);
+            return _validatedSelection = current.ValidateRestoreSelectionCore(selectedPath);
+        }
+
+        public RestoreLease TransferToRestore(RestoreSelection selection, bool finalConfirmed)
+        {
+            AppStorageDataToolsController current = _owner
+                ?? throw new ObjectDisposedException(nameof(RestoreInteraction));
+            if (!ReferenceEquals(selection, _validatedSelection))
+                throw new InvalidOperationException("只能转交本次交互实际验证过的恢复选择。");
+            RestoreLease lease = current.TransferToRestoreCore(selection, finalConfirmed);
+            _owner = null;
+            _validatedSelection = null;
+            return lease;
         }
 
         public void Dispose()
@@ -254,6 +301,14 @@ internal sealed class AppStorageDataToolsController
             AppStorageDataToolsController? current = Interlocked.Exchange(ref _owner, null);
             current?._operationGate.Release();
         }
+    }
+
+    internal sealed class RestoreLease(AppOfflineRestoreRequest request)
+    {
+        private AppOfflineRestoreRequest? _request = request;
+
+        public AppOfflineRestoreRequest Consume() => Interlocked.Exchange(ref _request, null)
+            ?? throw new InvalidOperationException("恢复 lease 已被使用，不能重复执行。");
     }
 
     private string Timestamp() => _clock().UtcDateTime.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture);
