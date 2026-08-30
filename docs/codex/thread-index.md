@@ -39,6 +39,7 @@
 | C34 | Storage 回放快照 | 实现固定快照、精确游标、边界原因迁移与只读租约 | 已完成并提交 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | `7fce302` | 是：`/root/storage_playback_snapshot` | terra / high；主线程 xhigh 复审迁移 | schema migration、同 UTC 零重漏、百万点有界与并发快照为高风险数据正确性工作 | schema v5、legacy/recovery 原因、异步 fail-closed 游标、live append 隔离与 lease 释放完成；8/0/0、195/0/0，物理硬件/掉电仍 pending |
 | C35 | UI 鼠标回放 | 将固定 Storage 快照接为逐记录、有界、可暂停/倍速/精确 seek 的鼠标回放 | 已完成并提交；视觉跟进只读复审完成 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | 回放 `a9b0dd4`；视觉主线程 `01d0ca8` | 是：`/root/ui_mouse_playback` | terra / high | WPF 状态、异步 generation、百万点零丢失与 Storage 游标交叉 | 回放协议完成；后续只读复审指出状态条、侧栏密度、强调色和空画布层级问题，主线程按 48 张布局矩阵修复。App 95/0/0；真实硬件与真实系统 DPI 仍 pending |
 | C36 | Storage 离线恢复 facade | 收敛 public offline restore API，并用可丢弃 A/B store 证明 owner lock、恢复往返和自动恢复前备份 | 已完成并提交 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | `babc1ba` | 是：`/root/offline_restore_facade` | gpt-5.6-sol / xhigh | 用户数据替换、writer lock、journal 与长期恢复兼容属于最高风险 | 唯一 public facade 与 canonical layout fail-closed 完成；9/0/0、non-Spike 204/0/0。只验临时 store，App coordinator 与真实副本人工验收待后续 |
+| C37 | App 离线恢复 | 实现可转交 lease、精确停采/释放 owner 顺序、二次确认、终态状态与单次退出 | 已登记，待正式任务卡 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | 基线 `1708a7a` | 是：`/root/app_offline_restore` | gpt-5.6-sol / xhigh | 用户数据替换、Raw Input/Storage owner 竞态与 WPF 退出顺序为最高风险 | 握手完成且尚未读写；只允许临时 store 测试，不得改 Storage/Input/Acceptance/verify/docs/Git，不得恢复真实数据 |
 
 ## 协调说明
 
