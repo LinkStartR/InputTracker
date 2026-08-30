@@ -34,7 +34,7 @@ internal sealed class NoStorageRestoreFaultInjector : IStorageRestoreFaultInject
     public void AfterMove(string source, string destination) { }
 }
 
-public static class StorageBackup
+internal static class StorageBackup
 {
     private const int FormatVersion = 1;
     private const int MaximumManifestBytes = 1024 * 1024;
@@ -53,7 +53,7 @@ public static class StorageBackup
         CompressionRatioSlackBytes,
         MinimumFreeSpaceBytes);
 
-    public static StorageRestoreResult Restore(StorageLayout layout, string relativeBackupPath)
+    internal static StorageRestoreResult Restore(StorageLayout layout, string relativeBackupPath)
         => RestoreCore(layout, relativeBackupPath, NoStorageRestoreFaultInjector.Instance, ProductionBudget);
 
     internal static StorageRestoreResult RestoreForTests(
