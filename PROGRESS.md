@@ -1138,3 +1138,13 @@
 - 最高判卷：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify.ps1 -Stage Portable` exit 0；SDK 10.0.302、354 total / 25 Acceptance / 0 failed / 0 skipped / 45 gates，publish/self-check exit 0、second-instance exit 2；证据 `.tools/verification/20260828-193131-372/verification.json`。真实硬件、系统、网络和视觉终验仍明确 `not-run` / `releaseEligible=false`。
 - 发布：原样 `dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true` exit 0；另生成 `.tools/publish/local-ui-refresh-20260828/InputTracker.exe`，484 files，self-check exit 0、未创建 data、残留进程 0，SHA-256 `289983CBCE162E19C4F159A555E6250E9EB408A9C8F8D7FD7D202D5D51801F6C`。未覆盖旧包或任何用户数据。
 - 下一步：用户退出旧托盘实例后从新目录测试浅/深色、真实输入增长与逐设备鼠标回放；视觉认可后继续离线恢复 facade/coordinator 的可丢弃 A/B store 测试。范围删除执行继续受 B-011 阻塞，不操作真实 store。
+
+## 2026-08-30 Storage 离线恢复窄门面
+
+- 分支/提交：`codex/ui-storage-integration@babc1ba`，提交 `feat: expose safe offline restore facade`；仅修改 `src/InputTracker.Storage/StorageBackup.cs`，新增 `src/InputTracker.Storage/StorageOfflineRestore.cs` 与 `tests/InputTracker.Storage.Tests/StorageOfflineRestoreTests.cs`，未改 App/Input/Acceptance/verify、依赖、权限或真实数据。
+- 产品结果：公开恢复面收敛为唯一 `StorageOfflineRestore.RestoreOffline(StorageLayout, string)`；原 `StorageBackup` 与 fault seam 均收窄为 internal。门面先验证 canonical Storage layout，再复用既有 contained `.itbackup`、reparse、exact writer lock、journal、rollback 与自动恢复前备份协议；伪造 layout 不得在程序目录外创建 writer lock。
+- 临时数据验证：9 个无 skip 聚焦测试仅使用 `TemporaryDirectory`，覆盖 public surface、活动 owner fail-closed、A/B/C 精确 press/hold 往返、自动恢复前备份、相对路径/扩展名/逃逸、junction 与 forged layout 外部零写入；没有对现有发布目录或用户 store 执行恢复。
+- 红证据边界：子任务 test-first build raw exit 1，但仅为沙箱 `MSB4184`（拒绝读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs`），未进入源码编译，因此不把它伪称为“缺 facade”的功能红证据。主任务按用户授权在主机上下文完成真实编译与测试。
+- 最终命令：Storage.Tests Release build exit 0、0 warnings / 0 errors、1.21s；`FullyQualifiedName~StorageOfflineRestoreTests` 为 9 passed / 0 failed / 0 skipped、837ms；`Category!=StorageSpike` 为 204 passed / 0 failed / 0 skipped、19s；`git diff --check` exit 0（仅 LF→CRLF 提示）。
+- 未验证：App restore coordinator、可转交 operation lease、二次确认、精确 teardown 顺序、restore 终态退出与统一五命令尚未完成；真实用户目录恢复继续禁止，人工恢复只能在完整绿色目录的可丢弃副本中进行。
+- 下一步：基于 `babc1ba` 实现 App coordinator 普通测试与 UI 请求接线；严格按“停止刷新/禁用数据工具 → 注销系统事件 → await capture dispose → 校验 diagnostics → Stop/Dispose Storage → offline restore → 终态提示并单次退出”执行，任何不确定状态都阻止 restore 且不自动恢复采集。
