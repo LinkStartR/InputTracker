@@ -1206,3 +1206,11 @@
 - 窄修：只将延后退出从 `ContextIdle` 提升为 `Normal`；仍保持在托盘菜单点击处理返回后才执行，不恢复同步 `Shutdown` 竞态。
 - 绿证据：App.Tests Release build exit `0`，`0 warnings / 0 errors`，2.12s；定向 `TrayExitSequenceTests|WindowClosePolicyTests` exit `0`，`5 passed / 0 failed / 0 skipped`，22ms。
 - 下一步：提交本第二轮窄修，发布新的独立目录且不启动；请用户先安全结束旧卡住进程，再验证退出后进程消失和立即重启。未通过前仍不进入第 2 项。
+
+## 2026-09-06 托盘退出第二轮人工测试包
+
+- 产品提交：`d817f3d fix: prevent deferred tray exit starvation`；仅包含 `TrayIconController` 的退出调度优先级、对应普通回归测试与进度记录。
+- 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/tray-exit-fix2-test-20260906` exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/tray-exit-fix2-test-20260906/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/` 目录；exe SHA-256 `6F5AE5B5A1498CFCE9EAABFD77861A39CC8FE932F2DE9478CC827C8C24FFB83B`。
+- 停点：执行者未启动新包、未运行 GUI/self-check，也未重跑全量验收。此前旧包 PID `29232` 曾在退出后隐藏存活，人工复测前应通过注销或重启 Windows 正常清理旧实例；不由执行者强制终止用户进程。
+- 本轮人工检查仅限：退出菜单立即消失、无 `.NET` 异常、任务管理器中进程消失、同一新目录立即重启不再提示“已在运行”、重启后数据存在。等待用户结果，未通过前不开始下一项。
