@@ -1239,3 +1239,10 @@
 - 红证据：先新增异步退出序列测试，Release build exit `1`、`0 warnings / 3 errors`，均为缺少 `AppExitSequence`。首次定向运行为 `8 passed / 1 failed / 0 skipped`，失败揭示 `Task.Yield` 的清理启动可与调用方并行；测试改为约束真实要求“退出完成必须等清理完成”，没有放宽清理先于 Shutdown 的顺序。
 - 绿证据：修复后定向 `AppExitSequenceTests|AppShutdownTests|TrayExitSequenceTests|WindowClosePolicyTests` exit `0`，连同构建均成功；`9 passed / 0 failed / 0 skipped`，0.5145s。
 - 下一步：提交该退出生命周期窄修，发布第四轮独立测试包后立即暂停。用户只复测主界面退出、托盘退出、进程消失与立即重启。
+
+## 2026-09-06 退出第四轮人工测试包
+
+- 提交：`c75ce22 fix: stop capture before application shutdown`；产品范围仅 App 退出生命周期，新增 3 个无 skip 的普通回归测试；未改 Input、Storage、Acceptance 或 verify。
+- 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/exit-fix4-test-20260906` exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/exit-fix4-test-20260906/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/` 目录；exe SHA-256 `682D67A9225369CA05D7631389CFD4C64758FB509BD895407AFC7115D348A819`。
+- 停点：执行者未启动程序、未做 GUI/self-check、未重跑全量测试。人工先分别验证主界面“退出”和托盘“退出”均在 2 秒内结束进程；通过后再验证立即重启无单实例提示及同目录数据仍在。等待用户结果。
