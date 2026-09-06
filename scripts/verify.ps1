@@ -56,6 +56,7 @@ $script:evidence = [ordered]@{
     inputCore = $null
     storage = $null
     portable = $null
+    offlineRestore = $null
     error = $null
 }
 
@@ -209,6 +210,7 @@ function Invoke-CheckedCommand {
 
     return [pscustomobject]@{
         ExitCode = $process.ExitCode
+        ProcessId = $process.Id
         Stdout = $stdout
         Stderr = $stderr
     }
@@ -447,8 +449,20 @@ try {
     $portableGateIds = @(
         'portable-storage-regression', 'portable-consent-fail-closed',
         'portable-startup-exact-ownership', 'portable-lock-suspend-barrier',
-        'portable-session-ending-controlled', 'portable-terminal-status-not-run'
+        'portable-session-ending-controlled', 'portable-terminal-status-not-run',
+        'offline-restore-public-facade', 'offline-restore-active-owner-fail-closed',
+        'offline-restore-abc-roundtrip', 'offline-restore-path-boundary',
+        'offline-restore-reparse-boundary', 'offline-restore-forged-layout-boundary',
+        'offline-restore-app-lifecycle-contract',
+        'offline-restore-published-disposable-self-check',
+        'offline-restore-manual-terminal-status'
     )
+    $knownGateIds = @($bootstrapGateIds + $inputCoreGateIds + $storageGateIds + $portableGateIds)
+    foreach ($requiredGateId in $requiredGateIds) {
+        if ($knownGateIds -notcontains $requiredGateId) {
+            throw "验收基线引用了尚未实现的 gate：$requiredGateId"
+        }
+    }
     foreach ($gateId in $bootstrapGateIds) {
         if ($requiredGateIds -notcontains $gateId) {
             throw "验收基线缺少不可移除 gate：$gateId"
@@ -876,6 +890,41 @@ try {
         Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.WindowClosePolicyTests.SessionEndingAllowsCloseWithoutHideSideEffect'
         Add-Gate -Id 'portable-session-ending-controlled' -Details 'session ending allows controlled shutdown rather than tray hiding'
 
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.StoragePublicSurfaceHasOneOfflineEntryAndNoFaultSeam'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.PublicSurfaceHasOneNarrowOfflineRestoreEntryPointWithoutFaultInjection'
+        Add-Gate -Id 'offline-restore-public-facade' -Details 'exactly one public RestoreOffline(StorageLayout,String) entry; no public fault seam'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.ActiveOwnerRejectsOfflineRestoreBeforeJournalOrAutomaticBackup'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.ActiveStorageOwnerFailsClosedWithoutAutomaticBackupOrJournal'
+        Add-Gate -Id 'offline-restore-active-owner-fail-closed' -Details 'active Storage owner rejects restore before journal or automatic backup'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.DisposableAtoBRestoreAndAutomaticBackupRoundTripExactly'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.DisposableStoresRoundTripBOverAThenAutomaticBackupRestoresAIntoC'
+        Add-Gate -Id 'offline-restore-abc-roundtrip' -Details 'disposable A/B/C reopen round-trip and automatic pre-restore backup are exact'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.RelativePathBoundaryRejectsEscapeAbsoluteWrongExtensionAndMissingFile'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.FacadeRejectsNonRelativeContainedBackupPath' 4
+        Add-Gate -Id 'offline-restore-path-boundary' -Details 'escape, absolute, wrong-extension and missing backup paths fail closed without external writes'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.JunctionBackupPathIsRejectedWithoutChangingExternalDirectory'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.FacadeRejectsBackupBehindDirectoryJunction'
+        Add-Gate -Id 'offline-restore-reparse-boundary' -Details 'directory junction backup is rejected and external directory snapshot is unchanged'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.ForgedLayoutIsRejectedBeforeWritingOutsideProgramDirectory'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.FacadeRejectsForgedLayoutWithoutWritingOutsideProgramDirectory'
+        Add-Gate -Id 'offline-restore-forged-layout-boundary' -Details 'forged StorageLayout fails before any external write'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.AppSourceLocksUserConsentOrderTerminalStateAndSingleShutdownContract'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppStorageDataToolsTests.RestoreTransferRejectsUnsafeBoundaryWithoutClosingController' 6
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppStorageDataToolsTests.RestoreLeaseIsSingleUseAndPermanentlyBlocksOtherLifecycleOwners'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.HappyPathUsesExactOrderAndTerminatesOnce'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.TeardownFailurePreventsRestoreAndNeverRepeatsOwnerRelease' 7
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.RestoreFailureIsTerminalAndNeverReopensOwners' 2
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.OpenCaptureDiagnosticsProducesExplicitUncertainTerminalState'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.RestoreLifecycleSuppressesNormalExitCleanupAndDeduplicatesShutdown'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.CollectionControllerTests.OfflineRestoreStatesAreTerminalAndCannotPauseOrResume' 4
+        Add-Gate -Id 'offline-restore-app-lifecycle-contract' -Details 'User pause plus final confirmation, exact teardown, fail-closed diagnostics, terminal state and single shutdown passed'
+
         $portableRunbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\portable-checklist.md'
         $portableSchemaPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\portable-evidence.schema.json'
         if (-not (Test-Path -LiteralPath $portableRunbookPath -PathType Leaf)) {
@@ -885,6 +934,17 @@ try {
             'startupShortcutTerminalStatus', 'sessionLockSuspendTerminalStatus', 'hardwareTerminalStatus',
             'visualTerminalStatus', 'runtimeNetworkStatus', 'releaseEligible')
         Add-Gate -Id 'portable-terminal-status-not-run' -Details 'Startup/session/hardware/visual/network terminal checks remain not-run; releaseEligible=false'
+        $offlineRestoreRunbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\offline-restore-checklist.md'
+        if (-not (Test-Path -LiteralPath $offlineRestoreRunbookPath -PathType Leaf)) {
+            throw "离线恢复人工验收清单不存在：$offlineRestoreRunbookPath"
+        }
+        $offlineRestoreRunbook = Get-Content -LiteralPath $offlineRestoreRunbookPath -Raw -Encoding UTF8
+        foreach ($requiredText in @('not-run', 'releaseEligible=false', '全新可丢弃副本', '二次确认', '手动重启')) {
+            if ($offlineRestoreRunbook.IndexOf($requiredText, [StringComparison]::Ordinal) -lt 0) {
+                throw "离线恢复人工验收清单缺少不可省略字段：$requiredText"
+            }
+        }
+        Add-Gate -Id 'offline-restore-manual-terminal-status' -Details 'real WPF restore remains not-run and releaseEligible=false; disposable-copy runbook present'
         $script:evidence.portable = [ordered]@{
             startupShortcutTerminalStatus = 'not-run'
             sessionLockSuspendTerminalStatus = 'not-run'
@@ -894,6 +954,17 @@ try {
             releaseEligible = $false
             runbook = Get-RelativePath -BasePath $repositoryRoot -Path $portableRunbookPath
             evidenceSchema = Get-RelativePath -BasePath $repositoryRoot -Path $portableSchemaPath
+        }
+        $script:evidence.offlineRestore = [ordered]@{
+            acceptanceStoreRoot = '.tools\acceptance'
+            publicFacade = 'StorageOfflineRestore.RestoreOffline(StorageLayout,String)'
+            activeOwnerFailClosed = $true
+            disposableRoundTrip = 'A-to-B; automatic-A-to-C'
+            appLifecycleContract = 'passed-automated'
+            publishedDisposableSelfCheck = 'pending'
+            manualTerminalStatus = 'not-run'
+            releaseEligible = $false
+            runbook = Get-RelativePath -BasePath $repositoryRoot -Path $offlineRestoreRunbookPath
         }
     }
 
@@ -942,6 +1013,29 @@ try {
     try {
         $null = Invoke-CheckedCommand -Name 'published-self-check' -FilePath $publishedExecutable -Arguments @('--self-check')
         Add-Gate -Id 'unicode-space-self-check' -Details '发布产物从中文和空格目录自检退出码 0。'
+
+        if ($Stage -eq 'Portable') {
+            $offlineRestoreSmokeDirectory = Join-Path $toolsRoot "acceptance\offline restore published\$timestamp\中文 空格副本"
+            New-Item -ItemType Directory -Path $offlineRestoreSmokeDirectory -Force | Out-Null
+            Get-ChildItem -LiteralPath $publishDirectory -Force | Copy-Item -Destination $offlineRestoreSmokeDirectory -Recurse -Force
+            $offlineRestoreSmokeExecutable = Join-Path $offlineRestoreSmokeDirectory 'InputTracker.exe'
+            $offlineRestoreSmokeBefore = Get-DirectoryState -Path $offlineRestoreSmokeDirectory
+            $offlineRestoreSmokeResult = Invoke-CheckedCommand -Name 'offline-restore-disposable-self-check' -FilePath $offlineRestoreSmokeExecutable -Arguments @('--self-check')
+            $offlineRestoreSmokeAfter = Get-DirectoryState -Path $offlineRestoreSmokeDirectory
+            if (@(Compare-Object -ReferenceObject $offlineRestoreSmokeBefore -DifferenceObject $offlineRestoreSmokeAfter).Count -ne 0) {
+                throw '离线恢复发布副本 self-check 产生或修改了数据。'
+            }
+            if (Test-Path -LiteralPath (Join-Path $offlineRestoreSmokeDirectory 'data')) {
+                throw '离线恢复发布副本 self-check 创建了 data 目录。'
+            }
+            if ($null -ne (Get-Process -Id $offlineRestoreSmokeResult.ProcessId -ErrorAction SilentlyContinue)) {
+                throw "离线恢复发布副本 self-check 留下进程：$($offlineRestoreSmokeResult.ProcessId)"
+            }
+            Add-Gate -Id 'offline-restore-published-disposable-self-check' -Details 'published Unicode-space disposable copy self-check exited 0 with no data changes or residual process'
+            $script:evidence.offlineRestore.publishedDisposableSelfCheck = 'passed-no-data-no-residual-process'
+            $script:evidence.offlineRestore.publishedDisposablePath = Get-RelativePath -BasePath $repositoryRoot -Path $offlineRestoreSmokeDirectory
+            Write-Evidence
+        }
 
         $outsideAfterSelfCheck = Get-DirectoryState -Path $runtimeOutsideRoot
         $outsideDifference = @(Compare-Object -ReferenceObject $outsideBefore -DifferenceObject $outsideAfterSelfCheck)

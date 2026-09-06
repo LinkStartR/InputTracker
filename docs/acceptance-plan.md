@@ -61,6 +61,12 @@ InputCore 自动测试仅验证规范化注入和生产管线，不是物理硬�
 
 Startup 真实创建/清理、锁屏与挂起、普通用户/UAC、运行时无网络、Windows 10/11、真实硬件和视觉矩阵均保持 `not-run`，`releaseEligible=false`；按 Portable 人工清单和 schema 记录证据，自动化不得冒充现场通过。
 
+### 离线恢复增量门槛
+
+Portable 判卷还必须验证唯一公开 `RestoreOffline` 门面、活动 Storage owner fail-closed、一次性 A/B/C store 精确往返、automatic pre-restore backup、路径与 reparse 边界、App 用户暂停/二次确认/精确 teardown/终态退出契约，以及完整发布目录的中文空格可丢弃副本自检。新增 Acceptance 恢复只发生在 `.tools/acceptance` 下全新临时目录；普通 Storage 单元测试只使用自动销毁的隔离临时目录。两者均不得接触现有发布数据或用户 store。
+
+App 生命周期自动证据由普通 App 测试锁定真实 internal seam，Acceptance 仅用源码契约补充跨程序集判定；它不能替代真实 WPF 点击、SessionEnding 或恢复后人工重启。人工流程固定在 `tests/Acceptance/Manual/offline-restore-checklist.md`，状态保持 `not-run`、`releaseEligible=false`，直到用户在完整绿色目录的可丢弃副本中完成两次恢复往返。
+
 ## 视觉矩阵
 
 在 1440×900 与 1920×1080、100% 与 150% 缩放、浅色与深色下截图；核对无截断、重叠、不可读文字，普通文字对比度至少 4.5:1，热力色阶不遮字。最终由领导确认。
