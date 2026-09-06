@@ -46,6 +46,7 @@ public sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(_resumeItem);
         _contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         _contextMenu.Items.Add("退出", null, (_, _) => BeginExit());
+        _contextMenu.Closed += ContextMenu_Closed;
 
         _notifyIcon = new System.Windows.Forms.NotifyIcon
         {
@@ -65,6 +66,7 @@ public sealed class TrayIconController : IDisposable
         _exitSequence.Dispose();
         _collection.Changed -= OnCollectionChanged;
         _notifyIcon.DoubleClick -= NotifyIcon_DoubleClick;
+        _contextMenu.Closed -= ContextMenu_Closed;
         _contextMenu.Close();
         _notifyIcon.Visible = false;
         _contextMenu.Dispose();
@@ -78,26 +80,28 @@ public sealed class TrayIconController : IDisposable
         if (_exitSequence.CanShowWindow) _showWindow();
     }
 
-    private void BeginExit() => _exitSequence.BeginExit(
-        closeMenu: () => _contextMenu.Close(System.Windows.Forms.ToolStripDropDownCloseReason.ItemClicked),
-        hideTray: () =>
-        {
-            _openItem.Enabled = false;
-            _pauseItem.Enabled = false;
-            _resumeItem.Enabled = false;
-            _notifyIcon.Visible = false;
-        },
-        defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
-            action,
-            ExitDispatchPriority),
-        tryExit: _exitApplication,
-        restoreTray: () =>
-        {
-            if (_disposed) return;
-            _notifyIcon.Visible = true;
-            _openItem.Enabled = true;
-            Render(_collection.Current);
-        });
+    private void BeginExit() => _exitSequence.BeginExit();
+
+    private void ContextMenu_Closed(object? sender, System.Windows.Forms.ToolStripDropDownClosedEventArgs e) =>
+        _exitSequence.ContinueAfterMenuClosed(
+            hideTray: () =>
+            {
+                _openItem.Enabled = false;
+                _pauseItem.Enabled = false;
+                _resumeItem.Enabled = false;
+                _notifyIcon.Visible = false;
+            },
+            defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                action,
+                ExitDispatchPriority),
+            tryExit: _exitApplication,
+            restoreTray: () =>
+            {
+                if (_disposed) return;
+                _notifyIcon.Visible = true;
+                _openItem.Enabled = true;
+                Render(_collection.Current);
+            });
 
     private void OnCollectionChanged(object? sender, CollectionSnapshot snapshot) => Render(snapshot);
 
@@ -134,25 +138,31 @@ public sealed class TrayIconController : IDisposable
 internal sealed class TrayExitSequence : IDisposable
 {
     private bool _exitPending;
+    private bool _continuationScheduled;
     private bool _disposed;
 
     public bool CanShowWindow => !_exitPending && !_disposed;
 
-    public void BeginExit(
-        Action closeMenu,
+    public void BeginExit()
+    {
+        if (_exitPending || _disposed) return;
+        _exitPending = true;
+    }
+
+    public void ContinueAfterMenuClosed(
         Action hideTray,
         Action<Action> defer,
         Func<bool> tryExit,
         Action restoreTray)
     {
-        if (_exitPending || _disposed) return;
-        _exitPending = true;
-        closeMenu();
+        if (!_exitPending || _continuationScheduled || _disposed) return;
+        _continuationScheduled = true;
         hideTray();
         defer(() =>
         {
             if (_disposed || tryExit()) return;
             _exitPending = false;
+            _continuationScheduled = false;
             restoreTray();
         });
     }

@@ -1214,3 +1214,12 @@
 - 交付物：`.tools/publish/tray-exit-fix2-test-20260906/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/` 目录；exe SHA-256 `6F5AE5B5A1498CFCE9EAABFD77861A39CC8FE932F2DE9478CC827C8C24FFB83B`。
 - 停点：执行者未启动新包、未运行 GUI/self-check，也未重跑全量验收。此前旧包 PID `29232` 曾在退出后隐藏存活，人工复测前应通过注销或重启 Windows 正常清理旧实例；不由执行者强制终止用户进程。
 - 本轮人工检查仅限：退出菜单立即消失、无 `.NET` 异常、任务管理器中进程消失、同一新目录立即重启不再提示“已在运行”、重启后数据存在。等待用户结果，未通过前不开始下一项。
+
+## 2026-09-06 托盘退出第三轮：等待系统完成菜单关闭
+
+- 用户复测第二轮包时首项仍失败：点击托盘“退出”后菜单画面没有消失，因而停止其余检查；截图显示完整右键菜单仍停留。按单项停点约定，字体/颜色/文案与鼠标/设备功能仍未开始。
+- 根因：第二轮把 `Shutdown` 提升到正常调度优先级后，进程可能在 WinForms 完成菜单关闭消息与桌面重绘前结束；同步 `_contextMenu.Close()` 不能证明系统已完成 `Closed` 生命周期。
+- 方案：点击“退出”只进入不可重复的退出待定状态；让 WinForms 按正常点击流程关闭菜单，收到 `ContextMenuStrip.Closed` 后才隐藏托盘并把真正退出交给 WPF Dispatcher。没有定时延迟，不改采集、Storage 或窗口关闭逻辑。
+- 红证据：新增两阶段顺序断言后，首次受限构建在 Windows SDK 探测处 exit `1`、`MSB4184 Access to ... AppData\\Local\\Microsoft SDKs is denied`，未进入源码编译；按既有授权在主机权限下重跑，源码构建 exit `1`、`0 warnings / 6 errors`，均为旧 `BeginExit` 签名与缺少 `ContinueAfterMenuClosed`。
+- 绿证据：最小实现后 App.Tests Release build exit `0`，`0 warnings / 0 errors`，1.32s；只运行 `TrayExitSequenceTests|WindowClosePolicyTests`，exit `0`，`5 passed / 0 failed / 0 skipped`，0.529s。
+- 下一步：提交该窄修并发布唯一第三轮本地包，不由执行者启动。随后立即停止，只请用户复测托盘菜单关闭与进程退出；未通过前不进入下一项。
