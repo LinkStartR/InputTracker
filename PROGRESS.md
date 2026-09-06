@@ -1159,3 +1159,11 @@
 - 统一命令：`dotnet restore InputTracker.sln` exit 0；Release solution build exit 0、7 projects、0 warnings / 0 errors、1.60s；solution test exit 0，App 125 + Input 38 + Acceptance 25 + Storage 205 = 393 passed / 0 failed / 0 skipped，StorageSpike 4m42s。
 - 最高判卷：`scripts/verify.ps1 -Stage Portable` exit 0；SDK 10.0.302、393 total / 25 Acceptance / 0 failed / 0 skipped / 45 gates，publish/self-check exit 0、second-instance exit 2；证据 `.tools/verification/20260830-083430-116/verification.json`。原样 `dotnet publish InputTracker.sln -c Release -r win-x64 --self-contained true` exit 0。
 - 未验证/下一步：没有对现有发布目录或用户 store 执行恢复；真实 WPF 点击、SessionEnding、可丢弃完整绿色副本的 A/B restore/restart 与恢复前备份往返仍 pending。先由固定“用户测试与下一步建议”角色补不可跳过的 Acceptance/人工 runbook 门，再生成新包；门未绿前不把恢复按钮交给用户实际使用。
+
+## 2026-09-06 离线恢复 Acceptance 首轮统一验收红灯
+
+- 分支：`codex/ui-storage-integration`；起点产品提交 `fd13f4c`，本轮 Acceptance 五个文件尚未提交。
+- 命令：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Stage Portable`；原始 exit `1`，restore exit `0`，Release build exit `0`，7 projects，`0 warnings / 0 errors`。
+- 结果：Acceptance `31 passed / 1 failed / 0 skipped / 32 total`；失败仅为 `StoragePublicSurfaceHasOneOfflineEntryAndNoFaultSeam`，断言将正常公开诊断 DTO `StorageIntegrityFault` 误当成公开 fault injection seam。失败 TRX：`.tools/verification/20260831-162355-854/trx/InputTracker.AcceptanceTests.trx`。命令在首个测试项目红灯后停止，未执行后续发布，未产生可交付新包。
+- 窄修：与既有 `StorageOfflineRestoreTests.PublicSurfaceHasOneNarrowOfflineRestoreEntryPointWithoutFaultInjection` 对齐，只禁止导出类名包含 `FaultInjector`；唯一公开 `RestoreOffline(StorageLayout,String)` 的精确断言保持不变。
+- 下一步：先只读解析 TRX 耗时和工作树，确认无遗留进程；然后最多再运行一次统一 `Portable` 验收。若绿，则复用其已验证 publish 产物生成唯一本地人工测试包并立即停止；不启动 GUI，不代替用户恢复数据，不反复测试。
