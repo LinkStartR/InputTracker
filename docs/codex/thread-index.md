@@ -1,10 +1,10 @@
 # Codex 线程索引
 
-最后更新：2026-08-30
+最后更新：2026-09-06
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：`codex/ui-storage-integration@c25ce96` 已提交 Storage facade、App 离线恢复生命周期与独立 Acceptance。本轮 400 tests / 0 failed / 0 skipped；`verify -Stage Portable` 在所有测试通过后因 PowerShell 5 文本 API 兼容错误 exit 1，已静态窄修且按用户指令不跑第三轮。新本地自包含包已生成，现立即停在用户人工点击/恢复/视觉验证；GitHub 暂缓，精确范围删除仍 blocked。
+- 当前阶段：`codex/ui-storage-integration@1d7059c` 已完成首个用户反馈切片，仅修复托盘退出时菜单与已关闭窗口竞态。App build 0 warnings / 0 errors，定向 4/0/0；新本地包已生成且未由执行者启动。现按用户要求停在单项人工验收，未通过前不开始浅色主题/字体/文案或鼠标/设备功能。GitHub 暂缓，精确范围删除仍 blocked。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -1191,3 +1191,9 @@
 - 红证据：`dotnet build tests/InputTracker.App.Tests/InputTracker.App.Tests.csproj -c Release --no-restore` exit `1`，`0 warnings / 2 errors`，两处 `CS0246` 明确缺 `TrayExitSequence`。
 - 绿证据：实现后同一 App.Tests Release build exit `0`，`0 warnings / 0 errors`，2.38s；定向 `TrayExitSequenceTests|WindowClosePolicyTests` exit `0`，`4 passed / 0 failed / 0 skipped`，18ms。`git diff --check` 无空白错误（仅 LF→CRLF 提示）。
 - 下一步：精确提交本窄修，只发布一个新的自包含本地包，不由执行者启动 GUI。随后立即停止，请用户只验证托盘菜单消失、无异常、进程退出与数据持久化；未通过前不开始额外功能。
+
+## 2026-09-06 托盘退出修复人工测试包
+
+- 提交：`1d7059c fix: close tray menu before shutdown`；工作树在发布前 clean。
+- 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/tray-exit-fix-test-20260906` exit `0`。产物 484 files，初始无 `data/`，`InputTracker.exe` SHA-256 `80AD5517DEF2194B8C4FB1BCB3FA794479FDECA02C8AF2D4F6E5DA533DF57A42`。
+- 人工停点：执行者未启动新包、未运行 GUI/self-check，不继续第 2 项。用户只需检查：托盘右键菜单选“退出”后立即消失；无 `.NET` 异常；进程退出；同目录重启后数据仍在。等待用户 `OK/失败+现象`。
