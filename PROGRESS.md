@@ -1223,3 +1223,10 @@
 - 红证据：新增两阶段顺序断言后，首次受限构建在 Windows SDK 探测处 exit `1`、`MSB4184 Access to ... AppData\\Local\\Microsoft SDKs is denied`，未进入源码编译；按既有授权在主机权限下重跑，源码构建 exit `1`、`0 warnings / 6 errors`，均为旧 `BeginExit` 签名与缺少 `ContinueAfterMenuClosed`。
 - 绿证据：最小实现后 App.Tests Release build exit `0`，`0 warnings / 0 errors`，1.32s；只运行 `TrayExitSequenceTests|WindowClosePolicyTests`，exit `0`，`5 passed / 0 failed / 0 skipped`，0.529s。
 - 下一步：提交该窄修并发布唯一第三轮本地包，不由执行者启动。随后立即停止，只请用户复测托盘菜单关闭与进程退出；未通过前不进入下一项。
+
+## 2026-09-06 托盘退出第三轮人工测试包
+
+- 提交：`66d8abd fix: wait for tray menu to close before exit`；精确 4 文件，包含产品实现、普通回归测试、进度和线程索引。
+- 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/tray-exit-fix3-test-20260906` exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/tray-exit-fix3-test-20260906/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/` 目录；exe SHA-256 `5CD24CE2A1390F0B732823725B375107E5376D9C755B84DD6BAEE431FFD564F5`。
+- 停点：执行者未启动程序、未做 GUI/self-check、未重跑全量测试。人工先只检查点击“退出”后菜单是否立即消失，以及 2 秒内进程是否退出；若两项通过，再检查立即重启和同目录数据持久化。等待用户结果。
