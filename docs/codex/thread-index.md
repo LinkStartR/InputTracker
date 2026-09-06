@@ -4,7 +4,7 @@
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
-- 当前阶段：`codex/ui-storage-integration@fd13f4c` 已提交 Storage facade 与 App 离线恢复生命周期；统一 393/0/0、Portable 393/25/45。用户明确暂缓 GitHub；下一步为恢复 Acceptance、可丢弃完整绿色副本验证与新版本地包，精确范围删除仍 blocked。
+- 当前阶段：`codex/ui-storage-integration@c25ce96` 已提交 Storage facade、App 离线恢复生命周期与独立 Acceptance。本轮 400 tests / 0 failed / 0 skipped；`verify -Stage Portable` 在所有测试通过后因 PowerShell 5 文本 API 兼容错误 exit 1，已静态窄修且按用户指令不跑第三轮。新本地自包含包已生成，现立即停在用户人工点击/恢复/视觉验证；GitHub 暂缓，精确范围删除仍 blocked。
 
 | ID | 子任务标题 | 负责事项 | 状态 | 范围 | 分支 / PR / 提交 | 可见或可定位 | 推荐模型 / 思考深度 | 成本理由 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -40,7 +40,7 @@
 | C35 | UI 鼠标回放 | 将固定 Storage 快照接为逐记录、有界、可暂停/倍速/精确 seek 的鼠标回放 | 已完成并提交；视觉跟进只读复审完成 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | 回放 `a9b0dd4`；视觉主线程 `01d0ca8` | 是：`/root/ui_mouse_playback` | terra / high | WPF 状态、异步 generation、百万点零丢失与 Storage 游标交叉 | 回放协议完成；后续只读复审指出状态条、侧栏密度、强调色和空画布层级问题，主线程按 48 张布局矩阵修复。App 95/0/0；真实硬件与真实系统 DPI 仍 pending |
 | C36 | Storage 离线恢复 facade | 收敛 public offline restore API，并用可丢弃 A/B store 证明 owner lock、恢复往返和自动恢复前备份 | 已完成并提交 | `src/InputTracker.Storage/**`、`tests/InputTracker.Storage.Tests/**` | `babc1ba` | 是：`/root/offline_restore_facade` | gpt-5.6-sol / xhigh | 用户数据替换、writer lock、journal 与长期恢复兼容属于最高风险 | 唯一 public facade 与 canonical layout fail-closed 完成；9/0/0、non-Spike 204/0/0。只验临时 store，App coordinator 与真实副本人工验收待后续 |
 | C37 | App 离线恢复 | 实现可转交 lease、精确停采/释放 owner 顺序、二次确认、终态状态与单次退出 | 已完成并提交 | `src/InputTracker.App/**`、`tests/InputTracker.App.Tests/**` | `fd13f4c` | 是：`/root/app_offline_restore` | gpt-5.6-sol / xhigh | 用户数据替换、Raw Input/Storage owner 竞态与 WPF 退出顺序为最高风险 | lease/二次确认/精确 teardown/owner handoff/终态完成；App 125/0/0、统一 393/0/0、Portable 393/25/45。真实 WPF、SessionEnding 与可丢弃完整副本恢复待 C2 验收 |
-| C38 | 用户测试与下一步建议 | 离线恢复 Acceptance、反向验证、可丢弃绿色副本 runbook 与交付门 | 两次环境中断，最终续作已登记 | `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`、验收 runbook | 基线 `7a258ee`；保留 2 个未提交 fail-fast 红准备 | 是：前任 `/root/offline_restore_acceptance`；容量失败 `/root/offline_restore_acceptance_recovery`；最终续作 `/root/offline_restore_acceptance_final` | 推荐 terra / high；实际继承当前可用模型 | 跨 App/Storage、数据替换、进程重启与防作弊判卷需要独立高判断 QA；terra 容量不可用 | 最终续作握手完成；禁止重做两处红准备，仅跑一次 fail-fast 红和一次最终自动判卷。到人工 WPF/恢复副本测试立即停止 |
+| C38 | 用户测试与下一步建议 | 离线恢复 Acceptance、反向验证、可丢弃绿色副本 runbook 与交付门 | 已完成并本地提交；人工终验 pending | `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`、验收 runbook | `c25ce96`；红灯记录 `82175ff` | 是：前任 `/root/offline_restore_acceptance`；容量失败 `/root/offline_restore_acceptance_recovery`；最终续作 `/root/offline_restore_acceptance_final` | 推荐 terra / high；实际继承当前可用模型 | 跨 App/Storage、数据替换、进程重启与防作弊判卷需要独立高判断 QA；terra 容量不可用 | 7 个新增 Acceptance 全绿，400/0/0；PowerShell 5 兼容窄修已提交，未重跑第三轮。已生成本地包，按用户指令停在真实 WPF/恢复副本测试 |
 
 ## 协调说明
 

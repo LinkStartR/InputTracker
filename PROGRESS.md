@@ -1167,3 +1167,18 @@
 - 结果：Acceptance `31 passed / 1 failed / 0 skipped / 32 total`；失败仅为 `StoragePublicSurfaceHasOneOfflineEntryAndNoFaultSeam`，断言将正常公开诊断 DTO `StorageIntegrityFault` 误当成公开 fault injection seam。失败 TRX：`.tools/verification/20260831-162355-854/trx/InputTracker.AcceptanceTests.trx`。命令在首个测试项目红灯后停止，未执行后续发布，未产生可交付新包。
 - 窄修：与既有 `StorageOfflineRestoreTests.PublicSurfaceHasOneNarrowOfflineRestoreEntryPointWithoutFaultInjection` 对齐，只禁止导出类名包含 `FaultInjector`；唯一公开 `RestoreOffline(StorageLayout,String)` 的精确断言保持不变。
 - 下一步：先只读解析 TRX 耗时和工作树，确认无遗留进程；然后最多再运行一次统一 `Portable` 验收。若绿，则复用其已验证 publish 产物生成唯一本地人工测试包并立即停止；不启动 GUI，不代替用户恢复数据，不反复测试。
+
+## 2026-09-06 离线恢复 Acceptance 恢复轮与人工测试停点
+
+- 断言窄修后仅重跑一次同一命令 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -Stage Portable`。SDK `10.0.302`、restore exit `0`、Release build exit `0`，7 projects，`0 warnings / 0 errors`。
+- 全部测试实际通过：Acceptance `32/0/0` 约 40 秒，App `125/0/0` 约 4 秒，Input `38/0/0` 约 564ms，Storage `205/0/0` 约 4m29s；合计 `400 passed / 0 failed / 0 skipped`。TRX 目录：`.tools/verification/20260906-093839-732/trx/`。
+- 命令最终仍 exit `1`：测试之后、publish 之前，Windows PowerShell 5 无 `String.Contains(String, StringComparison)` 重载，原样报错 `Cannot find an overload for "Contains" and the argument count: "2"`。这是新增人工 runbook 文本 gate 的脚本兼容性错误，不是产品、Storage 恢复或 400 项测试失败。
+- 静态窄修：改用 PowerShell 5 / .NET Framework 可用的 `IndexOf(String, StringComparison) -lt 0`，字面内容与严格区分大小写语义不变。按用户“到人工测试环节立即停止，不反复测试”指令，不启动第三轮 verify/test。
+- 下一步：只做 PowerShell AST / JSON / diff 静态检查，提交 Acceptance 窄修；复用同一产品提交既有已 self-check 的自包含 publish 目录生成新的固定人工测试副本，不启动 GUI。届时立即停止，等待用户点击、恢复与视觉反馈。
+
+## 2026-09-06 本地人工测试包已就绪，执行者停止
+
+- 验收提交：`c25ce96 test: add offline restore acceptance gates`；精确 5 个 QA 白名单文件。PowerShell AST parse `0` errors，baseline `400 total / 32 Acceptance / 54 gates`，required gate IDs `54`，`git diff --check` 无空白错误（仅 LF→CRLF 提示）。
+- 发布命令：`\.tools\dotnet\dotnet.exe publish .\src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\local-offline-restore-test-20260906`；exit `0`，Input/Input.Storage/App 均成功发布。
+- 交付物：`.tools/publish/local-offline-restore-test-20260906/InputTracker.exe`；484 files，publish 前后未创建 `data/`；exe SHA-256 `49229FD49E0D0D4B540C7E420A416B52847B8590B095C49785E1E6A3EA62850C`。本包未被执行、未做 self-check，用户是首次启动者。
+- 停点：已达到需要用户人工测试的环节。执行者不启动 GUI、不执行恢复、不重跑 verify/test，等待用户对真实记录、鼠标回放、视觉与可丢弃副本离线恢复的反馈。
