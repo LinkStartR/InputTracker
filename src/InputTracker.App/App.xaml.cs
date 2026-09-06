@@ -132,13 +132,10 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
         _trayIcon = new TrayIconController(
             _collection,
             showWindow: () => ShowWindow(window),
-            exitApplication: () =>
-            {
-                TryExplicitExit(window);
-            });
+            exitApplication: () => TryExplicitExit(window));
 
         window.MinimizeToTrayRequested += (_, _) => window.Hide();
-        window.ExitRequested += (_, _) => TryExplicitExit(window);
+        window.ExitRequested += (_, _) => _ = TryExplicitExit(window);
         window.OfflineRestoreRequested += async (_, request) =>
         {
             if (!_offlineRestoreLifecycle.TryBeginRestore())
@@ -227,20 +224,28 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
 
     private static void ShowWindow(Window window)
     {
+        if (!window.IsLoaded
+            || window.Dispatcher.HasShutdownStarted
+            || window.Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
         window.Show();
         window.WindowState = WindowState.Normal;
         window.Activate();
     }
 
-    private void TryExplicitExit(MainWindow window)
+    private bool TryExplicitExit(MainWindow window)
     {
         if (_dataTools is not null && !_dataTools.TryBeginExplicitExit())
         {
             window.ShowDataToolExitBlocked();
-            return;
+            return false;
         }
         window.PrepareForExplicitExit();
         Shutdown(0);
+        return true;
     }
 
     private static StartupShortcutManager? CreateStartupShortcutManager(string executablePath)

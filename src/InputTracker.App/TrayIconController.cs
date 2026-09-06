@@ -5,16 +5,28 @@ namespace InputTracker;
 public sealed class TrayIconController : IDisposable
 {
     private readonly CollectionController _collection;
+    private readonly Action _showWindow;
+    private readonly Func<bool> _exitApplication;
+    private readonly TrayExitSequence _exitSequence = new();
     private readonly System.Windows.Forms.NotifyIcon _notifyIcon;
+    private readonly System.Windows.Forms.ContextMenuStrip _contextMenu;
+    private readonly System.Windows.Forms.ToolStripMenuItem _openItem;
     private readonly System.Windows.Forms.ToolStripMenuItem _pauseItem;
     private readonly System.Windows.Forms.ToolStripMenuItem _resumeItem;
+    private bool _disposed;
 
     public TrayIconController(
         CollectionController collection,
         Action showWindow,
-        Action exitApplication)
+        Func<bool> exitApplication)
     {
         _collection = collection;
+        _showWindow = showWindow;
+        _exitApplication = exitApplication;
+        _openItem = new System.Windows.Forms.ToolStripMenuItem(
+            "打开 InputTracker",
+            null,
+            (_, _) => RequestShowWindow());
         _pauseItem = new System.Windows.Forms.ToolStripMenuItem(
             "暂停",
             null,
@@ -24,32 +36,65 @@ public sealed class TrayIconController : IDisposable
             null,
             async (_, _) => await ExecuteControlAsync("恢复采集", _collection.ResumeAsync));
 
-        var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("打开 InputTracker", null, (_, _) => showWindow());
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(_pauseItem);
-        menu.Items.Add(_resumeItem);
-        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => exitApplication());
+        _contextMenu = new System.Windows.Forms.ContextMenuStrip();
+        _contextMenu.Items.Add(_openItem);
+        _contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        _contextMenu.Items.Add(_pauseItem);
+        _contextMenu.Items.Add(_resumeItem);
+        _contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        _contextMenu.Items.Add("退出", null, (_, _) => BeginExit());
 
         _notifyIcon = new System.Windows.Forms.NotifyIcon
         {
-            ContextMenuStrip = menu,
+            ContextMenuStrip = _contextMenu,
             Icon = SystemIcons.Application,
             Visible = true
         };
-        _notifyIcon.DoubleClick += (_, _) => showWindow();
+        _notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
         _collection.Changed += OnCollectionChanged;
         Render(_collection.Current);
     }
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _exitSequence.Dispose();
         _collection.Changed -= OnCollectionChanged;
+        _notifyIcon.DoubleClick -= NotifyIcon_DoubleClick;
+        _contextMenu.Close();
         _notifyIcon.Visible = false;
-        _notifyIcon.ContextMenuStrip?.Dispose();
+        _contextMenu.Dispose();
         _notifyIcon.Dispose();
     }
+
+    private void NotifyIcon_DoubleClick(object? sender, EventArgs e) => RequestShowWindow();
+
+    private void RequestShowWindow()
+    {
+        if (_exitSequence.CanShowWindow) _showWindow();
+    }
+
+    private void BeginExit() => _exitSequence.BeginExit(
+        closeMenu: () => _contextMenu.Close(System.Windows.Forms.ToolStripDropDownCloseReason.ItemClicked),
+        hideTray: () =>
+        {
+            _openItem.Enabled = false;
+            _pauseItem.Enabled = false;
+            _resumeItem.Enabled = false;
+            _notifyIcon.Visible = false;
+        },
+        defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
+            action,
+            System.Windows.Threading.DispatcherPriority.ContextIdle),
+        tryExit: _exitApplication,
+        restoreTray: () =>
+        {
+            if (_disposed) return;
+            _notifyIcon.Visible = true;
+            _openItem.Enabled = true;
+            Render(_collection.Current);
+        });
 
     private void OnCollectionChanged(object? sender, CollectionSnapshot snapshot) => Render(snapshot);
 
@@ -77,7 +122,41 @@ public sealed class TrayIconController : IDisposable
             CollectionMode.RejectedProgramDirectory => "InputTracker - 目录不可写，采集已拒绝",
             _ => "InputTracker - 未采集"
         };
-        _pauseItem.Enabled = snapshot.CanPause;
-        _resumeItem.Enabled = snapshot.CanResume;
+        _openItem.Enabled = _exitSequence.CanShowWindow;
+        _pauseItem.Enabled = snapshot.CanPause && _exitSequence.CanShowWindow;
+        _resumeItem.Enabled = snapshot.CanResume && _exitSequence.CanShowWindow;
+    }
+}
+
+internal sealed class TrayExitSequence : IDisposable
+{
+    private bool _exitPending;
+    private bool _disposed;
+
+    public bool CanShowWindow => !_exitPending && !_disposed;
+
+    public void BeginExit(
+        Action closeMenu,
+        Action hideTray,
+        Action<Action> defer,
+        Func<bool> tryExit,
+        Action restoreTray)
+    {
+        if (_exitPending || _disposed) return;
+        _exitPending = true;
+        closeMenu();
+        hideTray();
+        defer(() =>
+        {
+            if (_disposed || tryExit()) return;
+            _exitPending = false;
+            restoreTray();
+        });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _exitPending = true;
     }
 }

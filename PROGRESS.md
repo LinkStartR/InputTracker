@@ -1182,3 +1182,12 @@
 - 发布命令：`\.tools\dotnet\dotnet.exe publish .\src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\local-offline-restore-test-20260906`；exit `0`，Input/Input.Storage/App 均成功发布。
 - 交付物：`.tools/publish/local-offline-restore-test-20260906/InputTracker.exe`；484 files，publish 前后未创建 `data/`；exe SHA-256 `49229FD49E0D0D4B540C7E420A416B52847B8590B095C49785E1E6A3EA62850C`。本包未被执行、未做 self-check，用户是首次启动者。
 - 停点：已达到需要用户人工测试的环节。执行者不启动 GUI、不执行恢复、不重跑 verify/test，等待用户对真实记录、鼠标回放、视觉与可丢弃副本离线恢复的反馈。
+
+## 2026-09-06 用户首轮人工反馈与托盘退出窄修
+
+- 人工结果：首次启动、键盘记录、鼠标记录基础、后台采集、暂停/恢复均报 `OK`；退出重启后数据仍在。失败项为托盘右键“退出”时菜单不消失，随后弹出 `.NET` 未处理异常：窗口关闭后又调用 `Show()` / 可见性 API。
+- 范围：本切片只修 `src/InputTracker.App/App.xaml.cs`、`src/InputTracker.App/TrayIconController.cs`并新增普通 `TrayExitSequenceTests`；未改字体、颜色、文案、鼠标统计/轨迹、Storage/Input 或 Acceptance/verify。
+- 修复契约：托盘退出必须先关闭菜单、禁用托盘交互并隐藏图标，再由 WPF Dispatcher 延后请求关闭；退出待定/已销毁时不得再 `Show()`。若数据操作拒绝退出，则恢复托盘与打开能力。
+- 红证据：`dotnet build tests/InputTracker.App.Tests/InputTracker.App.Tests.csproj -c Release --no-restore` exit `1`，`0 warnings / 2 errors`，两处 `CS0246` 明确缺 `TrayExitSequence`。
+- 绿证据：实现后同一 App.Tests Release build exit `0`，`0 warnings / 0 errors`，2.38s；定向 `TrayExitSequenceTests|WindowClosePolicyTests` exit `0`，`4 passed / 0 failed / 0 skipped`，18ms。`git diff --check` 无空白错误（仅 LF→CRLF 提示）。
+- 下一步：精确提交本窄修，只发布一个新的自包含本地包，不由执行者启动 GUI。随后立即停止，请用户只验证托盘菜单消失、无异常、进程退出与数据持久化；未通过前不开始额外功能。
