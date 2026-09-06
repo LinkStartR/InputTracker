@@ -1197,3 +1197,12 @@
 - 提交：`1d7059c fix: close tray menu before shutdown`；工作树在发布前 clean。
 - 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/tray-exit-fix-test-20260906` exit `0`。产物 484 files，初始无 `data/`，`InputTracker.exe` SHA-256 `80AD5517DEF2194B8C4FB1BCB3FA794479FDECA02C8AF2D4F6E5DA533DF57A42`。
 - 人工停点：执行者未启动新包、未运行 GUI/self-check，不继续第 2 项。用户只需检查：托盘右键菜单选“退出”后立即消失；无 `.NET` 异常；进程退出；同目录重启后数据仍在。等待用户 `OK/失败+现象`。
+
+## 2026-09-06 托盘退出修复第二轮：退出回调饥饿
+
+- 用户复测：菜单消失、无 `.NET` 异常与数据保留已通过；但立即重启显示“InputTracker 已在运行”。只读进程证据在弹窗时显示同路径 PID `29232` 与 `8136`；关闭第二实例弹窗后，PID `29232` 仍存活、无主窗口、托盘已隐藏。未终止或修改用户进程。
+- 根因：“先关菜单”后将真正 `Shutdown` 排到 `DispatcherPriority.ContextIdle`；Raw Input 和界面定时消息可长期让该低优先级任务饥饿，造成菜单/托盘已消失但旧进程仍持有单实例锁。
+- 红证据：新增 `ExitShutdownUsesNormalDispatcherPrioritySoCollectionCannotStarveIt`后 App.Tests build exit `1`，`0 warnings / 1 error`，`CS0117` 明确尚无 `ExitDispatchPriority`。
+- 窄修：只将延后退出从 `ContextIdle` 提升为 `Normal`；仍保持在托盘菜单点击处理返回后才执行，不恢复同步 `Shutdown` 竞态。
+- 绿证据：App.Tests Release build exit `0`，`0 warnings / 0 errors`，2.12s；定向 `TrayExitSequenceTests|WindowClosePolicyTests` exit `0`，`5 passed / 0 failed / 0 skipped`，22ms。
+- 下一步：提交本第二轮窄修，发布新的独立目录且不启动；请用户先安全结束旧卡住进程，再验证退出后进程消失和立即重启。未通过前仍不进入第 2 项。

@@ -3,6 +3,14 @@ namespace InputTracker.App.Tests;
 public sealed class TrayExitSequenceTests
 {
     [Fact]
+    public void ExitShutdownUsesNormalDispatcherPrioritySoCollectionCannotStarveIt()
+    {
+        Assert.Equal(
+            System.Windows.Threading.DispatcherPriority.Normal,
+            TrayIconController.ExitDispatchPriority);
+    }
+
+    [Fact]
     public void AcceptedExitClosesMenuAndHidesTrayBeforeDeferredShutdown()
     {
         var sequence = new TrayExitSequence();

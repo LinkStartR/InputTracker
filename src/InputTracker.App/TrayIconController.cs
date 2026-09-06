@@ -4,6 +4,9 @@ namespace InputTracker;
 
 public sealed class TrayIconController : IDisposable
 {
+    internal const System.Windows.Threading.DispatcherPriority ExitDispatchPriority =
+        System.Windows.Threading.DispatcherPriority.Normal;
+
     private readonly CollectionController _collection;
     private readonly Action _showWindow;
     private readonly Func<bool> _exitApplication;
@@ -86,7 +89,7 @@ public sealed class TrayIconController : IDisposable
         },
         defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
             action,
-            System.Windows.Threading.DispatcherPriority.ContextIdle),
+            ExitDispatchPriority),
         tryExit: _exitApplication,
         restoreTray: () =>
         {
