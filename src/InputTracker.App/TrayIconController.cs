@@ -73,6 +73,15 @@ public sealed class TrayIconController : IDisposable
         _notifyIcon.Dispose();
     }
 
+    internal void PrepareForApplicationExit()
+    {
+        if (_disposed) return;
+        _openItem.Enabled = false;
+        _pauseItem.Enabled = false;
+        _resumeItem.Enabled = false;
+        _notifyIcon.Visible = false;
+    }
+
     private void NotifyIcon_DoubleClick(object? sender, EventArgs e) => RequestShowWindow();
 
     private void RequestShowWindow()
@@ -84,13 +93,7 @@ public sealed class TrayIconController : IDisposable
 
     private void ContextMenu_Closed(object? sender, System.Windows.Forms.ToolStripDropDownClosedEventArgs e) =>
         _exitSequence.ContinueAfterMenuClosed(
-            hideTray: () =>
-            {
-                _openItem.Enabled = false;
-                _pauseItem.Enabled = false;
-                _resumeItem.Enabled = false;
-                _notifyIcon.Visible = false;
-            },
+            hideTray: PrepareForApplicationExit,
             defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
                 action,
                 ExitDispatchPriority),

@@ -22,6 +22,8 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
     private bool _disposeStorageOnExit = true;
     private InputCaptureService? _releasedCaptureForRestore;
     private readonly AppOfflineRestoreLifecycleGate _offlineRestoreLifecycle = new();
+    private readonly AppExitSequence _explicitExit = new();
+    private Exception? _explicitExitCleanupError;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -135,7 +137,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
             exitApplication: () => TryExplicitExit(window));
 
         window.MinimizeToTrayRequested += (_, _) => window.Hide();
-        window.ExitRequested += (_, _) => _ = TryExplicitExit(window);
+        window.ExitRequested += (_, _) => TryExplicitExit(window);
         window.OfflineRestoreRequested += async (_, request) =>
         {
             if (!_offlineRestoreLifecycle.TryBeginRestore())
@@ -183,10 +185,16 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
         {
             if (normalResourceCleanup)
                 _mousePlayback?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            Func<Task>? stopCapture = !normalResourceCleanup || (_capture is null && _systemEvents is null)
+                ? null
+                : () => StopCaptureAndSystemEventsAsync(_capture, _systemEvents);
+            if (_explicitExitCleanupError is Exception cleanupError)
+            {
+                stopCapture = () => Task.FromException(cleanupError);
+            }
+
             AppShutdown.Run(
-                !normalResourceCleanup || (_capture is null && _systemEvents is null)
-                    ? null
-                    : () => StopCaptureAndSystemEventsAsync(_capture, _systemEvents),
+                stopCapture,
                 normalResourceCleanup && _disposeStorageOnExit ? _storage : null,
                 _collection,
                 _trayIcon,
@@ -238,14 +246,63 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
 
     private bool TryExplicitExit(MainWindow window)
     {
-        if (_dataTools is not null && !_dataTools.TryBeginExplicitExit())
+        MousePlaybackController? playback = null;
+        InputCaptureService? capture = null;
+        PortableSystemEventBridge? systemEvents = null;
+        return _explicitExit.TryBegin(
+            acquireExit: () =>
+            {
+                if (_dataTools is null || _dataTools.TryBeginExplicitExit()) return true;
+                window.ShowDataToolExitBlocked();
+                return false;
+            },
+            prepareUi: () =>
+            {
+                playback = window.PrepareForExplicitExit();
+                _mousePlayback = null;
+                capture = _capture;
+                _capture = null;
+                systemEvents = _systemEvents;
+                _systemEvents = null;
+                _trayIcon?.PrepareForApplicationExit();
+                window.Hide();
+            },
+            cleanupAsync: () => PrepareExplicitExitResourcesAsync(playback, capture, systemEvents),
+            finish: error =>
+            {
+                _explicitExitCleanupError = error;
+                Shutdown(0);
+            });
+    }
+
+    private static async Task PrepareExplicitExitResourcesAsync(
+        MousePlaybackController? playback,
+        InputCaptureService? capture,
+        PortableSystemEventBridge? systemEvents)
+    {
+        Exception? first = null;
+        try
         {
-            window.ShowDataToolExitBlocked();
-            return false;
+            if (playback is not null) await playback.DisposeAsync();
         }
-        window.PrepareForExplicitExit();
-        Shutdown(0);
-        return true;
+        catch (Exception error)
+        {
+            first = error;
+        }
+
+        try
+        {
+            await StopCaptureAndSystemEventsAsync(capture, systemEvents);
+        }
+        catch (Exception error)
+        {
+            first ??= error;
+        }
+
+        if (first is not null)
+        {
+            throw new AggregateException("InputTracker pre-shutdown cleanup failed.", first);
+        }
     }
 
     private static StartupShortcutManager? CreateStartupShortcutManager(string executablePath)

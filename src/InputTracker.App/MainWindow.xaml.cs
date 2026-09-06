@@ -79,7 +79,17 @@ public partial class MainWindow : Window
     public event EventHandler? ExitRequested;
     internal event EventHandler<OfflineRestoreRequestedEventArgs>? OfflineRestoreRequested;
 
-    internal void PrepareForExplicitExit() => _closePolicy.RequestExplicitExit();
+    internal MousePlaybackController? PrepareForExplicitExit()
+    {
+        _closePolicy.RequestExplicitExit();
+        _dashboardRefreshTimer.Stop();
+        _mousePlaybackFrameTimer.Stop();
+        ResetMousePlaybackClock();
+        MousePlaybackController? playback = _mousePlayback;
+        if (playback is not null) playback.Changed -= MousePlayback_Changed;
+        _mousePlayback = null;
+        return playback;
+    }
 
     internal void PrepareForSessionEnding() => _closePolicy.RequestSessionEnding();
 

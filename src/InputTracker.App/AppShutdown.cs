@@ -49,3 +49,51 @@ internal static class AppShutdown
         }
     }
 }
+
+internal sealed class AppExitSequence
+{
+    private int _started;
+
+    public bool TryBegin(
+        Func<bool> acquireExit,
+        Action prepareUi,
+        Func<Task> cleanupAsync,
+        Action<Exception?> finish)
+    {
+        ArgumentNullException.ThrowIfNull(acquireExit);
+        ArgumentNullException.ThrowIfNull(prepareUi);
+        ArgumentNullException.ThrowIfNull(cleanupAsync);
+        ArgumentNullException.ThrowIfNull(finish);
+
+        if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
+        {
+            return true;
+        }
+
+        if (!acquireExit())
+        {
+            Volatile.Write(ref _started, 0);
+            return false;
+        }
+
+        prepareUi();
+        _ = CompleteAsync(cleanupAsync, finish);
+        return true;
+    }
+
+    private static async Task CompleteAsync(Func<Task> cleanupAsync, Action<Exception?> finish)
+    {
+        await Task.Yield();
+        Exception? error = null;
+        try
+        {
+            await cleanupAsync();
+        }
+        catch (Exception cleanupError)
+        {
+            error = cleanupError;
+        }
+
+        finish(error);
+    }
+}

@@ -1230,3 +1230,12 @@
 - 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/tray-exit-fix3-test-20260906` exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/tray-exit-fix3-test-20260906/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/` 目录；exe SHA-256 `5CD24CE2A1390F0B732823725B375107E5376D9C755B84DD6BAEE431FFD564F5`。
 - 停点：执行者未启动程序、未做 GUI/self-check、未重跑全量测试。人工先只检查点击“退出”后菜单是否立即消失，以及 2 秒内进程是否退出；若两项通过，再检查立即重启和同目录数据持久化。等待用户结果。
+
+## 2026-09-06 退出第四轮：关闭前异步释放采集所有权
+
+- 用户第三轮实测：托盘菜单立即消失 `OK`；2 秒内进程消失和立即重启均失败。另证实先点主界面“退出”不会结束进程，再点托盘“退出”会令菜单无法消失。
+- 只读现场：第三轮包进程 PID `20760` 仍存活，`Responding=True`、无主窗口，24 个线程全部处于等待；数据文件最后写入时间与退出操作一致，说明界面已关闭、采集已进入收尾，但应用停在 WPF `OnExit` 的同步资源等待路径。未终止或修改该用户进程。
+- 修复：显式退出先取得数据操作关闭权，立即隐藏窗口和托盘并解除鼠标回放 UI 所有权；在 WPF Dispatcher 仍运行时异步完成回放释放和 Raw Input 停止/队列 barrier/Storage 落盘，完成后才调用 `Shutdown`。主界面与托盘复用同一不可重复退出序列；清理异常保留到既有 `AppShutdown` 汇总，不吞异常。
+- 红证据：先新增异步退出序列测试，Release build exit `1`、`0 warnings / 3 errors`，均为缺少 `AppExitSequence`。首次定向运行为 `8 passed / 1 failed / 0 skipped`，失败揭示 `Task.Yield` 的清理启动可与调用方并行；测试改为约束真实要求“退出完成必须等清理完成”，没有放宽清理先于 Shutdown 的顺序。
+- 绿证据：修复后定向 `AppExitSequenceTests|AppShutdownTests|TrayExitSequenceTests|WindowClosePolicyTests` exit `0`，连同构建均成功；`9 passed / 0 failed / 0 skipped`，0.5145s。
+- 下一步：提交该退出生命周期窄修，发布第四轮独立测试包后立即暂停。用户只复测主界面退出、托盘退出、进程消失与立即重启。
