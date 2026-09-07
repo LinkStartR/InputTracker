@@ -1322,3 +1322,10 @@
 - 红证据：测试先行的主机编译 exit `1`、`0 warnings / 5 errors`，均为缺 `ReconnectableHardware`、`IsIndeterminate` 与对应 ambiguity；实现后首轮设备目录为 `15 passed / 1 failed / 0 skipped`，唯一失败是旧非法样本值 16 已成为明确合法的 IndeterminateTransport 位，改用未定义值 64 后保持 fail-closed 断言。
 - 绿证据：solution Release build exit `0`，7 projects，`0 warnings / 0 errors`，4.05s；首次不含 StorageSpike 的 solution 回归为 App `137/0/0`、Input `38/0/0`、Storage `208/0/0`、Acceptance `32/0/0`。补充“同容器但硬件变化不合并”和“多个候选全部提示歧义”后，设备目录 `18/0/0`、Storage 非 Spike `209/0/0`、App `137/0/0`。
 - 未验证/下一步：自动测试使用真实 SQLite 重开，但不替代真实 Windows 设备拔插。提交并发布独立绿色目录后立即停下，由用户验证同一键盘和鼠标拔插前后仍为同一列表项、次数连续、重启保留；若界面仍显示临时身份，说明该设备没有满足安全映射所需的容器/硬件证据，应如实保留而非猜测合并。设备重命名、文案和字号仍不处理。
+
+## 2026-09-07 设备重连人工测试包
+
+- 产品提交：`3f413fc feat: remember devices across reconnects`；10 个设备映射、App 展示、普通测试及断点文件，未改 schema、依赖、Acceptance、verify、权限或 GitHub。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-reconnect-test-20260907`，exit `0`，8.51s；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/device-reconnect-test-20260907/InputTracker.exe`；484 files，初始无 `data/`，SHA-256 `03B79FBF542C9F5BCE90050044D632DF2FD2AE068DE0384EFA538BE00D34A8DD`，运行中 InputTracker 进程 `0`。
+- 停点：执行者未启动程序、未做真实拔插，也未开始设备重命名、文案或字号。用户只需对一只键盘和一只鼠标分别验证“产生统计→拔插→列表仍为同一项→次数连续→退出重启仍保留”，并核对设备旁的身份提示；收到结果前不推进下一项。
