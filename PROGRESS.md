@@ -1301,3 +1301,10 @@
 - 最终自动证据：Release solution build exit `0`，7 projects，`0 warnings / 0 errors`，8.74s；App.Tests `136/0/0`，Input.Tests `38/0/0`，Storage 非 Spike `205/0/0`，完整 Acceptance `32/0/0`（12s），合计 `411 passed / 0 failed / 0 skipped`，不低于 400 基线。Storage Acceptance 定向 `10/0/0` 另证实按键汇总不生成 `.mspool` / `.mchunk` 且不存在公开轨迹 API。
 - 静态证据：`git diff --check` 无空白错误（仅 LF→CRLF 提示）；`MainWindow.xaml` 与 `App.xaml` XML parse 成功；`scripts/verify.ps1` PowerShell AST `0` errors；产品 App 源码无 `MousePlayback` / `StreamMouseAsync` / `StorageMouseTransition` 命中。
 - 下一步：提交本切片，发布新的 win-x64 self-contained 独立绿色目录且不由执行者启动。随后立即停在人工检查点，只验证“无轨迹入口/无新轨迹文件/按键次数继续/退出重启”；通过前不做设备重连映射或重命名。
+
+## 2026-09-07 无鼠标轨迹人工测试包
+
+- 产品提交：`281263d feat: remove mouse trajectory tracking`；53 个文件，删除 App 回放、Storage 轨迹运行链、公开接口、专用文档与过期测试，并以同数量的禁止轨迹回归保持测试基线只增不减。未推送 GitHub。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/no-mouse-trajectory-test-20260907`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/no-mouse-trajectory-test-20260907/InputTracker.exe`；484 files，初始无 `data/`，SHA-256 `A26F856E36C748623A4A75C81B06DD214E6A806B1D1EC761DFA50E98A0CE0C1D`，运行中 InputTracker 进程 `0`。
+- 停点：执行者未启动程序、未做 GUI/self-check，也未开始设备重连映射、设备重命名、文案或字号。本轮只请用户验证鼠标页只剩五键次数、持续移动/滚轮不产生 `.mspool` / `.mchunk`、按键次数继续增长与重启保留、主界面/托盘退出正常。
