@@ -1255,3 +1255,10 @@
 - 红→绿：首次 App.Tests 为 `125 passed / 9 failed / 0 skipped`，第二次 `129/5/0`，失败均是旧技术文案断言；同步断言后最终 `134 passed / 0 failed / 0 skipped`，exit `0`，约 4 秒。新门覆盖浅色侧栏亮度与 4.5:1 对比度、霞鹜文楷优先级和常规页面禁用实现术语。
 - 静态检查：`git diff --check` 无空白错误（仅 LF→CRLF 提示）；`App.xaml` 与 `MainWindow.xaml` XML parse 成功。本轮未启动 GUI，不把自动检查当作用户视觉确认。
 - 下一步：提交本切片，生成新的独立 win-x64 self-contained 绿色目录且不启动；随后立即停在用户人工检查点，只检查浅色侧栏、字体、文案、深浅切换、排版和退出回归。
+
+## 2026-09-07 界面观感与文案人工测试包
+
+- 提交：`40761f6 style: refine light theme and interface copy`；14 个文件均位于 App、普通 App tests、`PROGRESS.md` 与线程索引，未改 Input、Storage、Acceptance、verify、依赖、权限或用户数据。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/ui-copy-theme-test-20260907`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/ui-copy-theme-test-20260907/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/`，SHA-256 `11AEAD60FE5E79A899D92296F85C9DEFCAC193D0B2E455497009797B1AC0B12D`，残留 InputTracker 进程 `0`。
+- 停点：执行者未启动该包、未做 GUI/self-check，也未继续鼠标按键、移除轨迹、设备重命名或重连映射。用户只需检查浅色侧栏、霞鹜文楷字体、页面文案、深浅切换、排版和退出回归；收到结果前不开始下一项。
