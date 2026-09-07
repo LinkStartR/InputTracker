@@ -91,18 +91,6 @@ public readonly record struct StorageKeyboardTransition(
     long MonotonicTimestamp,
     Guid CalibrationSessionId);
 
-public readonly record struct StorageMouseTransition(
-    Guid DeviceId,
-    Guid CalibrationSessionId,
-    long MonotonicTimestamp,
-    int DeltaX,
-    int DeltaY,
-    byte MotionKind,
-    bool UsesVirtualDesktop,
-    ushort ButtonChanges,
-    short VerticalWheelDelta,
-    short HorizontalWheelDelta);
-
 public sealed record StorageIntegrityFault(
     string Code,
     string Summary,
@@ -116,7 +104,6 @@ public enum StorageDurabilityScope
 public sealed record StorageDurableWatermark(
     long CommitSequence,
     long KeyboardAggregateCommitSequence,
-    IReadOnlyDictionary<Guid, long> MouseSequenceByDevice,
     StorageDurabilityScope Scope);
 
 public sealed record StorageServiceHealth(
@@ -203,19 +190,13 @@ public sealed record StorageMouseButtonPeriodResult(
     IReadOnlyList<StorageMouseButtonPeriodAggregate> Aggregates,
     IReadOnlyList<string> AvailableCaptureTimeZoneIds);
 
-public readonly record struct StorageMouseRecord(
+public readonly record struct StorageMouseButtonTransition(
     Guid DeviceId,
-    long Sequence,
-    long UtcMicroseconds,
-    int DeltaX,
-    int DeltaY,
-    byte MotionKind,
-    bool UsesVirtualDesktop,
-    ushort ButtonChanges,
-    short VerticalWheelDelta,
-    short HorizontalWheelDelta);
+    Guid CalibrationSessionId,
+    long MonotonicTimestamp,
+    ushort ButtonChanges);
 
-public enum StorageMousePlaybackBoundaryReason
+internal enum LegacyMouseSegmentBoundaryReason
 {
     RangeStart = 0,
     DurationLimit = 1,
@@ -228,28 +209,3 @@ public enum StorageMousePlaybackBoundaryReason
     LegacyUnknown = 8,
     RecoveryUnknown = 9
 }
-
-public readonly record struct StorageMousePlaybackCursor(
-    Guid SnapshotId,
-    long Sequence,
-    long UtcMicroseconds);
-
-public sealed record StorageMousePlaybackSnapshotInfo(
-    Guid SnapshotId,
-    Guid DeviceId,
-    StorageUtcRange UtcRange,
-    long DurableWatermark,
-    long RecordCount,
-    StorageMousePlaybackCursor? First,
-    StorageMousePlaybackCursor? Last);
-
-/// <summary>
-/// One exact mouse record in a playback snapshot. <see cref="BoundaryReason"/> is the
-/// persisted reason for its containing spool segment; consumers treat it as a display
-/// discontinuity only when <see cref="StartsNewSegment"/> is true.
-/// </summary>
-public readonly record struct StorageMousePlaybackRecord(
-    StorageMouseRecord Record,
-    bool StartsNewSegment,
-    StorageMousePlaybackBoundaryReason BoundaryReason,
-    StorageMousePlaybackCursor Cursor);

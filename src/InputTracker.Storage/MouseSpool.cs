@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 namespace InputTracker.Storage;
 
-public readonly record struct MouseSpoolRecord(
+internal readonly record struct MouseSpoolRecord(
     long Sequence,
     long MonotonicTimestamp,
     int DeltaX,
@@ -14,14 +14,14 @@ public readonly record struct MouseSpoolRecord(
     short VerticalWheelDelta,
     short HorizontalWheelDelta);
 
-public readonly record struct SpoolRecoveryResult(
+internal readonly record struct SpoolRecoveryResult(
     long Recovered,
     long Lost,
     long Corrupt,
     long ValidLength,
     long LastSequence);
 
-public readonly record struct SpoolDurableWatermark(
+internal readonly record struct SpoolDurableWatermark(
     string SpoolId,
     long SpoolAppended,
     long PowerDurable,
@@ -176,7 +176,7 @@ internal static class MouseSpoolRecordCodec
     }
 }
 
-public static class MouseSpoolRecovery
+internal static class MouseSpoolRecovery
 {
     public static SpoolRecoveryResult Recover(string path, bool truncateIncompleteTail)
     {
@@ -304,7 +304,7 @@ internal static class LegacyMouseSpoolReader
     }
 }
 
-public sealed class MouseSpoolWriter : IDisposable
+internal sealed class MouseSpoolWriter : IDisposable
 {
     private readonly FileStream _stream;
     private long _lastSequence;

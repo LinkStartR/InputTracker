@@ -18,8 +18,9 @@ public sealed class MainWindowPrivacyTests
         Assert.DoesNotContain("Storage 尚未接通", disclosure);
         Assert.Contains("按设备、每天统计实体按键", disclosure);
         Assert.Contains("不保存输入内容、先后顺序、窗口或程序名称", disclosure);
-        Assert.Contains("鼠标移动路线按设备保存在当前程序文件夹", disclosure);
-        Assert.Contains("当前版本还不能按范围删除", disclosure);
+        Assert.Contains("鼠标只统计各按键的次数", disclosure);
+        Assert.Contains("不保存移动位置或路线", disclosure);
+        Assert.Contains("旧版本已经保存的轨迹文件会原样保留", disclosure);
     }
 
     [Fact]
@@ -57,7 +58,8 @@ public sealed class MainWindowPrivacyTests
         Assert.Contains("_startup.Disable()", code);
 
         string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "PortableSettings.cs"));
-        Assert.Contains("当前测试版还不能按范围删除", consent);
+        Assert.Contains("鼠标只统计各按键的次数，不保存移动位置或路线", consent);
+        Assert.Contains("旧版本已经保存的轨迹文件不会自动删除", consent);
     }
 
     [Fact]
@@ -75,7 +77,7 @@ public sealed class MainWindowPrivacyTests
         Assert.Contains("TransferToRestore", code);
         Assert.Contains("OfflineRestoreRequested?.Invoke", code);
         Assert.Contains("_dashboardRefreshTimer.Stop()", code);
-        Assert.Contains("_mousePlaybackFrameTimer.Stop()", code);
+        Assert.Contains("MouseDeviceSelector.IsEnabled = false", code);
         Assert.Contains("SetDataToolsEnabled(false)", code);
     }
 

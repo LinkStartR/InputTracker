@@ -297,6 +297,6 @@ public sealed class AppOfflineRestoreCoordinatorTests
     private static StorageServiceHealth Health(StorageServiceState state, bool acceptingWrites) => new(
         state,
         acceptingWrites,
-        new StorageDurableWatermark(0, 0, new Dictionary<Guid, long>(), StorageDurabilityScope.SQLiteCommitted),
+        new StorageDurableWatermark(0, 0, StorageDurabilityScope.SQLiteCommitted),
         null);
 }

@@ -1,13 +1,9 @@
-using Microsoft.Data.Sqlite;
-
 namespace InputTracker.Storage.Tests;
 
 public sealed class StorageMouseButtonQueryTests
 {
     private const ushort LeftDown = 1 << 0;
-    private const ushort LeftUp = 1 << 1;
     private const ushort RightDown = 1 << 2;
-    private const ushort RightUp = 1 << 3;
     private const ushort MiddleDown = 1 << 4;
     private const ushort X1Down = 1 << 6;
     private const ushort X2Down = 1 << 8;
@@ -25,10 +21,9 @@ public sealed class StorageMouseButtonQueryTests
 
         using StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock());
         service.Start(calibration);
-        service.WriteMouseTransition(Point(first, calibration, 0, LeftDown | RightDown));
-        service.WriteMouseTransition(Point(first, calibration, 1, LeftUp | RightUp));
-        service.WriteMouseTransition(Point(first, calibration, 2_000_000, MiddleDown | X1Down | X2Down));
-        service.WriteMouseTransition(Point(second, calibration, 2_000_001, LeftDown));
+        service.WriteMouseButtonTransition(Point(first, calibration, 0, LeftDown | RightDown));
+        service.WriteMouseButtonTransition(Point(first, calibration, 2_000_000, MiddleDown | X1Down | X2Down));
+        service.WriteMouseButtonTransition(Point(second, calibration, 2_000_001, LeftDown));
         service.Checkpoint(2_000_001);
 
         StorageMouseButtonPeriodResult firstDay = service.QueryMouseButtonsPeriod(
@@ -56,7 +51,7 @@ public sealed class StorageMouseButtonQueryTests
     }
 
     [Fact]
-    public void ReopenBackfillsAValidatedPublishedSegmentThatHasNoAggregateMarker()
+    public void ReopenKeepsDirectButtonAggregatesWithoutTrajectoryFiles()
     {
         using var directory = new TemporaryDirectory();
         StorageLayout layout = StorageLayout.Create(directory.Path);
@@ -67,16 +62,8 @@ public sealed class StorageMouseButtonQueryTests
         using (StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock()))
         {
             service.Start(calibration);
-            service.WriteMouseTransition(Point(mouse, calibration, 0, LeftDown));
+            service.WriteMouseButtonTransition(Point(mouse, calibration, 0, LeftDown));
             service.Checkpoint(0);
-        }
-
-        using (var connection = new SqliteConnection($"Data Source={layout.DatabasePath};Pooling=False"))
-        {
-            connection.Open();
-            using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM mouse_button_aggregated_segments; DELETE FROM mouse_button_daily;";
-            command.ExecuteNonQuery();
         }
 
         using StorageService reopened = StorageService.OpenForTests(layout, new ControllableStorageClock());
@@ -86,6 +73,33 @@ public sealed class StorageMouseButtonQueryTests
         StorageMouseButtonPeriodAggregate row = Assert.Single(result.Aggregates);
         Assert.Equal(StorageMouseButton.Left, row.Button);
         Assert.Equal(1, row.PressCount);
+        Assert.Empty(Directory.GetFiles(layout.SpoolDirectory, "*.mspool"));
+        Assert.Empty(Directory.GetFiles(layout.ChunkDirectory, "*.mchunk"));
+    }
+
+    [Fact]
+    public void DirectButtonAggregationDoesNotCreateTrajectoryArtifacts()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid mouse = RegisterMouse(layout);
+        TimeCalibrationSegment calibration = StorageServiceTestSupport.Calibration(
+            "UTC",
+            new DateTimeOffset(2026, 9, 7, 12, 0, 0, TimeSpan.Zero));
+
+        using StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock());
+        service.Start(calibration);
+        service.WriteMouseButtonTransition(new StorageMouseButtonTransition(
+            mouse,
+            calibration.SessionId,
+            0,
+            LeftDown | RightDown));
+
+        StorageMouseButtonPeriodResult result = service.QueryMouseButtonsPeriod(
+            StoragePeriodKind.Day, new DateOnly(2026, 9, 7), "UTC", mouse);
+        Assert.Equal(2, result.Aggregates.Sum(row => row.PressCount));
+        Assert.Empty(Directory.GetFiles(layout.SpoolDirectory, "*.mspool"));
+        Assert.Empty(Directory.GetFiles(layout.ChunkDirectory, "*.mchunk"));
     }
 
     private static Guid RegisterMouse(StorageLayout layout)
@@ -96,7 +110,7 @@ public sealed class StorageMouseButtonQueryTests
         return deviceId;
     }
 
-    private static StorageMouseTransition Point(
+    private static StorageMouseButtonTransition Point(
         Guid deviceId,
         TimeCalibrationSegment calibration,
         long timestamp,
@@ -104,11 +118,5 @@ public sealed class StorageMouseButtonQueryTests
             deviceId,
             calibration.SessionId,
             timestamp,
-            DeltaX: 0,
-            DeltaY: 0,
-            MotionKind: 0,
-            UsesVirtualDesktop: false,
-            ButtonChanges: buttons,
-            VerticalWheelDelta: 0,
-            HorizontalWheelDelta: 0);
+            ButtonChanges: buttons);
 }

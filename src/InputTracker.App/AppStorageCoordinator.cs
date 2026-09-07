@@ -10,7 +10,7 @@ internal interface IAppStorageWriter
 {
     StorageServiceHealth Health { get; }
     void WriteKeyboard(StorageKeyboardTransition value);
-    void WriteMouse(StorageMouseTransition value);
+    void WriteMouseButtons(StorageMouseButtonTransition value);
     void Pause(StoragePauseReason reason, long timestamp);
     void Resume(StoragePauseReason reason);
     void RemoveDevice(Guid deviceId, long timestamp);
@@ -23,7 +23,7 @@ internal sealed class StorageServiceWriter(StorageService service) : IAppStorage
 {
     public StorageServiceHealth Health => service.Health;
     public void WriteKeyboard(StorageKeyboardTransition value) => service.WriteKeyboardTransition(value);
-    public void WriteMouse(StorageMouseTransition value) => service.WriteMouseTransition(value);
+    public void WriteMouseButtons(StorageMouseButtonTransition value) => service.WriteMouseButtonTransition(value);
     public void Pause(StoragePauseReason reason, long timestamp) => service.Pause(reason, timestamp);
     public void Resume(StoragePauseReason reason) => service.Resume(reason);
     public void RemoveDevice(Guid deviceId, long timestamp) => service.RemoveDevice(deviceId, timestamp);
@@ -153,11 +153,20 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
             case CapturedInputKind.Mouse:
             {
                 MouseRawEvent value = input.Mouse;
-                _storage.WriteMouse(new StorageMouseTransition(
-                    Resolve(value.DeviceId, StorageDeviceKind.Mouse), _calibrationSessionId, value.Timestamp,
-                    value.DeltaX, value.DeltaY, (byte)value.MotionKind,
-                    value.UsesVirtualDesktop, (ushort)value.ButtonChanges,
-                    value.VerticalWheelDelta, value.HorizontalWheelDelta));
+                const MouseButtonChanges downChanges = MouseButtonChanges.LeftDown
+                    | MouseButtonChanges.RightDown
+                    | MouseButtonChanges.MiddleDown
+                    | MouseButtonChanges.X1Down
+                    | MouseButtonChanges.X2Down;
+                MouseButtonChanges pressed = value.ButtonChanges & downChanges;
+                if (pressed != MouseButtonChanges.None)
+                {
+                    _storage.WriteMouseButtons(new StorageMouseButtonTransition(
+                        Resolve(value.DeviceId, StorageDeviceKind.Mouse),
+                        _calibrationSessionId,
+                        value.Timestamp,
+                        (ushort)pressed));
+                }
                 break;
             }
             case CapturedInputKind.AggregationBoundary:

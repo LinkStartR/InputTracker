@@ -5,7 +5,7 @@ using InputTracker.Storage;
 public sealed class DashboardViewModelTests
 {
     [Fact]
-    public async Task RefreshUsesSelectedPeriodDeviceAndStreamsEveryMousePoint()
+    public async Task RefreshUsesSelectedPeriodAndDevicesWithoutReadingTrajectory()
     {
         Guid keyboard = Guid.NewGuid();
         Guid mouse = Guid.NewGuid();
@@ -22,21 +22,17 @@ public sealed class DashboardViewModelTests
         await model.RefreshAsync();
 
         Assert.Equal((StoragePeriodKind.Week, keyboard), source.KeyboardRequest);
-        Assert.Equal(mouse, source.MouseRequest);
         Assert.Equal(7, model.TotalPressCount);
         Assert.Equal(2, model.Heatmap.Count);
-        Assert.InRange(model.MousePoints.Count, 1, 3);
-        Assert.Equal(3, model.TotalMousePointCount);
-        Assert.Equal(3, model.MousePoints[^1].LastSequence);
         Assert.Equal(new MouseButtonCounts(2, 1, 0, 1, 0), model.MouseButtons);
         Assert.Equal((StoragePeriodKind.Week, mouse), source.MouseButtonsRequest);
         Assert.Equal(
-            "左键 2 次 · 右键 1 次 · 中键 0 次 · 侧键一 1 次 · 侧键二 0 次\n移动记录 3 条",
-            MainWindow.FormatMouseSummary(model.MouseButtons, model.TotalMousePointCount));
+            "左键 2 次 · 右键 1 次 · 中键 0 次 · 侧键一 1 次 · 侧键二 0 次",
+            MainWindow.FormatMouseSummary(model.MouseButtons));
     }
 
     [Fact]
-    public async Task MillionPointStreamIsFullyReadButDisplayMemoryIsBounded()
+    public async Task LargeButtonCountsAreQueriedOffTheCallingThread()
     {
         Guid mouse = Guid.NewGuid();
         int callerThread = 0;
@@ -54,20 +50,9 @@ public sealed class DashboardViewModelTests
             await model.RefreshAsync();
         });
 
-        Assert.Equal(1_000_000, model.TotalMousePointCount);
-        Assert.Equal(DashboardViewModel.MaxRenderedMousePoints, model.MousePoints.Count);
-        Assert.Equal(1_000_000, model.MousePoints[^1].LastSequence);
-        Assert.Equal(1_000_000, model.MousePoints.Sum(point => point.DeltaX));
-        Assert.Equal(1_000_000, model.MousePoints.Sum(point => point.DeltaY));
-        Assert.Equal(1_000_000, source.EnumeratedCount);
-        Assert.DoesNotContain(callerThread, source.EnumerationThreads);
-        Assert.True(source.AllEnumerationThreadsWereThreadPoolThreads);
-        StorageUtcRange range = model.ResolvedPeriod!.UtcRange;
-        long bucketWidth = (range.EndUtcMicroseconds - range.StartUtcMicroseconds) / DashboardViewModel.MaxRenderedMousePoints;
-        Assert.InRange(model.MousePoints[0].LastUtcMicroseconds,
-            range.StartUtcMicroseconds, range.StartUtcMicroseconds + bucketWidth);
-        Assert.InRange(model.MousePoints[^1].LastUtcMicroseconds,
-            range.EndUtcMicroseconds - bucketWidth - 1, range.EndUtcMicroseconds - 1);
+        Assert.Equal(1_000_000, model.MouseButtons.Left);
+        Assert.DoesNotContain(callerThread, source.QueryThreads);
+        Assert.True(source.AllQueryThreadsWereThreadPoolThreads);
     }
 
     private static Task RunOnDedicatedThreadAsync(Func<Task> action)
@@ -94,7 +79,7 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
-    public async Task SummaryRefreshDoesNotReReadOrClearExistingMouseTrajectory()
+    public async Task RepeatedRefreshUsesOnlyAggregateQueries()
     {
         Guid keyboard = Guid.NewGuid();
         Guid mouse = Guid.NewGuid();
@@ -105,43 +90,29 @@ public sealed class DashboardViewModelTests
             TimeZoneId = "UTC"
         };
 
-        await model.RefreshAsync(includeMouse: true);
-        IReadOnlyList<MouseDisplayPoint> firstPoints = model.MousePoints;
-        long firstTotal = model.TotalMousePointCount;
-        int firstEnumerated = source.MouseEnumeratedCount;
+        await model.RefreshAsync();
+        await model.RefreshAsync();
 
-        await model.RefreshAsync(includeMouse: false);
-
-        Assert.Same(firstPoints, model.MousePoints);
-        Assert.Equal(firstTotal, model.TotalMousePointCount);
-        Assert.Equal(firstEnumerated, source.MouseEnumeratedCount);
+        Assert.Equal(2, source.MouseButtonQueryCount);
+        Assert.DoesNotContain(
+            typeof(IDashboardDataSource).GetMethods(),
+            method => method.Name.Contains("StreamMouse", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void ProjectionKeepsAbsoluteCoordinatesSeparateFromRelativeMotion()
+    public void MouseSummaryContainsOnlyButtonCounts()
     {
-        MouseDisplayPoint[] points =
-        [
-            new(1, 1, 10, -5, MotionKind: 0, UsesVirtualDesktop: false, StartsNewSegment: false),
-            new(2, 2, 65_535, 0, MotionKind: 1, UsesVirtualDesktop: true, StartsNewSegment: true),
-            new(3, 3, -10, 5, MotionKind: 0, UsesVirtualDesktop: false, StartsNewSegment: true)
-        ];
+        string summary = MainWindow.FormatMouseSummary(new MouseButtonCounts(1, 2, 3, 4, 5));
 
-        IReadOnlyList<IReadOnlyList<System.Windows.Point>> projected =
-            MainWindow.ProjectMouseSegments(points, 100, 100);
-
-        Assert.Equal(3, projected.Count);
-        Assert.Equal(new System.Windows.Point(60, 45), Assert.Single(projected[0]));
-        Assert.Equal(new System.Windows.Point(100, 0), Assert.Single(projected[1]));
-        Assert.Equal(new System.Windows.Point(40, 55), Assert.Single(projected[2]));
+        Assert.Equal("左键 1 次 · 右键 2 次 · 中键 3 次 · 侧键一 4 次 · 侧键二 5 次", summary);
+        Assert.DoesNotContain("移动", summary, StringComparison.Ordinal);
     }
 
     private sealed class FakeDashboardDataSource(Guid keyboard, Guid mouse) : IDashboardDataSource
     {
         public (StoragePeriodKind, Guid?) KeyboardRequest { get; private set; }
-        public Guid MouseRequest { get; private set; }
         public (StoragePeriodKind, Guid?) MouseButtonsRequest { get; private set; }
-        public int MouseEnumeratedCount { get; private set; }
+        public int MouseButtonQueryCount { get; private set; }
 
         public Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<StorageDeviceInfo>>([
@@ -163,6 +134,7 @@ public sealed class DashboardViewModelTests
             StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken)
         {
             MouseButtonsRequest = (kind, deviceId);
+            MouseButtonQueryCount++;
             return Task.FromResult(new StorageMouseButtonPeriodResult(
                 StoragePeriodResolver.Resolve(kind, date, zone),
                 [
@@ -173,52 +145,34 @@ public sealed class DashboardViewModelTests
                 [zone]));
         }
 
-        public async IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
-            Guid deviceId, StorageUtcRange range,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            MouseRequest = deviceId;
-            for (long sequence = 1; sequence <= 3; sequence++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                MouseEnumeratedCount++;
-                yield return new StorageMouseRecord(deviceId, sequence, range.StartUtcMicroseconds + sequence,
-                    1, 2, 0, false, 0, 0, 0);
-                await Task.Yield();
-            }
-        }
     }
 
     private sealed class LargeMouseDataSource(Guid mouse) : IDashboardDataSource
     {
-        public long EnumeratedCount { get; private set; }
-        public HashSet<int> EnumerationThreads { get; } = [];
-        public bool AllEnumerationThreadsWereThreadPoolThreads { get; private set; } = true;
+        public HashSet<int> QueryThreads { get; } = [];
+        public bool AllQueryThreadsWereThreadPoolThreads { get; private set; } = true;
         public Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<StorageDeviceInfo>>([]);
         public Task<StorageKeyboardPeriodResult> QueryKeyboardAsync(
-            StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken) =>
-            Task.FromResult(new StorageKeyboardPeriodResult(
-                StoragePeriodResolver.Resolve(kind, date, zone), [], []));
-        public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsAsync(
-            StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken) =>
-            Task.FromResult(new StorageMouseButtonPeriodResult(
-                StoragePeriodResolver.Resolve(kind, date, zone), [], []));
-        public async IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
-            Guid deviceId, StorageUtcRange range,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+            StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken)
         {
-            for (long sequence = 1; sequence <= 1_000_000; sequence++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                EnumeratedCount++;
-                EnumerationThreads.Add(Environment.CurrentManagedThreadId);
-                AllEnumerationThreadsWereThreadPoolThreads &= Thread.CurrentThread.IsThreadPoolThread;
-                long utc = range.StartUtcMicroseconds
-                    + (long)(((Int128)(range.EndUtcMicroseconds - range.StartUtcMicroseconds) * (sequence - 1)) / 1_000_000);
-                yield return new StorageMouseRecord(mouse, sequence, utc, 1, 1, 0, false, 0, 0, 0);
-            }
-            await Task.CompletedTask;
+            RecordThread();
+            return Task.FromResult(new StorageKeyboardPeriodResult(
+                StoragePeriodResolver.Resolve(kind, date, zone), [], []));
+        }
+        public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsAsync(
+            StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken)
+        {
+            RecordThread();
+            return Task.FromResult(new StorageMouseButtonPeriodResult(
+                StoragePeriodResolver.Resolve(kind, date, zone),
+                [new(mouse, StorageMouseButton.Left, 1_000_000)], []));
+        }
+
+        private void RecordThread()
+        {
+            QueryThreads.Add(Environment.CurrentManagedThreadId);
+            AllQueryThreadsWereThreadPoolThreads &= Thread.CurrentThread.IsThreadPoolThread;
         }
     }
 }

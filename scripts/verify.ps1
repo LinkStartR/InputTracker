@@ -833,12 +833,11 @@ try {
         Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeviceCatalogTests.StableHardwareReinsertReusesPersistentGuidAndAliasAcrossInterfacePaths'
         Add-Gate -Id 'storage-device-mapping-confidence' -Details 'persistent hardware remapping and alias survive close/reopen without raw identifiers'
 
-        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.MouseChunkReaderFailsClosedForInjectedTemporaryCorruption'
-        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.MouseChunkCatalogTests.IndexedMissingAndCorruptFilesNeverCountAsDurable'
-        Add-Gate -Id 'storage-chunk-integrity-recovery' -Details 'temporary corruption and catalog durability fail closed'
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.MouseButtonsCreateNoTrajectoryArtifactsOrPublicPlaybackApi'
+        Add-Gate -Id 'storage-no-trajectory-artifacts' -Details 'mouse buttons persist without trajectory files or public playback APIs'
 
         Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.DeletionPreviewIsExplicitlyBlockedByCurrentFormat'
-        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.PreviewCountsExactDeviceAndHalfOpenRangeWithoutChangingStore'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.MouseTrajectoryDeletionPreviewIsUnavailableAfterFeatureRemoval'
         Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.ExecuteAlwaysFailsClosedWhileCurrentFormatCannotRewriteExactRange'
         Add-Gate -Id 'deletion-preview-and-execution-blocked' -Details 'preview capability=BlockedByCurrentFormat; execute remains fail-closed and is not reported as passed deletion'
 

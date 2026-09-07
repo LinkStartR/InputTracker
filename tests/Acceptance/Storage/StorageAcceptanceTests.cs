@@ -36,7 +36,8 @@ public sealed class StorageAcceptanceTests
     {
         using var directory = new AcceptanceTemporaryDirectory("storage deletion");
         using StorageService service = StorageService.Open(StorageLayout.Create(directory.Path));
-        StorageDeviceResolution device = service.ObserveDevice(StorageAcceptanceSupport.MouseObservation());
+        StorageDeviceResolution device = service.ObserveDevice(
+            StorageAcceptanceSupport.MouseObservation() with { Kind = StorageDeviceKind.Keyboard });
 
         StorageDeletionPreview preview = await service.PreviewDeletionAsync(
             device.Device.DeviceId, new StorageUtcRange(1, 2));
@@ -64,20 +65,30 @@ public sealed class StorageAcceptanceTests
     }
 
     [Fact]
-    public void MouseChunkReaderFailsClosedForInjectedTemporaryCorruption()
+    public void MouseButtonsCreateNoTrajectoryArtifactsOrPublicPlaybackApi()
     {
-        using var directory = new AcceptanceTemporaryDirectory("storage corruption");
-        string chunkPath = StorageAcceptanceSupport.CreateCommittedMouseChunk(directory.Path);
-        MouseChunk healthy = MouseChunkReader.Read(chunkPath);
-        Assert.Single(healthy.Records);
+        using var directory = new AcceptanceTemporaryDirectory("no mouse trajectory");
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        using StorageService service = StorageService.Open(layout);
+        StorageDeviceResolution device = service.ObserveDevice(StorageAcceptanceSupport.MouseObservation());
+        TimeCalibrationSegment calibration = TimeCalibrationSegment.Capture(
+            Guid.NewGuid(), SystemStorageClock.Instance);
+        service.Start(calibration);
+        service.WriteMouseButtonTransition(new StorageMouseButtonTransition(
+            device.Device.DeviceId, calibration.SessionId, calibration.MonotonicAnchor, 1));
+        service.Stop(calibration.MonotonicAnchor);
 
         if (Environment.GetEnvironmentVariable("INPUTTRACKER_STORAGE_INJECTION") == "chunk-corruption")
         {
-            byte[] bytes = File.ReadAllBytes(chunkPath);
-            bytes[108] ^= 1;
-            File.WriteAllBytes(chunkPath, bytes);
-            _ = MouseChunkReader.Read(chunkPath);
+            File.WriteAllText(Path.Combine(layout.ChunkDirectory, "forbidden.mchunk"), "injected");
         }
+
+        Assert.Empty(Directory.GetFiles(layout.SpoolDirectory, "*.mspool", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(layout.ChunkDirectory, "*.mchunk", SearchOption.AllDirectories));
+        Assert.DoesNotContain(typeof(StorageService).GetMethods(), method =>
+            method.Name.Contains("Playback", StringComparison.Ordinal)
+            || method.Name.Contains("StreamMouse", StringComparison.Ordinal)
+            || method.Name == "WriteMouseTransition");
     }
 
     [Fact]

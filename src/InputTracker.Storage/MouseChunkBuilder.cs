@@ -1,6 +1,6 @@
 namespace InputTracker.Storage;
 
-public enum MouseChunkSealReason
+internal enum MouseChunkSealReason
 {
     EventLimit = 0,
     CanonicalSizeLimit = 1,
@@ -11,19 +11,19 @@ public enum MouseChunkSealReason
     ExplicitFlush = 6
 }
 
-public sealed record MouseChunkBatch(
+internal sealed record MouseChunkBatch(
     Guid DeviceId,
     long CalibrationSegmentId,
     IReadOnlyList<MouseSpoolRecord> Records,
     long CanonicalLength,
     MouseChunkSealReason Reason);
 
-public sealed record MouseChunkAppendResult(
+internal sealed record MouseChunkAppendResult(
     MouseChunkBatch? Sealed,
     int BufferedEvents,
     long BufferedCanonicalLength);
 
-public sealed class MouseChunkBuilder
+internal sealed class MouseChunkBuilder
 {
     public const int MaxEvents = 4096;
     public const int MaxCanonicalBytes = 256 * 1024;

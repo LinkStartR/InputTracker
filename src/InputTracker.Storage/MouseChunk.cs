@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace InputTracker.Storage;
 
-public sealed record MouseChunkHeader(
+internal sealed record MouseChunkHeader(
     Guid ChunkId,
     Guid DeviceId,
     long CalibrationSegmentId,
@@ -17,7 +17,7 @@ public sealed record MouseChunkHeader(
     long CanonicalLength,
     long CompressedLength);
 
-public sealed record MouseChunk(
+internal sealed record MouseChunk(
     MouseChunkHeader Header,
     IReadOnlyList<MouseSpoolRecord> Records,
     uint CompressedCrc32C,
@@ -85,7 +85,7 @@ internal static class MouseChunkFile
     }
 }
 
-public static class MouseChunkReader
+internal static class MouseChunkReader
 {
     public static MouseChunk Read(string path)
     {

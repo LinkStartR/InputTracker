@@ -303,11 +303,11 @@ public sealed class StorageDatabase : IDisposable
     internal StorageMousePrefixCommit CommitMouseSpoolSegment(
         MouseSpoolSegment segment,
         long updatedUtcMicroseconds,
-        StorageMousePlaybackBoundaryReason sealReason = StorageMousePlaybackBoundaryReason.LegacyUnknown)
+        LegacyMouseSegmentBoundaryReason sealReason = LegacyMouseSegmentBoundaryReason.LegacyUnknown)
     {
         ArgumentNullException.ThrowIfNull(segment);
-        if (sealReason is < StorageMousePlaybackBoundaryReason.RangeStart
-            or > StorageMousePlaybackBoundaryReason.RecoveryUnknown)
+        if (sealReason is < LegacyMouseSegmentBoundaryReason.RangeStart
+            or > LegacyMouseSegmentBoundaryReason.RecoveryUnknown)
         {
             throw new ArgumentOutOfRangeException(nameof(sealReason));
         }
@@ -557,7 +557,67 @@ public sealed class StorageDatabase : IDisposable
         return next;
     }
 
-    public SpoolDurableWatermark CommitSpoolBoundary(
+    internal StorageServiceOrdinals CommitMouseButtonPresses(
+        Guid deviceId,
+        DateOnly captureLocalDate,
+        string timeZoneId,
+        IReadOnlyList<StorageMouseButton> buttons,
+        IStorageServiceFaultInjector faultInjector)
+    {
+        ArgumentNullException.ThrowIfNull(buttons);
+        ArgumentNullException.ThrowIfNull(faultInjector);
+        if (deviceId == Guid.Empty
+            || string.IsNullOrWhiteSpace(timeZoneId)
+            || buttons.Count == 0
+            || buttons.Distinct().Count() != buttons.Count
+            || buttons.Any(button => button is < StorageMouseButton.Left or > StorageMouseButton.X2))
+        {
+            throw new InvalidDataException("A mouse button aggregate is invalid.");
+        }
+
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        using (SqliteCommand device = _connection.CreateCommand())
+        {
+            device.Transaction = transaction;
+            device.CommandText = "SELECT kind FROM devices WHERE device_id = $device;";
+            device.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            if (device.ExecuteScalar() is not long kind || kind != (long)StorageDeviceKind.Mouse)
+            {
+                throw new InvalidDataException("A mouse button aggregate references a non-mouse device.");
+            }
+        }
+
+        foreach (StorageMouseButton button in buttons)
+        {
+            using SqliteCommand aggregate = _connection.CreateCommand();
+            aggregate.Transaction = transaction;
+            aggregate.CommandText = """
+                INSERT INTO mouse_button_daily(
+                    device_id, button, capture_local_date, time_zone_id, press_count)
+                VALUES ($device, $button, $date, $zone, 1)
+                ON CONFLICT(device_id, button, capture_local_date, time_zone_id)
+                DO UPDATE SET press_count = press_count + 1;
+                """;
+            aggregate.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            aggregate.Parameters.AddWithValue("$button", (int)button);
+            aggregate.Parameters.AddWithValue("$date", captureLocalDate.ToString(
+                "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture));
+            aggregate.Parameters.AddWithValue("$zone", timeZoneId);
+            aggregate.ExecuteNonQuery();
+        }
+
+        StorageServiceOrdinals current = ReadStorageServiceOrdinals(_connection, transaction);
+        var next = new StorageServiceOrdinals(
+            checked(current.CommitOrdinal + 1),
+            current.KeyboardAggregateCommitOrdinal);
+        WriteStorageServiceOrdinals(_connection, transaction, next);
+        faultInjector.BeforeStorageCommit(boundary: null, keyboardRowCount: 0);
+        transaction.Commit();
+        return next;
+    }
+
+    internal SpoolDurableWatermark CommitSpoolBoundary(
         Guid deviceId,
         MouseSpoolWriter writer,
         string spoolId,
@@ -594,7 +654,7 @@ public sealed class StorageDatabase : IDisposable
             flush.FlushedLength);
     }
 
-    public MouseChunkDurableWatermark CommitMouseChunk(
+    internal MouseChunkDurableWatermark CommitMouseChunk(
         Guid chunkId,
         Guid deviceId,
         long calibrationSegmentId,
@@ -607,9 +667,9 @@ public sealed class StorageDatabase : IDisposable
             records,
             createdUtcMicroseconds);
 
-    public IReadOnlyList<MouseChunkCatalogEntry> ReadMouseChunkCatalog() => MouseChunkCatalog.ReadAll(this);
+    internal IReadOnlyList<MouseChunkCatalogEntry> ReadMouseChunkCatalog() => MouseChunkCatalog.ReadAll(this);
 
-    public MouseChunkRecoveryReport RecoverMouseChunks(long recoveredUtcMicroseconds) =>
+    internal MouseChunkRecoveryReport RecoverMouseChunks(long recoveredUtcMicroseconds) =>
         MouseChunkCatalog.Recover(this, recoveredUtcMicroseconds);
 
     internal SqliteConnection Connection => _connection;

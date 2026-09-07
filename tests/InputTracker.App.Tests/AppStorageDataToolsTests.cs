@@ -56,20 +56,19 @@ public sealed class AppStorageDataToolsTests
     }
 
     [Fact]
-    public async Task DeletionPreviewNeverExposesConfirmationToken()
+    public async Task KeyboardDeletionPreviewNeverExposesConfirmationToken()
     {
-        var storage = new FakeStorageTools();
+        var storage = new FakeStorageTools { DeviceKind = StorageDeviceKind.Keyboard };
         var controller = new AppStorageDataToolsController(storage, new FakeCaptureControl(), @"C:\portable", Clock);
         var range = new StorageUtcRange(10, 20);
 
         Guid deviceId = Guid.Parse("12345678-1234-1234-1234-1234567890ab");
         StorageDeletionDisplay result = await controller.PreviewDeletionAsync(
-            deviceId, StorageDeviceKind.Mouse, range);
+            deviceId, StorageDeviceKind.Keyboard, range);
 
         Assert.Equal(deviceId, result.DeviceId);
-        Assert.Equal(StorageDeviceKind.Mouse, result.DeviceKind);
+        Assert.Equal(StorageDeviceKind.Keyboard, result.DeviceKind);
         Assert.Equal(range, result.UtcRange);
-        Assert.Equal(12, result.MouseRecordCount);
         Assert.Equal(3, result.KeyboardAggregateCount);
         Assert.Contains("当前存储格式", result.Status);
         Assert.DoesNotContain("SECRET-TOKEN", result.ToString());
@@ -263,20 +262,24 @@ public sealed class AppStorageDataToolsTests
     }
 
     [Fact]
-    public async Task PreviewRejectsDifferentReturnedRangeAndDeviceKind()
+    public async Task PreviewRejectsMouseTrajectoryAndDifferentKeyboardRange()
     {
         Guid device = Guid.Parse("12345678-1234-1234-1234-1234567890ab");
         var storage = new FakeStorageTools { ReturnedRange = new StorageUtcRange(11, 20) };
         var controller = new AppStorageDataToolsController(
             storage, new FakeCaptureControl(), @"C:\portable", Clock);
-        await Assert.ThrowsAsync<InvalidDataException>(() => controller.PreviewDeletionAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.PreviewDeletionAsync(
             device, StorageDeviceKind.Mouse, new StorageUtcRange(10, 20)));
 
-        storage = new FakeStorageTools { DeviceKind = StorageDeviceKind.Keyboard };
+        storage = new FakeStorageTools
+        {
+            DeviceKind = StorageDeviceKind.Keyboard,
+            ReturnedRange = new StorageUtcRange(11, 20)
+        };
         controller = new AppStorageDataToolsController(
             storage, new FakeCaptureControl(), @"C:\portable", Clock);
         await Assert.ThrowsAsync<InvalidDataException>(() => controller.PreviewDeletionAsync(
-            device, StorageDeviceKind.Mouse, new StorageUtcRange(10, 20)));
+            device, StorageDeviceKind.Keyboard, new StorageUtcRange(10, 20)));
     }
 
     private static DateTimeOffset Clock() => new(2026, 8, 13, 12, 34, 56, TimeSpan.Zero);
@@ -336,7 +339,7 @@ public sealed class AppStorageDataToolsTests
 
         public Task<StorageDeletionPreview> PreviewDeletionAsync(Guid deviceId, StorageUtcRange range, CancellationToken token) =>
             Task.FromResult(new StorageDeletionPreview(
-                deviceId, ReturnedRange ?? range, 12, 3, StorageDeletionCapability.BlockedByCurrentFormat,
+                deviceId, ReturnedRange ?? range, 3, StorageDeletionCapability.BlockedByCurrentFormat,
                 "当前存储格式无法安全执行精确范围删除。", "SECRET-TOKEN", "SECRET-FINGERPRINT"));
 
         public IReadOnlyList<StorageDeviceInfo> ListDevices() =>
@@ -354,7 +357,7 @@ public sealed class AppStorageDataToolsTests
         public StorageServiceHealth Health => new(
             state,
             acceptingWrites,
-            new StorageDurableWatermark(0, 0, new Dictionary<Guid, long>(), StorageDurabilityScope.SQLiteCommitted),
+            new StorageDurableWatermark(0, 0, StorageDurabilityScope.SQLiteCommitted),
             null);
     }
 

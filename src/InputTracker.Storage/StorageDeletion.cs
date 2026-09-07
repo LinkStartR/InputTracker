@@ -12,7 +12,6 @@ public enum StorageDeletionCapability
 public sealed record StorageDeletionPreview(
     Guid DeviceId,
     StorageUtcRange UtcRange,
-    long MouseRecordCount,
     long KeyboardAggregateCount,
     StorageDeletionCapability Capability,
     string? BlockedReason,
@@ -70,20 +69,15 @@ internal static class StorageDeletion
         Guid deviceId,
         StorageUtcRange range,
         StorageDeviceKind kind,
-        long mouseCount,
         long keyboardCount,
         StorageDurableWatermark watermark)
     {
         var text = new StringBuilder();
         text.Append(deviceId.ToString("N")).Append('|')
             .Append(range.StartUtcMicroseconds).Append('|').Append(range.EndUtcMicroseconds).Append('|')
-            .Append((int)kind).Append('|').Append(mouseCount).Append('|').Append(keyboardCount).Append('|')
+            .Append((int)kind).Append('|').Append(keyboardCount).Append('|')
             .Append(watermark.CommitSequence).Append('|')
             .Append(watermark.KeyboardAggregateCommitSequence);
-        foreach ((Guid id, long sequence) in watermark.MouseSequenceByDevice.OrderBy(pair => pair.Key))
-        {
-            text.Append('|').Append(id.ToString("N")).Append(':').Append(sequence);
-        }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
 

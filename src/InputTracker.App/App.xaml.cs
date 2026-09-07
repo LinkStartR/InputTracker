@@ -17,7 +17,6 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
     private AppStorageCoordinator? _storageCoordinator;
     private PortableSystemEventBridge? _systemEvents;
     private AppStorageDataToolsController? _dataTools;
-    private MousePlaybackController? _mousePlayback;
     private StorageLayout? _storageLayout;
     private bool _disposeStorageOnExit = true;
     private InputCaptureService? _releasedCaptureForRestore;
@@ -81,7 +80,6 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
 
         string? storageStartupError = null;
         DashboardViewModel? dashboard = null;
-        MousePlaybackController? mousePlayback = null;
         if (directory.IsWritable && collectionConsentGranted)
         {
             try
@@ -100,8 +98,6 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                     new RawDeviceInfoProvider(),
                     _storageCoordinator);
                 dashboard = new DashboardViewModel(new StorageDashboardDataSource(_storage));
-                mousePlayback = new MousePlaybackController(new StorageMousePlaybackDataSource(_storage));
-                _mousePlayback = mousePlayback;
             }
             catch (Exception error)
             {
@@ -129,7 +125,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                 collectionControl,
                 directory.DirectoryPath)
             : null;
-        var window = new MainWindow(_collection, directory, dashboard, startup, _dataTools, mousePlayback);
+        var window = new MainWindow(_collection, directory, dashboard, startup, _dataTools);
 
         _trayIcon = new TrayIconController(
             _collection,
@@ -183,8 +179,6 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
         bool normalResourceCleanup = _offlineRestoreLifecycle.AllowsNormalExitResourceCleanup;
         try
         {
-            if (normalResourceCleanup)
-                _mousePlayback?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             Func<Task>? stopCapture = !normalResourceCleanup || (_capture is null && _systemEvents is null)
                 ? null
                 : () => StopCaptureAndSystemEventsAsync(_capture, _systemEvents);
@@ -218,7 +212,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
         {
             if (_offlineRestoreLifecycle.RestoreActive)
             {
-                _ = window.PrepareForOfflineRestore();
+                window.PrepareForOfflineRestore();
                 window.PrepareForSessionEnding();
                 if (_offlineRestoreLifecycle.TryRequestShutdown()) Shutdown(0);
                 return;
@@ -246,7 +240,6 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
 
     private bool TryExplicitExit(MainWindow window)
     {
-        MousePlaybackController? playback = null;
         InputCaptureService? capture = null;
         PortableSystemEventBridge? systemEvents = null;
         return _explicitExit.TryBegin(
@@ -258,8 +251,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
             },
             prepareUi: () =>
             {
-                playback = window.PrepareForExplicitExit();
-                _mousePlayback = null;
+                window.PrepareForExplicitExit();
                 capture = _capture;
                 _capture = null;
                 systemEvents = _systemEvents;
@@ -267,7 +259,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                 _trayIcon?.PrepareForApplicationExit();
                 window.Hide();
             },
-            cleanupAsync: () => PrepareExplicitExitResourcesAsync(playback, capture, systemEvents),
+            cleanupAsync: () => PrepareExplicitExitResourcesAsync(capture, systemEvents),
             finish: error =>
             {
                 _explicitExitCleanupError = error;
@@ -276,32 +268,16 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
     }
 
     private static async Task PrepareExplicitExitResourcesAsync(
-        MousePlaybackController? playback,
         InputCaptureService? capture,
         PortableSystemEventBridge? systemEvents)
     {
-        Exception? first = null;
-        try
-        {
-            if (playback is not null) await playback.DisposeAsync();
-        }
-        catch (Exception error)
-        {
-            first = error;
-        }
-
         try
         {
             await StopCaptureAndSystemEventsAsync(capture, systemEvents);
         }
         catch (Exception error)
         {
-            first ??= error;
-        }
-
-        if (first is not null)
-        {
-            throw new AggregateException("InputTracker pre-shutdown cleanup failed.", first);
+            throw new AggregateException("InputTracker pre-shutdown cleanup failed.", error);
         }
     }
 
@@ -347,15 +323,8 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
     {
         if (MainWindow is not MainWindow window)
             throw new InvalidOperationException("Offline restore requires the active MainWindow lifecycle owner.");
-        MousePlaybackController? windowPlayback = window.PrepareForOfflineRestore();
-        MousePlaybackController? appPlayback = AppOfflineRestoreOwnership.Take(ref _mousePlayback);
-        if (windowPlayback is not null && appPlayback is not null
-            && !ReferenceEquals(windowPlayback, appPlayback))
-        {
-            throw new InvalidOperationException("Mouse playback ownership changed during offline restore teardown.");
-        }
-        MousePlaybackController? playback = appPlayback ?? windowPlayback;
-        if (playback is not null) await playback.DisposeAsync();
+        window.PrepareForOfflineRestore();
+        await Task.CompletedTask;
     }
 
     void IAppOfflineRestoreRuntime.ReleaseSystemEventBridge()

@@ -1286,3 +1286,18 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/mouse-button-stats-test-20260907`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/mouse-button-stats-test-20260907/InputTracker.exe`；484 files，初始无 `data/`、`logs/`、`backups/`，SHA-256 `15214BACE19B78B31B3F204DF676BEF52BE40A2BBC0B51D71D359ED834B9AA4F`，运行中 InputTracker 进程 `0`。
 - 停点：执行者未启动程序、未做 GUI/self-check、未继续移除轨迹或设备功能。用户只需验证选定鼠标后的五类按键增量、松开不重复、2 秒刷新、设备隔离和同目录重启保留；收到结果前不推进下一项。
+
+## 2026-09-07 鼠标按键统计人工通过与移除轨迹起点
+
+- 用户反馈：五类鼠标按键增量、松开不重复、2 秒刷新、设备隔离与同目录重启保留全部通过；`a4c9f73` 的鼠标按键统计人工验收完成。
+- 下一项仅处理“去掉鼠标轨迹追踪”：停止保存新的鼠标移动轨迹并移除界面入口，按键日汇总继续工作。已有轨迹文件属于用户数据，本轮不删除、不覆盖、不迁移；设备重连映射、重命名、文案和小字号仍不处理。
+
+## 2026-09-07 鼠标轨迹功能完整移除
+
+- 用户澄清“完全移除鼠标轨迹的所有相关”。本切片移除轨迹页面、画布、播放/暂停/倍速/定位、Dashboard 原始流、App 回放控制器、Storage 运行时轨迹写入器、公开写入/流式读取/固定快照接口，以及数据工具中的鼠标轨迹删除预览。Raw Input 仍接收鼠标消息以区分设备和统计五类按键，但移动、坐标、滚轮和按键松开不会进入 Storage。
+- Storage 只保留直接的鼠标按键日汇总。旧 `.mspool` / `.mchunk` 格式代码降为内部兼容边界，当前服务不实例化、不公开、不读取或新增这些产物；旧数据库表和备份识别保持不变，以免打开旧绿色目录时破坏用户数据。专用回放/轨迹文档及过期人工步骤已删除或改写。
+- 不可逆停点：已有轨迹文件未自动删除、覆盖或迁移，详见 `BLOCKED.md` B-016。设备重连映射、设备重命名、文案和小字号仍未开始。
+- 红证据：首轮产品实现前 Release build exit `1`、`0 warnings / 2 errors`，明确缺 `StorageMouseButtonTransition` 与 `WriteMouseButtonTransition`；拆除旧公开类型后一次 build exit `1`、`0 warnings / 2 errors`，明确暴露的 `CommitSpoolBoundary` 与已内部化旧类型可访问性不一致；均做窄修后转绿。默认沙箱另有既知 Windows SDK `MSB4184` 权限失败，不计产品红灯。
+- 最终自动证据：Release solution build exit `0`，7 projects，`0 warnings / 0 errors`，8.74s；App.Tests `136/0/0`，Input.Tests `38/0/0`，Storage 非 Spike `205/0/0`，完整 Acceptance `32/0/0`（12s），合计 `411 passed / 0 failed / 0 skipped`，不低于 400 基线。Storage Acceptance 定向 `10/0/0` 另证实按键汇总不生成 `.mspool` / `.mchunk` 且不存在公开轨迹 API。
+- 静态证据：`git diff --check` 无空白错误（仅 LF→CRLF 提示）；`MainWindow.xaml` 与 `App.xaml` XML parse 成功；`scripts/verify.ps1` PowerShell AST `0` errors；产品 App 源码无 `MousePlayback` / `StreamMouseAsync` / `StorageMouseTransition` 命中。
+- 下一步：提交本切片，发布新的 win-x64 self-contained 独立绿色目录且不由执行者启动。随后立即停在人工检查点，只验证“无轨迹入口/无新轨迹文件/按键次数继续/退出重启”；通过前不做设备重连映射或重命名。

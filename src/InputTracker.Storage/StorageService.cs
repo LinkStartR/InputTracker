@@ -16,6 +16,8 @@ internal sealed class NoStorageServiceFaultInjector : IStorageServiceFaultInject
 
 public sealed class StorageService : IDisposable
 {
+    private const ushort KnownMouseButtonChanges = 0x03ff;
+    private const ushort MouseButtonDownChanges = 0x0155;
     internal const int MaxPendingTransitions = 32;
     internal const int MaxPendingRows = 64;
     internal const int MaxBatchWindowMilliseconds = 250;
@@ -29,7 +31,6 @@ public sealed class StorageService : IDisposable
     private readonly StorageDatabase _database;
     private readonly IStorageClock _clock;
     private readonly IStorageServiceFaultInjector _faultInjector;
-    private readonly MouseIngestion _mouse;
     private readonly Timer? _batchTimer;
     private readonly Dictionary<StorageKeyboardKey, StorageKeyboardHold> _openHolds = [];
     private readonly Dictionary<StorageKeyboardAggregateKey, StorageKeyboardAggregateDelta> _pending = [];
@@ -59,8 +60,6 @@ public sealed class StorageService : IDisposable
         _clock = clock;
         _faultInjector = faultInjector;
         _ordinals = database.ReadStorageServiceOrdinals();
-        _mouse = new MouseIngestion(database);
-        _ordinals = _mouse.Ordinals;
         if (startTimer)
         {
             _batchTimer = new Timer(
@@ -99,7 +98,6 @@ public sealed class StorageService : IDisposable
                     new StorageDurableWatermark(
                         _ordinals.CommitOrdinal,
                         _ordinals.KeyboardAggregateCommitOrdinal,
-                        _mouse.Watermarks,
                         StorageDurabilityScope.SQLiteCommitted),
                     _integrityFault);
             }
@@ -191,38 +189,6 @@ public sealed class StorageService : IDisposable
         }
     }
 
-    public IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
-        Guid deviceId,
-        StorageUtcRange utcRange,
-        CancellationToken cancellationToken = default)
-    {
-        lock (_gate)
-        {
-            ThrowIfDisposed();
-            return StorageQuery.CreateMouseSnapshot(
-                _database,
-                deviceId,
-                utcRange,
-                cancellationToken);
-        }
-    }
-
-    public async Task<StorageMousePlaybackSnapshot> OpenMousePlaybackSnapshotAsync(
-        Guid deviceId,
-        StorageUtcRange utcRange,
-        CancellationToken cancellationToken = default)
-    {
-        StorageQuery.MouseQuerySnapshot snapshot;
-        lock (_gate)
-        {
-            ThrowIfDisposed();
-            snapshot = StorageQuery.CaptureMouseSnapshot(_database, deviceId, utcRange);
-        }
-
-        return await StorageMousePlaybackSnapshot.OpenAsync(snapshot, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
     public StorageExportArtifact ExportKeyboardCsv(
         StorageKeyboardPeriodResult result,
         string relativePath)
@@ -261,8 +227,7 @@ public sealed class StorageService : IDisposable
                 and not StorageServiceState.Paused
                 and not StorageServiceState.Stopped
                 || _pending.Count != 0
-                || _openHolds.Count != 0
-                || _mouse.HasBuffered)
+                || _openHolds.Count != 0)
             {
                 throw new InvalidOperationException(
                     "Backup requires Created, Paused, or Stopped storage with no buffered input.");
@@ -271,7 +236,7 @@ public sealed class StorageService : IDisposable
         }
     }
 
-    public async Task<StorageDeletionPreview> PreviewDeletionAsync(
+    public Task<StorageDeletionPreview> PreviewDeletionAsync(
         Guid deviceId,
         StorageUtcRange utcRange,
         CancellationToken cancellationToken = default)
@@ -280,42 +245,31 @@ public sealed class StorageService : IDisposable
         StorageDeviceKind kind;
         long keyboardCount;
         StorageDurableWatermark watermark;
-        IAsyncEnumerable<StorageMouseRecord>? mouseSnapshot = null;
         lock (_gate)
         {
             ThrowIfDisposed();
+            cancellationToken.ThrowIfCancellationRequested();
             (kind, keyboardCount) = StorageDeletion.DescribeKeyboardImpact(
                 _database.Connection, deviceId, utcRange);
-            watermark = Health.DurableWatermark;
             if (kind == StorageDeviceKind.Mouse)
             {
-                mouseSnapshot = StorageQuery.CreateMouseSnapshot(
-                    _database, deviceId, utcRange, cancellationToken);
+                throw new InvalidOperationException(
+                    "Mouse trajectory deletion is unavailable because InputTracker no longer collects trajectory data.");
             }
+            watermark = Health.DurableWatermark;
         }
 
-        long mouseCount = 0;
-        if (mouseSnapshot is not null)
-        {
-            await foreach (StorageMouseRecord _ in mouseSnapshot.ConfigureAwait(false))
-            {
-                mouseCount = checked(mouseCount + 1);
-            }
-        }
         string fingerprint = StorageDeletion.CreateStateFingerprint(
-            deviceId, utcRange, kind, mouseCount, keyboardCount, watermark);
-        string reason = kind == StorageDeviceKind.Mouse
-            ? "Current mouse storage requires one continuous prefix; an exact interior range rewrite is not yet crash-safe."
-            : "Current keyboard storage is daily aggregate data; an arbitrary UTC range cannot be removed exactly within a day.";
-        return new StorageDeletionPreview(
+            deviceId, utcRange, kind, keyboardCount, watermark);
+        var preview = new StorageDeletionPreview(
             deviceId,
             utcRange,
-            mouseCount,
             keyboardCount,
             StorageDeletionCapability.BlockedByCurrentFormat,
-            reason,
+            "Current keyboard storage is daily aggregate data; an arbitrary UTC range cannot be removed exactly within a day.",
             StorageDeletion.CreateToken(fingerprint),
             fingerprint);
+        return Task.FromResult(preview);
     }
 
     public void ExecuteDeletion(StorageDeletionPreview preview, string confirmationToken)
@@ -354,8 +308,6 @@ public sealed class StorageService : IDisposable
                     boundary: null,
                     _faultInjector);
                 _activeCalibration = calibration;
-                _mouse.SetCalibration(calibration, _database.FindCalibrationSegmentId(calibration));
-                RefreshMousePublishedState();
                 _lastMonotonicTimestamp = calibration.MonotonicAnchor;
                 _state = StorageServiceState.Running;
                 _acceptingWrites = true;
@@ -462,28 +414,6 @@ public sealed class StorageService : IDisposable
         }
     }
 
-    public void WriteMouseTransition(StorageMouseTransition transition)
-    {
-        lock (_gate)
-        {
-            EnsureRunningAndAccepting();
-            try
-            {
-                _mouse.Validate(transition, _lastMonotonicTimestamp);
-                _mouse.WriteValidated(transition);
-                _lastMonotonicTimestamp = transition.MonotonicTimestamp;
-                RefreshMousePublishedState();
-            }
-            catch (Exception error) when (IsControlledFailure(error))
-            {
-                _mouse.RefreshPublishedState();
-                RefreshMousePublishedState();
-                EnterFault("storage.mouse-ingestion-failed", "Mouse ingestion failed closed.", null);
-                throw;
-            }
-        }
-    }
-
     public void Checkpoint(long monotonicTimestamp)
     {
         lock (_gate)
@@ -497,7 +427,6 @@ public sealed class StorageService : IDisposable
                 closeHolds: false,
                 boundary: null,
                 calibration: null);
-            CommitMouseBoundary(static mouse => mouse.SealAll(), boundary: null);
         }
     }
 
@@ -529,9 +458,6 @@ public sealed class StorageService : IDisposable
                     closeHolds: true,
                     boundary: GetPauseBoundary(added),
                     calibration: null);
-                CommitMouseBoundary(
-                    static mouse => mouse.SealAll(),
-                    GetPauseBoundary(added));
                 _state = StorageServiceState.Paused;
             }
 
@@ -579,9 +505,6 @@ public sealed class StorageService : IDisposable
                 closeHolds: true,
                 boundary: StorageLifecycleBoundary.DeviceRemoval,
                 calibration: null);
-            CommitMouseBoundary(
-                mouse => mouse.SealDevice(deviceId),
-                StorageLifecycleBoundary.DeviceRemoval);
             _acceptingWrites = restoreAccepting;
         }
     }
@@ -605,10 +528,6 @@ public sealed class StorageService : IDisposable
 
                 TrackTimestamp(monotonicTimestamp, StorageLifecycleBoundary.CalibrationChange);
                 _acceptingWrites = false;
-                long previousCalibrationSegmentId = _database.FindCalibrationSegmentId(_activeCalibration!.Value);
-                CommitMouseBoundary(
-                    mouse => mouse.SealCalibration(previousCalibrationSegmentId),
-                    StorageLifecycleBoundary.CalibrationChange);
                 CommitScope(
                     monotonicTimestamp,
                     static _ => true,
@@ -617,7 +536,6 @@ public sealed class StorageService : IDisposable
                     boundary: StorageLifecycleBoundary.CalibrationChange,
                     calibration: calibration);
                 _activeCalibration = calibration;
-                _mouse.SetCalibration(calibration, _database.FindCalibrationSegmentId(calibration));
                 _lastMonotonicTimestamp = calibration.MonotonicAnchor;
                 _state = previousState;
                 _acceptingWrites = previousState == StorageServiceState.Running;
@@ -654,9 +572,6 @@ public sealed class StorageService : IDisposable
                 closeHolds: true,
                 boundary: StorageLifecycleBoundary.Stop,
                 calibration: null);
-            CommitMouseBoundary(
-                static mouse => mouse.SealAll(),
-                StorageLifecycleBoundary.Stop);
             _pauseReasons = StoragePauseReason.None;
             _state = StorageServiceState.Stopped;
         }
@@ -681,7 +596,6 @@ public sealed class StorageService : IDisposable
             _pendingTransitionsByDevice.Clear();
             _batchStartByDevice.Clear();
             _batchTimer?.Dispose();
-            _mouse.Dispose();
             try
             {
                 _database.Dispose();
@@ -918,7 +832,7 @@ public sealed class StorageService : IDisposable
             if (_disposed
                 || _state != StorageServiceState.Running
                 || !_acceptingWrites
-                || _batchStartByDevice.Count == 0 && !_mouse.HasBuffered)
+                || _batchStartByDevice.Count == 0)
             {
                 return;
             }
@@ -937,8 +851,6 @@ public sealed class StorageService : IDisposable
                         boundary: null,
                         calibration: null);
                 }
-
-                CommitMouseBoundary(mouse => mouse.SealAtTimestamp(timestamp), boundary: null);
             }
             catch (Exception error) when (IsControlledFailure(error))
             {
@@ -965,28 +877,6 @@ public sealed class StorageService : IDisposable
         {
             Fail("keyboard.calibration-mismatch", "Keyboard transition calibration does not match the active segment.", null);
         }
-    }
-
-    private void CommitMouseBoundary(Action<MouseIngestion> action, StorageLifecycleBoundary? boundary)
-    {
-        try
-        {
-            action(_mouse);
-            RefreshMousePublishedState();
-        }
-        catch (Exception error) when (IsControlledFailure(error))
-        {
-            _mouse.RefreshPublishedState();
-            RefreshMousePublishedState();
-            EnterFault("storage.mouse-boundary-failed", "Mouse boundary failed closed.", boundary);
-            throw;
-        }
-    }
-
-    private void RefreshMousePublishedState()
-    {
-        _mouse.RefreshPublishedState();
-        _ordinals = _mouse.Ordinals;
     }
 
     private void ValidateCalibrationForClock(TimeCalibrationSegment calibration)
@@ -1024,6 +914,59 @@ public sealed class StorageService : IDisposable
             or StorageServiceState.Disposed)
         {
             throw new InvalidOperationException("Storage service cannot modify devices from its current state.");
+        }
+    }
+
+    public void WriteMouseButtonTransition(StorageMouseButtonTransition transition)
+    {
+        lock (_gate)
+        {
+            EnsureRunningAndAccepting();
+            if (transition.DeviceId == Guid.Empty
+                || transition.CalibrationSessionId == Guid.Empty
+                || transition.MonotonicTimestamp < 0
+                || (transition.ButtonChanges & ~KnownMouseButtonChanges) != 0
+                || _activeCalibration is null)
+            {
+                Fail("mouse-button.transition-invalid", "Mouse button transition fields are invalid.", null);
+                return;
+            }
+
+            TimeCalibrationSegment calibration = _activeCalibration.Value;
+            if (transition.CalibrationSessionId != calibration.SessionId)
+            {
+                Fail("mouse-button.transition-invalid", "Mouse button transition fields are invalid.", null);
+                return;
+            }
+
+            ushort downChanges = (ushort)(transition.ButtonChanges & MouseButtonDownChanges);
+            if (downChanges == 0)
+            {
+                return;
+            }
+
+            TrackTimestamp(transition.MonotonicTimestamp, boundary: null);
+            try
+            {
+                DateOnly date = StorageKeyboardTime.GetLocalDate(calibration, transition.MonotonicTimestamp);
+                var buttons = new List<StorageMouseButton>(5);
+                if ((downChanges & (1 << 0)) != 0) buttons.Add(StorageMouseButton.Left);
+                if ((downChanges & (1 << 2)) != 0) buttons.Add(StorageMouseButton.Right);
+                if ((downChanges & (1 << 4)) != 0) buttons.Add(StorageMouseButton.Middle);
+                if ((downChanges & (1 << 6)) != 0) buttons.Add(StorageMouseButton.X1);
+                if ((downChanges & (1 << 8)) != 0) buttons.Add(StorageMouseButton.X2);
+                _ordinals = _database.CommitMouseButtonPresses(
+                    transition.DeviceId,
+                    date,
+                    calibration.TimeZoneId,
+                    buttons,
+                    _faultInjector);
+            }
+            catch (Exception error) when (IsControlledFailure(error))
+            {
+                EnterFault("storage.mouse-button-commit-failed", "Mouse button aggregate failed closed.", null);
+                throw;
+            }
         }
     }
 

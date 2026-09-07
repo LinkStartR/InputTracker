@@ -3,7 +3,7 @@ namespace InputTracker;
 internal static class PrivacyDisclosure
 {
     private const string StorageBoundary =
-        "键盘只按设备、每天统计实体按键的次数和按住时长，不保存输入内容、先后顺序、窗口或程序名称。鼠标移动路线按设备保存在当前程序文件夹；当前版本还不能按范围删除。";
+        "键盘只按设备、每天统计实体按键的次数和按住时长，不保存输入内容、先后顺序、窗口或程序名称。鼠标只统计各按键的次数，不保存移动位置或路线。旧版本已经保存的轨迹文件会原样保留，程序不会自动删除。";
 
     public static string For(CollectionSnapshot snapshot)
     {

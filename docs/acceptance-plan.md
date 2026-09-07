@@ -38,7 +38,7 @@ InputCore 自动测试仅验证规范化注入和生产管线，不是物理硬�
 
 ## 反向验证
 
-分别临时破坏聚合期望、轨迹块校验、绿色路径规则，保存非零退出码和关键失败输出；恢复原状后运行全套命令并保存全绿输出。临时破坏不得提交。
+分别临时破坏聚合期望、禁止鼠标轨迹产物规则、绿色路径规则，保存非零退出码和关键失败输出；恢复原状后运行全套命令并保存全绿输出。临时破坏不得提交。
 
 ## 真实硬件与性能
 
@@ -49,7 +49,7 @@ InputCore 自动测试仅验证规范化注入和生产管线，不是物理硬�
 
 ## Storage 阶段
 
-执行 `scripts/verify.ps1 -Stage Storage`。该阶段必须完整回归 Bootstrap 与 InputCore gate，并通过日/周/月/年半开区间、Pacific 23/25 小时 DST、显式 Windows 时区、CSV 隐私列、PNG、版本化迁移、设备映射、轨迹块完整性、备份恢复和恢复日志测试。TRX 使用精确测试名并要求每项为 `Passed`，缺失、改名或非通过均失败。
+执行 `scripts/verify.ps1 -Stage Storage`。该阶段必须完整回归 Bootstrap 与 InputCore gate，并通过日/周/月/年半开区间、Pacific 23/25 小时 DST、显式 Windows 时区、CSV 隐私列、PNG、版本化迁移、设备映射、鼠标按键汇总且不产生轨迹文件、备份恢复和恢复日志测试。TRX 使用精确测试名并要求每项为 `Passed`，缺失、改名或非通过均失败。
 
 当前格式不能安全地精确重写任意范围，因此删除 gate 固定为 `deletion-preview-and-execution-blocked`。证据必须报告 `BlockedByCurrentFormat`、`releaseEligible=false`，不得把预览或执行阻断称为删除通过。真实多设备、1000Hz、磁盘增长和物理断电保持 `not-run`，按 Storage 人工清单与 schema 现场验收。
 

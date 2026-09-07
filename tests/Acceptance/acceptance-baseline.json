@@ -40,7 +40,7 @@
     "storage-migration-versioned",
     "storage-privacy-schema-source-policy",
     "storage-device-mapping-confidence",
-    "storage-chunk-integrity-recovery",
+    "storage-no-trajectory-artifacts",
     "deletion-preview-and-execution-blocked",
     "storage-manual-terminal-status",
     "portable-storage-regression",

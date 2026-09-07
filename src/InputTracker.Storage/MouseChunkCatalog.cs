@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 
 namespace InputTracker.Storage;
 
-public sealed record MouseChunkCatalogEntry(
+internal sealed record MouseChunkCatalogEntry(
     Guid ChunkId,
     Guid DeviceId,
     long CalibrationSegmentId,
@@ -20,20 +20,20 @@ public sealed record MouseChunkCatalogEntry(
     long CreatedUtcMicroseconds,
     bool Recovered);
 
-public sealed record MouseChunkDurableWatermark(
+internal sealed record MouseChunkDurableWatermark(
     Guid ChunkId,
     long Encoded,
     long Persisted,
     long PowerDurable,
     string RelativePath);
 
-public enum MouseChunkIssueSeverity
+internal enum MouseChunkIssueSeverity
 {
     Observation = 0,
     IntegrityFault = 1
 }
 
-public enum MouseChunkIssueCategory
+internal enum MouseChunkIssueCategory
 {
     TemporaryFileValid = 0,
     TemporaryFileCorrupt = 1,
@@ -49,14 +49,14 @@ public enum MouseChunkIssueCategory
     CatalogInsertFailed = 11
 }
 
-public sealed record MouseChunkIntegrityIssue(
+internal sealed record MouseChunkIntegrityIssue(
     MouseChunkIssueSeverity Severity,
     MouseChunkIssueCategory Category,
     string RelativePath,
     string ErrorType,
     string Message);
 
-public sealed record MouseChunkDiagnostics(
+internal sealed record MouseChunkDiagnostics(
     long Encoded,
     long Persisted,
     long Durable,
@@ -66,7 +66,7 @@ public sealed record MouseChunkDiagnostics(
     long MissingIndex,
     long MissingFile);
 
-public sealed record MouseChunkRecoveryReport(
+internal sealed record MouseChunkRecoveryReport(
     MouseChunkDiagnostics Diagnostics,
     IReadOnlyList<MouseChunkIntegrityIssue> Issues)
 {

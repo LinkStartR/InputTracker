@@ -38,9 +38,9 @@ public sealed class StorageServicePrivacyTests
     }
 
     [Fact]
-    public void MouseTransitionContractHasOnlyDeviceCalibrationAndRawPhysicalFields()
+    public void MouseButtonTransitionContractContainsNoPositionWheelOrSequenceFields()
     {
-        Dictionary<string, Type> properties = typeof(StorageMouseTransition)
+        Dictionary<string, Type> properties = typeof(StorageMouseButtonTransition)
             .GetProperties(BindingFlags.Instance | BindingFlags.Public)
             .ToDictionary(property => property.Name, property => property.PropertyType, StringComparer.Ordinal);
         var expected = new Dictionary<string, Type>(StringComparer.Ordinal)
@@ -48,34 +48,28 @@ public sealed class StorageServicePrivacyTests
             ["DeviceId"] = typeof(Guid),
             ["CalibrationSessionId"] = typeof(Guid),
             ["MonotonicTimestamp"] = typeof(long),
-            ["DeltaX"] = typeof(int),
-            ["DeltaY"] = typeof(int),
-            ["MotionKind"] = typeof(byte),
-            ["UsesVirtualDesktop"] = typeof(bool),
-            ["ButtonChanges"] = typeof(ushort),
-            ["VerticalWheelDelta"] = typeof(short),
-            ["HorizontalWheelDelta"] = typeof(short)
+            ["ButtonChanges"] = typeof(ushort)
         };
 
         Assert.Equal(expected.OrderBy(pair => pair.Key), properties.OrderBy(pair => pair.Key));
         Assert.DoesNotContain(properties.Keys, name => ContainsAny(
-            name, "Sequence", "Text", "Character", "Window", "Focus", "Application", "Process", "Interface", "Hardware"));
+            name, "Sequence", "DeltaX", "DeltaY", "Motion", "Wheel", "Position", "Text", "Character", "Window", "Focus", "Application", "Process", "Interface", "Hardware"));
     }
 
     [Fact]
-    public void MouseIngestionSchemaAndSourcesExcludeContentAndRawIdentityFields()
+    public void RuntimeMouseStorageSourceContainsNoTrajectoryIngestion()
     {
         using var directory = new TemporaryDirectory();
         using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
-        IReadOnlyList<string> spoolColumns = database.ReadSchemaColumns()["mouse_spool_segments"];
-        IReadOnlyList<string> watermarkColumns = database.ReadSchemaColumns()["mouse_device_watermarks"];
-        string schema = string.Join('|', spoolColumns.Concat(watermarkColumns));
         string root = FindRepositoryRoot();
-        string source = string.Join('\n', new[] { "MouseIngestion.cs", "MouseSpool.cs" }
+        string source = string.Join('\n', new[] { "StorageService.cs", "StorageQuery.cs" }
             .Select(file => File.ReadAllText(Path.Combine(root, "src", "InputTracker.Storage", file))));
-        foreach (string forbidden in new[] { "Text", "Character", "Window", "Focus", "Application", "Process", "InterfacePath", "HardwareIds", "SerialNumber", "ContainerId" })
+        foreach (string forbidden in new[]
         {
-            Assert.DoesNotContain(forbidden, schema, StringComparison.OrdinalIgnoreCase);
+            "WriteMouseTransition", "StreamMouseAsync", "OpenMousePlaybackSnapshotAsync",
+            "MouseIngestion", "DeltaX", "DeltaY", "VerticalWheelDelta", "HorizontalWheelDelta"
+        })
+        {
             Assert.DoesNotMatch(new Regex($@"\b{Regex.Escape(forbidden)}\b", RegexOptions.CultureInvariant), source);
         }
     }
@@ -166,7 +160,7 @@ public sealed class StorageServicePrivacyTests
                 "storage.service.keyboard-aggregate-commit-ordinal"
             ],
             values.Keys);
-        Assert.Equal("1", values["mouse.v3-adoption-complete"]);
+        Assert.Equal("0", values["mouse.v3-adoption-complete"]);
         Assert.All(values
             .Where(pair => pair.Key.StartsWith("storage.service.", StringComparison.Ordinal))
             .Select(pair => pair.Value), value => Assert.True(long.TryParse(

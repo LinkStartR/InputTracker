@@ -5,6 +5,41 @@ namespace InputTracker.App.Tests;
 
 public sealed class UiPresentationTests
 {
+    [Theory]
+    [InlineData("MainWindow.xaml", "MouseCanvasGrid")]
+    [InlineData("MainWindow.xaml", "MousePlaybackPlayButton")]
+    [InlineData("MainWindow.xaml", "MousePlaybackSpeedCombo")]
+    [InlineData("MainWindow.xaml", "MouseRouteSummaryText")]
+    [InlineData("MainWindow.xaml", "PreviewMouseDeletionButton")]
+    [InlineData("MainWindow.xaml", "鼠标轨迹")]
+    [InlineData("MainWindow.xaml", "移动路线")]
+    [InlineData("MainWindow.xaml", "轨迹回放")]
+    [InlineData("MainWindow.xaml.cs", "DrawMouseTrajectory")]
+    [InlineData("MainWindow.xaml.cs", "ProjectMousePoint")]
+    [InlineData("MainWindow.xaml.cs", "MousePlaybackTimer_Tick")]
+    [InlineData("MainWindow.xaml.cs", "FormatMouseRoute")]
+    [InlineData("App.xaml.cs", "MousePlaybackController")]
+    [InlineData("DashboardViewModel.cs", "MousePoints")]
+    [InlineData("DashboardViewModel.cs", "StreamMouseAsync")]
+    [InlineData("AppStorageCoordinator.cs", "StorageMouseTransition")]
+    public void ProductUiAndRuntimeContainNoTrajectoryFeatureToken(string fileName, string forbidden)
+    {
+        string path = Path.Combine(FindRepositoryRoot(), "src", "InputTracker.App", fileName);
+        Assert.DoesNotContain(forbidden, File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MousePageShowsButtonCountsWithoutTrajectoryControls()
+    {
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("Header=\"鼠标按键\"", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MouseCanvasGrid", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("MousePlaybackPlayButton", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("鼠标轨迹", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("移动路线", windowXaml, StringComparison.Ordinal);
+    }
+
     private static readonly XNamespace Presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
@@ -23,7 +58,8 @@ public sealed class UiPresentationTests
 
         Assert.Contains("Overview", destinations);
         Assert.Contains("KeyboardHeatmap", destinations);
-        Assert.Contains("MousePlayback", destinations);
+        Assert.Contains("MouseButtons", destinations);
+        Assert.DoesNotContain("MousePlayback", destinations);
         Assert.Contains("DataTools", destinations);
         Assert.Contains("Settings", destinations);
         Assert.Contains("Privacy", destinations);
@@ -86,7 +122,7 @@ public sealed class UiPresentationTests
         Assert.Contains("x:Key=\"CardShadowEffect\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"NavigationGlyph\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("ContentSource=\"SelectedContent\" TextElement.Foreground=\"{DynamicResource PrimaryTextBrush}\"", windowXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"MouseCanvasGrid\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"鼠标按键\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalCollectionBar\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"DirectoryText\"", windowXaml, StringComparison.Ordinal);
     }

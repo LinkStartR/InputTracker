@@ -38,12 +38,26 @@ public sealed class AppStorageCoordinatorTests
         IOException error = await Assert.ThrowsAsync<IOException>(() => coordinator.WriteAsync(
             CapturedInput.FromMouse(new MouseRawEvent(
                 new RuntimeDeviceId(9), 1, -1, MouseMotionKind.Relative, false,
-                MouseButtonChanges.None, 0, 0, 20)), CancellationToken.None).AsTask());
+                MouseButtonChanges.LeftDown, 0, 0, 20)), CancellationToken.None).AsTask());
         Assert.Equal("disk fault", error.Message);
     }
 
     [Fact]
-    public async Task KeyboardAndMouseMapEveryPhysicalField()
+    public async Task PureMovementAndWheelDoNotReachStorage()
+    {
+        var store = new FakeWriter(StorageServiceState.Running);
+        var coordinator = new AppStorageCoordinator(store, Guid.NewGuid());
+        coordinator.MapRuntimeDevice(new RuntimeDeviceId(10), Guid.NewGuid());
+
+        await coordinator.WriteAsync(CapturedInput.FromMouse(new MouseRawEvent(
+            new RuntimeDeviceId(10), 300, -200, MouseMotionKind.Relative, false,
+            MouseButtonChanges.None, 120, -120, 21)), CancellationToken.None);
+
+        Assert.Null(store.Mouse);
+    }
+
+    [Fact]
+    public async Task KeyboardAndMouseButtonMapOnlyPersistedFields()
     {
         var store = new FakeWriter(StorageServiceState.Running);
         Guid calibration = Guid.NewGuid();
@@ -60,10 +74,8 @@ public sealed class AppStorageCoordinatorTests
             short.MinValue, short.MaxValue, 31)), CancellationToken.None);
 
         Assert.Equal(new StorageKeyboardTransition(device, 0x1d, true, false, false, 30, calibration), store.Keyboard);
-        Assert.Equal(new StorageMouseTransition(
-            device, calibration, 31, int.MinValue, int.MaxValue, 1, true,
-            (ushort)(MouseButtonChanges.LeftDown | MouseButtonChanges.X2Up),
-            short.MinValue, short.MaxValue), store.Mouse);
+        Assert.Equal(new StorageMouseButtonTransition(
+            device, calibration, 31, (ushort)MouseButtonChanges.LeftDown), store.Mouse);
     }
 
     [Fact]
@@ -132,7 +144,7 @@ public sealed class AppStorageCoordinatorTests
         Guid second = Guid.NewGuid();
         coordinator.MapRuntimeDevice(runtime, second);
         await coordinator.WriteAsync(CapturedInput.FromMouse(new MouseRawEvent(
-            runtime, 1, 1, MouseMotionKind.Relative, false, MouseButtonChanges.None, 0, 0, 7)), CancellationToken.None);
+            runtime, 1, 1, MouseMotionKind.Relative, false, MouseButtonChanges.LeftDown, 0, 0, 7)), CancellationToken.None);
 
         Assert.Equal(new[] { first }, store.RemovedDevices);
         Assert.Equal(second, store.Mouse!.Value.DeviceId);
@@ -168,7 +180,7 @@ public sealed class AppStorageCoordinatorTests
             PhysicalKeyTransition.Down, 1)), CancellationToken.None);
         await coordinator.WriteAsync(CapturedInput.FromMouse(new MouseRawEvent(
             RuntimeDeviceId.Unattributed, 1, 2, MouseMotionKind.Relative, false,
-            MouseButtonChanges.None, 0, 0, 2)), CancellationToken.None);
+            MouseButtonChanges.LeftDown, 0, 0, 2)), CancellationToken.None);
 
         Assert.Equal(2, store.Observations.Count);
         Assert.Equal(StorageDeviceKind.Keyboard, store.Observations[0].Kind);
@@ -186,10 +198,10 @@ public sealed class AppStorageCoordinatorTests
     {
         public StorageServiceHealth Health { get; } = new(
             state, state == StorageServiceState.Running,
-            new StorageDurableWatermark(0, 0, new Dictionary<Guid, long>(), StorageDurabilityScope.SQLiteCommitted), null);
+            new StorageDurableWatermark(0, 0, StorageDurabilityScope.SQLiteCommitted), null);
         public int KeyboardWrites { get; private set; }
         public StorageKeyboardTransition? Keyboard { get; private set; }
-        public StorageMouseTransition? Mouse { get; private set; }
+        public StorageMouseButtonTransition? Mouse { get; private set; }
         public Exception? WriteError { get; init; }
         public List<string> Controls { get; } = [];
         public StorageDeviceObservation? Observation { get; private set; }
@@ -198,7 +210,7 @@ public sealed class AppStorageCoordinatorTests
         public List<Guid> RemovedDevices { get; } = [];
         public bool FailResume { get; init; }
         public void WriteKeyboard(StorageKeyboardTransition value) { Throw(); KeyboardWrites++; Keyboard = value; }
-        public void WriteMouse(StorageMouseTransition value) { Throw(); Mouse = value; }
+        public void WriteMouseButtons(StorageMouseButtonTransition value) { Throw(); Mouse = value; }
         public void Pause(StoragePauseReason reason, long timestamp) { Throw(); Controls.Add($"pause:{reason}"); }
         public void Resume(StoragePauseReason reason) { Throw(); if (FailResume) throw new IOException("resume failed"); Controls.Add($"resume:{reason}"); }
         public void RemoveDevice(Guid deviceId, long timestamp) { Throw(); RemovedDevices.Add(deviceId); }

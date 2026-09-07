@@ -303,7 +303,7 @@
                                 <Setter TargetName="NavigationLabel" Property="TextElement.Foreground" Value="{DynamicResource SidebarTextBrush}" />
                             </Trigger>
                             <Trigger Property="Tag" Value="KeyboardHeatmap"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE765;" /></Trigger>
-                            <Trigger Property="Tag" Value="MousePlayback"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE962;" /></Trigger>
+                            <Trigger Property="Tag" Value="MouseButtons"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE962;" /></Trigger>
                             <Trigger Property="Tag" Value="DataTools"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE74E;" /></Trigger>
                             <Trigger Property="Tag" Value="Settings"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE713;" /></Trigger>
                             <Trigger Property="Tag" Value="Privacy"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE72E;" /></Trigger>
@@ -537,8 +537,7 @@
             <TabControl x:Name="NavigationList"
                         Grid.Row="2"
                         TabStripPlacement="Left"
-                        Style="{StaticResource NavigationTabControlStyle}"
-                        SelectionChanged="NavigationList_SelectionChanged">
+                        Style="{StaticResource NavigationTabControlStyle}">
                 <TabItem Header="总览" Tag="Overview">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="2,2,6,16">
@@ -602,7 +601,7 @@
                                                        TextWrapping="Wrap" />
                                             <TextBlock Margin="0,8,0,0"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       Text="选择一只鼠标，查看按键次数和这段时间的活动。"
+                                                       Text="选择一只鼠标，查看各个按键的使用次数。"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -712,12 +711,12 @@
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="鼠标轨迹" Tag="MousePlayback">
+                <TabItem Header="鼠标按键" Tag="MouseButtons">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="2,2,6,16">
-                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="鼠标轨迹" />
+                            <TextBlock Style="{StaticResource PageTitleStyle}" Text="鼠标按键" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="选择一只鼠标，查看按键次数和这段时间的移动路线。" />
+                                       Text="看看这段时间里，每只鼠标分别点击了多少次。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>
@@ -726,9 +725,9 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="移动路线" />
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="当前鼠标" />
                                             <TextBlock x:Name="MouseSummary" Margin="0,8,16,0"
-                                                       Text="选择鼠标后显示路线"
+                                                       Text="选择鼠标后显示按键次数"
                                                        FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                                         </StackPanel>
                                         <ComboBox x:Name="MouseDeviceSelector" Grid.Column="1" Width="260"
@@ -736,73 +735,13 @@
                                                   SelectionChanged="QuerySelection_Changed" />
                                     </Grid>
                                     <Border Margin="0,16,0,0"
-                                            Padding="1"
-                                            Background="{DynamicResource BorderBrush}"
-                                            CornerRadius="15">
-                                        <Grid x:Name="MouseCanvasGrid"
-                                              Height="300"
-                                              Background="{DynamicResource SubtleBackgroundBrush}"
-                                              ClipToBounds="True">
-                                            <Rectangle Fill="{StaticResource MouseGridBrush}" Opacity="0.7" />
-                                            <StackPanel x:Name="MouseCanvasEmptyState"
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
-                                                        IsHitTestVisible="False">
-                                                <Border Width="54" Height="54" HorizontalAlignment="Center"
-                                                        Background="{DynamicResource CardBackgroundBrush}"
-                                                        BorderBrush="{DynamicResource BorderBrush}"
-                                                        BorderThickness="1" CornerRadius="27">
-                                                    <TextBlock Text="&#xE962;" FontFamily="Segoe Fluent Icons" FontSize="22"
-                                                               Foreground="{DynamicResource AccentBrush}"
-                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                </Border>
-                                                <TextBlock Margin="0,12,0,0" Text="选择一只鼠标，移动路线会显示在这里"
-                                                           FontSize="13" FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}" />
-                                            </StackPanel>
-                                            <Canvas x:Name="MouseCanvas" Height="300"
-                                                    Background="Transparent"
-                                                    ClipToBounds="True" />
-                                        </Grid>
-                                    </Border>
-                                    <Border Margin="0,12,0,0"
-                                            Padding="10,8"
+                                            Padding="14,12"
                                             Background="{DynamicResource SubtleBackgroundBrush}"
                                             CornerRadius="12">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="16" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Button x:Name="MousePlaybackPlayButton" Grid.Column="0"
-                                                Style="{StaticResource PrimaryButtonStyle}"
-                                                Click="MousePlaybackPlayButton_Click" Content="播放" />
-                                        <Button x:Name="MousePlaybackPauseButton" Grid.Column="1"
-                                                Click="MousePlaybackPauseButton_Click" Content="暂停" />
-                                        <ComboBox x:Name="MousePlaybackSpeedSelector" Grid.Column="2" Width="82"
-                                                  SelectedIndex="2" SelectionChanged="MousePlaybackSpeedSelector_SelectionChanged">
-                                            <ComboBoxItem Tag="Quarter" Content="0.25×" />
-                                            <ComboBoxItem Tag="Half" Content="0.5×" />
-                                            <ComboBoxItem Tag="One" Content="1×" />
-                                            <ComboBoxItem Tag="Double" Content="2×" />
-                                            <ComboBoxItem Tag="Four" Content="4×" />
-                                        </ComboBox>
-                                        <Slider x:Name="MousePlaybackProgress" Grid.Column="4" Minimum="0" Maximum="1"
-                                                SmallChange="0.01" LargeChange="0.1"
-                                                ValueChanged="MousePlaybackProgress_ValueChanged" />
-                                    </Grid>
+                                        <TextBlock Text="只统计按键次数，不保存鼠标移动位置。"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" />
                                     </Border>
-                                    <TextBlock x:Name="MousePlaybackStatus" Margin="2,10,0,0"
-                                               Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap"
-                                               Text="选择鼠标后即可准备回放。" />
-                                    <TextBlock Margin="0,10,0,0"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               Text="画面一次最多显示 2048 个点；回放仍会按完整记录进行，不会为了显示速度丢掉路线数据。"
-                                               TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -846,8 +785,6 @@
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
                                                 Click="PreviewKeyboardDeletionButton_Click" Content="预览键盘删除" />
-                                        <Button x:Name="PreviewMouseDeletionButton" HorizontalAlignment="Left"
-                                                Click="PreviewMouseDeletionButton_Click" Content="预览鼠标删除" />
                                         <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"
                                                 Click="ValidateRestoreButton_Click" Content="恢复本地备份" />
                                     </StackPanel>
@@ -969,7 +906,7 @@
                                     <StackPanel>
                                         <TextBlock Text="鼠标" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="移动路线按设备保存在当前程序文件夹，直到你主动删除。"
+                                                   Text="只统计各个按键的次数，不保存鼠标移动位置或路线。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />

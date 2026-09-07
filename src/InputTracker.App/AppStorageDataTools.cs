@@ -39,7 +39,6 @@ internal sealed record StorageDeletionDisplay(
     Guid DeviceId,
     StorageDeviceKind DeviceKind,
     StorageUtcRange UtcRange,
-    long MouseRecordCount,
     long KeyboardAggregateCount,
     string Status);
 
@@ -119,6 +118,11 @@ internal sealed class AppStorageDataToolsController
         StorageUtcRange range,
         CancellationToken cancellationToken = default)
     {
+        if (expectedKind != StorageDeviceKind.Keyboard)
+        {
+            throw new InvalidOperationException("鼠标轨迹功能已移除，没有可预览的鼠标轨迹删除范围。");
+        }
+
         return await RunExclusiveAsync(async () =>
         {
             StorageDeviceInfo? device = _storage.ListDevices()
@@ -141,7 +145,6 @@ internal sealed class AppStorageDataToolsController
                 preview.DeviceId,
                 expectedKind,
                 preview.UtcRange,
-                preview.MouseRecordCount,
                 preview.KeyboardAggregateCount,
                 status);
         }, cancellationToken).ConfigureAwait(false);

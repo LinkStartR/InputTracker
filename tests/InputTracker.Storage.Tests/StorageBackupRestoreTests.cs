@@ -115,7 +115,7 @@ public sealed class StorageBackupRestoreTests
     }
 
     [Fact]
-    public async Task BackupAndRestoreRoundTripsCommittedMousePrefix()
+    public void BackupAndRestoreRoundTripsMouseButtonAggregatesWithoutTrajectoryFiles()
     {
         using var directory = new TemporaryDirectory();
         StorageLayout layout = StorageLayout.Create(directory.Path);
@@ -129,8 +129,8 @@ public sealed class StorageBackupRestoreTests
         using (StorageService service = StorageService.OpenForTests(layout, clock))
         {
             service.Start(calibration);
-            service.WriteMouseTransition(new StorageMouseTransition(
-                mouse, calibration.SessionId, 1, 10, -3, 1, true, 0x03FF, 120, -120));
+            service.WriteMouseButtonTransition(new StorageMouseButtonTransition(
+                mouse, calibration.SessionId, 1, 0x0005));
             service.Stop(2);
             service.CreateBackup("backups/mouse.itbackup");
         }
@@ -140,21 +140,15 @@ public sealed class StorageBackupRestoreTests
         StorageBackup.Restore(layout, "backups/mouse.itbackup");
 
         using StorageService restored = StorageService.OpenForTests(layout, clock);
-        var records = new List<StorageMouseRecord>();
-        await foreach (StorageMouseRecord record in restored.StreamMouseAsync(
-            mouse, new StorageUtcRange(0, long.MaxValue)))
-        {
-            records.Add(record);
-        }
-        StorageMouseRecord item = Assert.Single(records);
-        Assert.Equal(mouse, item.DeviceId);
-        Assert.Equal(1, item.Sequence);
-        Assert.Equal(calibration.ToUtcMicroseconds(1), item.UtcMicroseconds);
-        Assert.Equal((10, -3, (byte)1, true, (ushort)0x03FF, (short)120, (short)-120),
-            (item.DeltaX, item.DeltaY, item.MotionKind, item.UsesVirtualDesktop,
-             item.ButtonChanges, item.VerticalWheelDelta, item.HorizontalWheelDelta));
+        StorageMouseButtonPeriodResult result = restored.QueryMouseButtonsPeriod(
+            StoragePeriodKind.Day,
+            DateOnly.FromDateTime(clock.UtcNow.UtcDateTime),
+            TimeZoneInfo.Utc.Id,
+            mouse);
+        Assert.Equal(2, result.Aggregates.Sum(row => row.PressCount));
         Assert.True(File.Exists(Path.Combine(layout.StorageDirectory, "outside-uncommitted.txt")));
         Assert.Equal(committedFilesBeforeRestore, SnapshotCommittedMouseFiles(layout));
+        Assert.Empty(committedFilesBeforeRestore);
     }
 
     [Fact]
