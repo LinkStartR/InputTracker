@@ -1,5 +1,6 @@
 using InputTracker.Storage;
 using System.Collections.ObjectModel;
+using System.IO;
 
 namespace InputTracker;
 
@@ -7,6 +8,12 @@ internal interface IDashboardDataSource
 {
     Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken);
     Task<StorageKeyboardPeriodResult> QueryKeyboardAsync(
+        StoragePeriodKind kind,
+        DateOnly date,
+        string timeZoneId,
+        Guid? deviceId,
+        CancellationToken cancellationToken);
+    Task<StorageMouseButtonPeriodResult> QueryMouseButtonsAsync(
         StoragePeriodKind kind,
         DateOnly date,
         string timeZoneId,
@@ -37,6 +44,17 @@ internal sealed class StorageDashboardDataSource(StorageService service) : IDash
         return Task.FromResult(service.QueryKeyboardPeriod(kind, date, timeZoneId, deviceId));
     }
 
+    public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsAsync(
+        StoragePeriodKind kind,
+        DateOnly date,
+        string timeZoneId,
+        Guid? deviceId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(service.QueryMouseButtonsPeriod(kind, date, timeZoneId, deviceId));
+    }
+
     public IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
         Guid deviceId,
         StorageUtcRange range,
@@ -60,6 +78,16 @@ internal sealed record MouseDisplayPoint(
     bool UsesVirtualDesktop,
     bool StartsNewSegment);
 
+internal sealed record MouseButtonCounts(
+    long Left,
+    long Right,
+    long Middle,
+    long X1,
+    long X2)
+{
+    public static MouseButtonCounts Empty { get; } = new(0, 0, 0, 0, 0);
+}
+
 internal sealed class DashboardViewModel
 {
     internal const int MaxRenderedMousePoints = 2048;
@@ -78,6 +106,7 @@ internal sealed class DashboardViewModel
     public IReadOnlyList<HeatmapCell> Heatmap { get; private set; } = [];
     public IReadOnlyList<MouseDisplayPoint> MousePoints { get; private set; } = [];
     public long TotalMousePointCount { get; private set; }
+    public MouseButtonCounts MouseButtons { get; private set; } = MouseButtonCounts.Empty;
     public StorageResolvedPeriod? ResolvedPeriod { get; private set; }
     public long TotalPressCount { get; private set; }
     public long TotalHoldDurationMicroseconds { get; private set; }
@@ -99,6 +128,7 @@ internal sealed class DashboardViewModel
         Devices = loaded.Devices;
         ResolvedPeriod = loaded.Keyboard.Period;
         KeyboardPeriodResult = loaded.Keyboard;
+        MouseButtons = ToMouseButtonCounts(loaded.MouseButtons.Aggregates, SelectedMouseDeviceId);
         Heatmap = loaded.Keyboard.Aggregates.Select(value => new HeatmapCell(
             value.MakeCode, value.IsE0, value.IsE1,
             value.PressCount, value.HoldDurationMicroseconds)).ToArray();
@@ -118,10 +148,42 @@ internal sealed class DashboardViewModel
         IReadOnlyList<StorageDeviceInfo> devices = await _dataSource.ListDevicesAsync(token).ConfigureAwait(false);
         StorageKeyboardPeriodResult keyboard = await _dataSource.QueryKeyboardAsync(
             period, anchor, zone, keyboardDevice, token).ConfigureAwait(false);
+        StorageMouseButtonPeriodResult mouseButtons = await _dataSource.QueryMouseButtonsAsync(
+            period, anchor, zone, mouseDevice, token).ConfigureAwait(false);
         MouseDisplayResult? mouse = includeMouse && mouseDevice is Guid device
             ? await BucketMouseAsync(device, keyboard.Period.UtcRange, token).ConfigureAwait(false)
             : includeMouse ? new MouseDisplayResult(0, []) : null;
-        return new DashboardLoadResult(devices, keyboard, mouse);
+        return new DashboardLoadResult(devices, keyboard, mouseButtons, mouse);
+    }
+
+    private static MouseButtonCounts ToMouseButtonCounts(
+        IReadOnlyList<StorageMouseButtonPeriodAggregate> aggregates,
+        Guid? selectedDeviceId)
+    {
+        long left = 0;
+        long right = 0;
+        long middle = 0;
+        long x1 = 0;
+        long x2 = 0;
+        foreach (StorageMouseButtonPeriodAggregate row in aggregates)
+        {
+            if (selectedDeviceId is Guid selected && row.DeviceId != selected)
+            {
+                continue;
+            }
+
+            switch (row.Button)
+            {
+                case StorageMouseButton.Left: left = checked(left + row.PressCount); break;
+                case StorageMouseButton.Right: right = checked(right + row.PressCount); break;
+                case StorageMouseButton.Middle: middle = checked(middle + row.PressCount); break;
+                case StorageMouseButton.X1: x1 = checked(x1 + row.PressCount); break;
+                case StorageMouseButton.X2: x2 = checked(x2 + row.PressCount); break;
+                default: throw new InvalidDataException("Mouse button aggregate contains an unknown button.");
+            }
+        }
+
+        return new MouseButtonCounts(left, right, middle, x1, x2);
     }
 
     private async Task<MouseDisplayResult> BucketMouseAsync(
@@ -187,5 +249,6 @@ internal sealed class DashboardViewModel
     private sealed record DashboardLoadResult(
         IReadOnlyList<StorageDeviceInfo> Devices,
         StorageKeyboardPeriodResult Keyboard,
+        StorageMouseButtonPeriodResult MouseButtons,
         MouseDisplayResult? Mouse);
 }

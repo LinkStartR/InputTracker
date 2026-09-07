@@ -81,6 +81,28 @@ public sealed class StorageServicePrivacyTests
     }
 
     [Fact]
+    public void MouseButtonSchemaContainsOnlyDailyCountsAndSegmentDeduplication()
+    {
+        using var directory = new TemporaryDirectory();
+        using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
+
+        Assert.Equal(
+            ["device_id", "button", "capture_local_date", "time_zone_id", "press_count"],
+            database.ReadSchemaColumns()["mouse_button_daily"]);
+        Assert.Equal(
+            ["spool_segment_id"],
+            database.ReadSchemaColumns()["mouse_button_aggregated_segments"]);
+        string schema = string.Join('|', database.ReadSchemaColumns()["mouse_button_daily"]);
+        foreach (string forbidden in new[]
+        {
+            "sequence", "timestamp", "button_down", "button_up", "window", "process", "application", "text"
+        })
+        {
+            Assert.DoesNotContain(forbidden, schema, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void ProductionServiceDoesNotExposeClockOrFaultInjection()
     {
         Assert.Empty(typeof(StorageService).GetConstructors(BindingFlags.Instance | BindingFlags.Public));

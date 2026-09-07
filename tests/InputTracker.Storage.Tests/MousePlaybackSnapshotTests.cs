@@ -214,13 +214,15 @@ public sealed class MousePlaybackSnapshotTests
         }
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
-        Assert.Equal(5, database.SchemaVersion);
+        Assert.Equal(6, database.SchemaVersion);
         using Microsoft.Data.Sqlite.SqliteCommand reason = database.Connection.CreateCommand();
         reason.CommandText = "SELECT seal_reason FROM mouse_spool_segments WHERE spool_segment_id = $segment;";
         reason.Parameters.AddWithValue("$segment", segmentId.ToString("N"));
         Assert.Equal((long)StorageMousePlaybackBoundaryReason.LegacyUnknown, (long)reason.ExecuteScalar()!);
         reason.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 5;";
         Assert.Equal(StorageSchema.Version5Checksum, (string)reason.ExecuteScalar()!);
+        reason.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 6;";
+        Assert.Equal(StorageSchema.Version6Checksum, (string)reason.ExecuteScalar()!);
     }
 
     [Fact]

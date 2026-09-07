@@ -5,7 +5,7 @@ namespace InputTracker.Storage;
 
 internal static class StorageSchema
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 
     public const string Version1Sql = """
         CREATE TABLE schema_migrations (
@@ -181,4 +181,25 @@ internal static class StorageSchema
 
     public static string Version5Checksum { get; } = Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(Version5Sql)));
+
+    public const string Version6Sql = """
+        CREATE TABLE mouse_button_daily (
+            device_id TEXT NOT NULL REFERENCES devices(device_id),
+            button INTEGER NOT NULL CHECK (button IN (0, 1, 2, 3, 4)),
+            capture_local_date TEXT NOT NULL,
+            time_zone_id TEXT NOT NULL,
+            press_count INTEGER NOT NULL CHECK (press_count > 0),
+            PRIMARY KEY (device_id, button, capture_local_date, time_zone_id)
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE TABLE mouse_button_aggregated_segments (
+            spool_segment_id TEXT PRIMARY KEY
+                REFERENCES mouse_spool_segments(spool_segment_id) ON DELETE CASCADE
+        ) WITHOUT ROWID, STRICT;
+
+        PRAGMA user_version = 6;
+        """;
+
+    public static string Version6Checksum { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(Version6Sql)));
 }

@@ -396,6 +396,11 @@ internal sealed class MouseIngestion : IDisposable
                 StorageMousePlaybackBoundaryReason.RecoveryUnknown);
         }
 
+        foreach (MouseSpoolSegment segment in segments.Where(value => value.Records.Count > 0))
+        {
+            _database.BackfillMouseButtonAggregates(segment);
+        }
+
         RefreshPublishedState();
         if (adoptionComplete)
         {

@@ -602,7 +602,7 @@
                                                        TextWrapping="Wrap" />
                                             <TextBlock Margin="0,8,0,0"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   Text="选择一只鼠标，查看这段时间的移动路线。"
+                                                       Text="选择一只鼠标，查看按键次数和这段时间的活动。"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -717,7 +717,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="鼠标轨迹" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="选择一只鼠标，回看这段时间的移动路线。" />
+                                       Text="选择一只鼠标，查看按键次数和这段时间的移动路线。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>

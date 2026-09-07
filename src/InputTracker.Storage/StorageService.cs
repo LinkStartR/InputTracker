@@ -173,6 +173,24 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public StorageMouseButtonPeriodResult QueryMouseButtonsPeriod(
+        StoragePeriodKind kind,
+        DateOnly containingDate,
+        string timeZoneId,
+        Guid? deviceId = null)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.QueryMouseButtonsPeriod(
+                _database.Connection,
+                kind,
+                containingDate,
+                timeZoneId,
+                deviceId);
+        }
+    }
+
     public IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
         Guid deviceId,
         StorageUtcRange utcRange,

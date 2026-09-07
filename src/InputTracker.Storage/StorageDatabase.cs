@@ -4,6 +4,15 @@ namespace InputTracker.Storage;
 
 public sealed class StorageDatabase : IDisposable
 {
+    private static readonly (StorageMouseButton Button, ushort DownMask)[] MouseButtonDownMasks =
+    [
+        (StorageMouseButton.Left, 1 << 0),
+        (StorageMouseButton.Right, 1 << 2),
+        (StorageMouseButton.Middle, 1 << 4),
+        (StorageMouseButton.X1, 1 << 6),
+        (StorageMouseButton.X2, 1 << 8)
+    ];
+
     private readonly SqliteConnection _connection;
     private readonly FileStream? _writerGuard;
 
@@ -397,6 +406,8 @@ public sealed class StorageDatabase : IDisposable
             insert.ExecuteNonQuery();
         }
 
+        AggregateMouseButtons(_connection, transaction, segment);
+
         long nextDeviceSequence = segment.Records[^1].Sequence;
         using (SqliteCommand watermark = _connection.CreateCommand())
         {
@@ -425,6 +436,61 @@ public sealed class StorageDatabase : IDisposable
             nextDeviceSequence,
             next.CommitOrdinal,
             next.KeyboardAggregateCommitOrdinal);
+    }
+
+    internal void BackfillMouseButtonAggregates(MouseSpoolSegment segment)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        if (segment.Records.Count == 0)
+        {
+            return;
+        }
+
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        if (MouseButtonsAlreadyAggregated(_connection, transaction, segment.Header.SegmentId))
+        {
+            transaction.Rollback();
+            return;
+        }
+
+        MouseChunkEncoded canonical = MouseChunkCodec.Encode(
+            Guid.NewGuid(),
+            segment.Header.DeviceId,
+            segment.Header.CalibrationSegmentId,
+            segment.Records);
+        using (SqliteCommand published = _connection.CreateCommand())
+        {
+            published.Transaction = transaction;
+            published.CommandText = """
+                SELECT COUNT(*)
+                FROM mouse_spool_segments
+                WHERE spool_segment_id = $segment
+                  AND device_id = $device
+                  AND calibration_segment_id = $calibration
+                  AND first_sequence = $first
+                  AND last_sequence = $last
+                  AND record_count = $count
+                  AND committed_length = $length
+                  AND spool_file_sha256 = $fileHash
+                  AND canonical_sha256 = $canonicalHash;
+                """;
+            published.Parameters.AddWithValue("$segment", segment.Header.SegmentId.ToString("N"));
+            published.Parameters.AddWithValue("$device", segment.Header.DeviceId.ToString("N"));
+            published.Parameters.AddWithValue("$calibration", segment.Header.CalibrationSegmentId);
+            published.Parameters.AddWithValue("$first", segment.Records[0].Sequence);
+            published.Parameters.AddWithValue("$last", segment.Records[^1].Sequence);
+            published.Parameters.AddWithValue("$count", segment.Records.Count);
+            published.Parameters.AddWithValue("$length", segment.ValidLength);
+            published.Parameters.AddWithValue("$fileHash", segment.SpoolFileSha256);
+            published.Parameters.AddWithValue("$canonicalHash", canonical.CanonicalSha256);
+            if ((long)published.ExecuteScalar()! != 1)
+            {
+                throw new InvalidDataException("Mouse button backfill source is not an exact published spool segment.");
+            }
+        }
+
+        AggregateMouseButtons(_connection, transaction, segment);
+        transaction.Commit();
     }
 
     internal StorageServiceOrdinals CommitStorageServiceBatch(
@@ -747,6 +813,146 @@ public sealed class StorageDatabase : IDisposable
         command.ExecuteNonQuery();
     }
 
+    private static bool MouseButtonsAlreadyAggregated(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid segmentId)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT 1
+            FROM mouse_button_aggregated_segments
+            WHERE spool_segment_id = $segment;
+            """;
+        command.Parameters.AddWithValue("$segment", segmentId.ToString("N"));
+        return command.ExecuteScalar() is not null;
+    }
+
+    private static void AggregateMouseButtons(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        MouseSpoolSegment segment)
+    {
+        if (MouseButtonsAlreadyAggregated(connection, transaction, segment.Header.SegmentId))
+        {
+            return;
+        }
+
+        if (!segment.Records.Any(record => (record.ButtonChanges & 0x0155) != 0))
+        {
+            MarkMouseButtonsAggregated(connection, transaction, segment.Header.SegmentId);
+            return;
+        }
+
+        TimeCalibrationSegment calibration = ReadMouseCalibration(connection, transaction, segment.Header);
+        TimeZoneInfo zone = StorageKeyboardTime.ValidateCalibration(calibration);
+        var counts = new Dictionary<(StorageMouseButton Button, DateOnly Date), long>();
+        foreach (MouseSpoolRecord record in segment.Records)
+        {
+            ushort downChanges = (ushort)(record.ButtonChanges & 0x0155);
+            if (downChanges == 0)
+            {
+                continue;
+            }
+
+            DateOnly date = StorageKeyboardTime.GetLocalDate(
+                calibration.ToUtcMicroseconds(record.MonotonicTimestamp),
+                zone);
+            foreach ((StorageMouseButton button, ushort downMask) in MouseButtonDownMasks)
+            {
+                if ((downChanges & downMask) == 0)
+                {
+                    continue;
+                }
+
+                var key = (button, date);
+                counts.TryGetValue(key, out long current);
+                counts[key] = checked(current + 1);
+            }
+        }
+
+        foreach (((StorageMouseButton button, DateOnly date), long count) in counts
+            .OrderBy(pair => pair.Key.Date)
+            .ThenBy(pair => pair.Key.Button))
+        {
+            using SqliteCommand aggregate = connection.CreateCommand();
+            aggregate.Transaction = transaction;
+            aggregate.CommandText = """
+                INSERT INTO mouse_button_daily(
+                    device_id, button, capture_local_date, time_zone_id, press_count)
+                VALUES ($device, $button, $date, $zone, $count)
+                ON CONFLICT(device_id, button, capture_local_date, time_zone_id)
+                DO UPDATE SET press_count = press_count + excluded.press_count;
+                """;
+            aggregate.Parameters.AddWithValue("$device", segment.Header.DeviceId.ToString("N"));
+            aggregate.Parameters.AddWithValue("$button", (int)button);
+            aggregate.Parameters.AddWithValue("$date", date.ToString(
+                "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture));
+            aggregate.Parameters.AddWithValue("$zone", calibration.TimeZoneId);
+            aggregate.Parameters.AddWithValue("$count", count);
+            aggregate.ExecuteNonQuery();
+        }
+
+        MarkMouseButtonsAggregated(connection, transaction, segment.Header.SegmentId);
+    }
+
+    private static void MarkMouseButtonsAggregated(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid segmentId)
+    {
+        using SqliteCommand marker = connection.CreateCommand();
+        marker.Transaction = transaction;
+        marker.CommandText = """
+            INSERT INTO mouse_button_aggregated_segments(spool_segment_id)
+            VALUES ($segment);
+            """;
+        marker.Parameters.AddWithValue("$segment", segmentId.ToString("N"));
+        marker.ExecuteNonQuery();
+    }
+
+    private static TimeCalibrationSegment ReadMouseCalibration(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        MouseSpoolHeader header)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT c.session_id, s.frequency, c.monotonic_anchor, c.utc_anchor_us,
+                   c.uncertainty_ticks, c.time_zone_id
+            FROM time_calibration_segments c
+            JOIN clock_sessions s ON s.session_id = c.session_id
+            WHERE c.segment_id = $segment;
+            """;
+        command.Parameters.AddWithValue("$segment", header.CalibrationSegmentId);
+        using SqliteDataReader reader = command.ExecuteReader();
+        if (!reader.Read()
+            || !Guid.TryParseExact(reader.GetString(0), "N", out Guid sessionId)
+            || sessionId == Guid.Empty
+            || sessionId != header.CalibrationSessionId)
+        {
+            throw new InvalidDataException("Mouse button aggregate calibration identity is invalid.");
+        }
+
+        var calibration = new TimeCalibrationSegment(
+            sessionId,
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetInt64(3),
+            reader.GetInt64(4),
+            reader.GetString(5));
+        if (reader.Read())
+        {
+            throw new InvalidDataException("Mouse button aggregate calibration is ambiguous.");
+        }
+
+        StorageKeyboardTime.ValidateCalibration(calibration);
+        return calibration;
+    }
+
     private static void Configure(SqliteConnection connection)
     {
         string journal = Scalar<string>(connection, "PRAGMA journal_mode = WAL;");
@@ -862,7 +1068,26 @@ public sealed class StorageDatabase : IDisposable
         }
 
         VerifyMigrationChecksum(connection, 5, StorageSchema.Version5Checksum);
-        ValidateVersionFiveShape(connection);
+        if (version == 5)
+        {
+            ValidateVersionFiveShape(connection);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Execute(connection, StorageSchema.Version6Sql, transaction);
+            using SqliteCommand record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (6, 'mouse-button-daily-aggregates', $checksum, $applied);
+                """;
+            record.Parameters.AddWithValue("$checksum", StorageSchema.Version6Checksum);
+            record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
+            record.ExecuteNonQuery();
+            transaction.Commit();
+            version = 6;
+        }
+
+        VerifyMigrationChecksum(connection, 6, StorageSchema.Version6Checksum);
+        ValidateVersionSixShape(connection);
     }
 
     private static void ValidateVersionFourShape(SqliteConnection connection)
@@ -959,6 +1184,43 @@ public sealed class StorageDatabase : IDisposable
             || markerShape != 1)
         {
             throw new InvalidDataException("Storage schema version 5 mouse playback shape is invalid.");
+        }
+    }
+
+    private static void ValidateVersionSixShape(SqliteConnection connection)
+    {
+        ValidateVersionFiveShape(connection);
+        const string dailyColumns = "device_id:TEXT:1:1|button:INTEGER:1:2|capture_local_date:TEXT:1:3|time_zone_id:TEXT:1:4|press_count:INTEGER:1:0";
+        const string segmentColumns = "spool_segment_id:TEXT:1:1";
+        string actualDailyColumns = Scalar<string>(connection, """
+            SELECT group_concat(name || ':' || type || ':' || "notnull" || ':' || pk, '|')
+            FROM (SELECT name, type, "notnull", pk FROM pragma_table_info('mouse_button_daily') ORDER BY cid);
+            """);
+        string actualSegmentColumns = Scalar<string>(connection, """
+            SELECT group_concat(name || ':' || type || ':' || "notnull" || ':' || pk, '|')
+            FROM (SELECT name, type, "notnull", pk FROM pragma_table_info('mouse_button_aggregated_segments') ORDER BY cid);
+            """);
+        long dailyShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name = 'mouse_button_daily' AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long segmentShape = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name = 'mouse_button_aggregated_segments' AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long checks = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM sqlite_schema
+            WHERE type = 'table' AND name = 'mouse_button_daily'
+              AND sql LIKE '%button IN (0, 1, 2, 3, 4)%'
+              AND sql LIKE '%press_count INTEGER NOT NULL CHECK (press_count > 0)%';
+            """);
+        if (!string.Equals(actualDailyColumns, dailyColumns, StringComparison.Ordinal)
+            || !string.Equals(actualSegmentColumns, segmentColumns, StringComparison.Ordinal)
+            || dailyShape != 1
+            || segmentShape != 1
+            || checks != 1)
+        {
+            throw new InvalidDataException("Storage schema version 6 mouse button aggregate shape is invalid.");
         }
     }
 

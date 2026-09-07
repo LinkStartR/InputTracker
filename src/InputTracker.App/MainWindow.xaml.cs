@@ -548,8 +548,8 @@ public partial class MainWindow : Window
                 HeatmapItems.ItemsSource = heatmap.PhysicalKeys;
                 OtherHeatmapItems.ItemsSource = heatmap.OtherKeys;
                 string mouseSummary = _dashboard.SelectedMouseDeviceId is null
-                    ? "选择一只鼠标后查看移动路线"
-                    : $"共有 {_dashboard.TotalMousePointCount:N0} 条移动记录 · 当前画面显示 {_dashboard.MousePoints.Count:N0} 个点";
+                    ? "选择一只鼠标后查看按键次数"
+                    : FormatMouseSummary(_dashboard.MouseButtons, _dashboard.TotalMousePointCount);
                 MouseSummary.Text = mouseSummary;
                 OverviewMouseSummary.Text = mouseSummary;
                 if (refreshMouse) RenderMouse(_dashboard.MousePoints);
@@ -755,6 +755,14 @@ public partial class MainWindow : Window
 
             MouseCanvas.Children.Add(line);
         }
+    }
+
+    internal static string FormatMouseSummary(MouseButtonCounts buttons, long movementRecords)
+    {
+        ArgumentNullException.ThrowIfNull(buttons);
+        return $"左键 {buttons.Left:N0} 次 · 右键 {buttons.Right:N0} 次 · 中键 {buttons.Middle:N0} 次 · "
+            + $"侧键一 {buttons.X1:N0} 次 · 侧键二 {buttons.X2:N0} 次\n"
+            + $"移动记录 {movementRecords:N0} 条";
     }
 
     internal static IReadOnlyList<IReadOnlyList<System.Windows.Point>> ProjectMouseSegments(

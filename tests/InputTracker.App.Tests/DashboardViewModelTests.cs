@@ -28,6 +28,11 @@ public sealed class DashboardViewModelTests
         Assert.InRange(model.MousePoints.Count, 1, 3);
         Assert.Equal(3, model.TotalMousePointCount);
         Assert.Equal(3, model.MousePoints[^1].LastSequence);
+        Assert.Equal(new MouseButtonCounts(2, 1, 0, 1, 0), model.MouseButtons);
+        Assert.Equal((StoragePeriodKind.Week, mouse), source.MouseButtonsRequest);
+        Assert.Equal(
+            "左键 2 次 · 右键 1 次 · 中键 0 次 · 侧键一 1 次 · 侧键二 0 次\n移动记录 3 条",
+            MainWindow.FormatMouseSummary(model.MouseButtons, model.TotalMousePointCount));
     }
 
     [Fact]
@@ -135,6 +140,7 @@ public sealed class DashboardViewModelTests
     {
         public (StoragePeriodKind, Guid?) KeyboardRequest { get; private set; }
         public Guid MouseRequest { get; private set; }
+        public (StoragePeriodKind, Guid?) MouseButtonsRequest { get; private set; }
         public int MouseEnumeratedCount { get; private set; }
 
         public Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken) =>
@@ -151,6 +157,20 @@ public sealed class DashboardViewModelTests
             return Task.FromResult(new StorageKeyboardPeriodResult(
                 StoragePeriodResolver.Resolve(kind, date, zone),
                 [new(keyboard, 30, false, false, 4, 10), new(keyboard, 31, true, false, 3, 20)], [zone]));
+        }
+
+        public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsAsync(
+            StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken)
+        {
+            MouseButtonsRequest = (kind, deviceId);
+            return Task.FromResult(new StorageMouseButtonPeriodResult(
+                StoragePeriodResolver.Resolve(kind, date, zone),
+                [
+                    new(mouse, StorageMouseButton.Left, 2),
+                    new(mouse, StorageMouseButton.Right, 1),
+                    new(mouse, StorageMouseButton.X1, 1)
+                ],
+                [zone]));
         }
 
         public async IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
@@ -179,6 +199,10 @@ public sealed class DashboardViewModelTests
         public Task<StorageKeyboardPeriodResult> QueryKeyboardAsync(
             StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken) =>
             Task.FromResult(new StorageKeyboardPeriodResult(
+                StoragePeriodResolver.Resolve(kind, date, zone), [], []));
+        public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsAsync(
+            StoragePeriodKind kind, DateOnly date, string zone, Guid? deviceId, CancellationToken cancellationToken) =>
+            Task.FromResult(new StorageMouseButtonPeriodResult(
                 StoragePeriodResolver.Resolve(kind, date, zone), [], []));
         public async IAsyncEnumerable<StorageMouseRecord> StreamMouseAsync(
             Guid deviceId, StorageUtcRange range,

@@ -1262,3 +1262,20 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/ui-copy-theme-test-20260907`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/ui-copy-theme-test-20260907/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/`，SHA-256 `11AEAD60FE5E79A899D92296F85C9DEFCAC193D0B2E455497009797B1AC0B12D`，残留 InputTracker 进程 `0`。
 - 停点：执行者未启动该包、未做 GUI/self-check，也未继续鼠标按键、移除轨迹、设备重命名或重连映射。用户只需检查浅色侧栏、霞鹜文楷字体、页面文案、深浅切换、排版和退出回归；收到结果前不开始下一项。
+
+## 2026-09-07 界面人工结果与鼠标按键统计起点
+
+- 用户人工结果：浅色侧栏 `OK`、霞鹜文楷字体 `OK`、深浅切换 `OK`、退出回归 `OK`；排版未给出结论。文案 `不OK`，按用户指示先记录并跳过；另有部分小字号不适配霞鹜文楷、阅读不舒服，先记录稍后处理。
+- 本轮只推进“鼠标按键无法统计”。现状证据：Raw Input、Storage spool/chunk 与 `StorageMouseRecord.ButtonChanges` 已完整保留左/右/中/X1/X2 的按下和松开信息，但 `DashboardViewModel` 只累计移动记录，UI 没有按键次数，因此不是输入解析丢失。
+- 最小方向：增加按设备、捕获日期和按钮的次数汇总，只计按下，不保存点击顺序；界面沿用当前周期与鼠标筛选。完成并生成本地包后立即暂停，不同时移除轨迹或修改设备身份功能。
+
+## 2026-09-07 鼠标按键统计实现与自动回归
+
+- 分支：`codex/ui-storage-integration`。本切片只增加左键、右键、中键、侧键一、侧键二的按下次数；沿用现有周期与鼠标筛选，只计 `Down`，不把 `Up` 重复计数，不保存点击顺序、窗口、程序或文字。移除鼠标轨迹、设备重命名与重连映射均未开始。
+- 持久化：schema v6 增加按设备/按钮/捕获日期/时区的日汇总，以及每个已发布 spool 段的去重标记。新段在同一 SQLite 事务中发布与汇总；重开时只对没有标记且完整校验通过的历史段补算，避免崩溃后漏算或重复。没有按键的旧段不要求可用时区，因此不阻断原有轨迹恢复。
+- UI：选定鼠标后显示五类按键次数和移动记录数；2 秒刷新与“立即刷新”都读取小型日汇总，不为显示次数反复扫描完整轨迹。
+- 首轮红：测试先行后，solution Release build exit `1`，`0 warnings / 18 errors`，明确缺少 mouse button query/contracts；产品实现后曾有一次 `0 warnings / 1 error`，为 App 缺 `System.IO` 引用，窄修后消失。
+- 兼容红：首次 Storage 非 Spike 回归 exit `1`，`198 passed / 10 failed / 0 skipped`，TRX `.tools/test-results/mouse-button-storage-20260907/storage-nonspike.trx`。失败暴露无按键的旧恢复段被新汇总过早校验时区、v3 降级 fixture 未移除 v6 表，以及去重标记外键阻止既有缺行损坏测试。
+- 兼容绿：无按键段直接写去重标记；只有实际按下事件才解析一次段时区；去重标记随 spool 目录行级联删除；v3 fixture 精确移除 v6 表。定向兼容/新功能 `45 passed / 0 failed / 0 skipped`。
+- 最终自动证据：solution Release build exit `0`，7 projects，`0 warnings / 0 errors`，3.81s；Storage 非 Spike exit `0`，`208 passed / 0 failed / 0 skipped`，22s，TRX `.tools/test-results/mouse-button-storage-green-20260907/storage-nonspike.trx`；App.Tests exit `0`，`134 passed / 0 failed / 0 skipped`，4s。`git diff --check` 无空白错误（仅 LF→CRLF 提示），MainWindow XAML parse 成功，禁用 skip/TODO/吞错标记无命中，运行中 InputTracker 进程 `0`。
+- 未验证/下一步：自动测试使用真实 Storage 文件与 SQLite，但不冒充真实物理鼠标。先本地提交并生成唯一自包含测试目录，执行者不启动；随后立即停下，请用户逐键点击、核对设备隔离、自动刷新与重启保留。

@@ -513,6 +513,8 @@ public sealed class MouseStorageRecoveryTests
     {
         using SqliteCommand command = database.Connection.CreateCommand();
         command.CommandText = """
+            DROP TABLE mouse_button_aggregated_segments;
+            DROP TABLE mouse_button_daily;
             DROP TABLE mouse_device_watermarks;
             DROP TABLE mouse_spool_segments;
             DELETE FROM store_metadata WHERE key = 'mouse.v3-adoption-complete';

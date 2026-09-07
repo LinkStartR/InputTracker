@@ -72,7 +72,13 @@ internal static class StorageKeyboardTime
     public static DateOnly GetLocalDate(TimeCalibrationSegment calibration, long monotonicTimestamp)
     {
         TimeZoneInfo zone = ValidateCalibration(calibration);
-        DateTimeOffset utc = FromUnixMicroseconds(calibration.ToUtcMicroseconds(monotonicTimestamp));
+        return GetLocalDate(calibration.ToUtcMicroseconds(monotonicTimestamp), zone);
+    }
+
+    public static DateOnly GetLocalDate(long utcMicroseconds, TimeZoneInfo zone)
+    {
+        ArgumentNullException.ThrowIfNull(zone);
+        DateTimeOffset utc = FromUnixMicroseconds(utcMicroseconds);
         return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(utc, zone).DateTime);
     }
 

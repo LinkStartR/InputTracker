@@ -84,6 +84,70 @@ internal static class StorageQuery
         return new StorageKeyboardPeriodResult(period, rows, zones);
     }
 
+    public static StorageMouseButtonPeriodResult QueryMouseButtonsPeriod(
+        SqliteConnection connection,
+        StoragePeriodKind kind,
+        DateOnly containingDate,
+        string timeZoneId,
+        Guid? deviceId)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (deviceId == Guid.Empty)
+        {
+            throw new ArgumentException("A device filter must be non-empty when supplied.", nameof(deviceId));
+        }
+
+        StorageResolvedPeriod period = StoragePeriodResolver.Resolve(kind, containingDate, timeZoneId);
+        if (deviceId is Guid requested)
+        {
+            EnsureDeviceKind(connection, requested, StorageDeviceKind.Mouse);
+        }
+
+        IReadOnlyList<string> zones = ReadMouseButtonCaptureTimeZones(connection, deviceId);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT m.device_id, m.button, SUM(m.press_count)
+            FROM mouse_button_daily m
+            JOIN devices d ON d.device_id = m.device_id
+            WHERE d.kind = $mouse
+              AND m.time_zone_id = $zone
+              AND m.capture_local_date >= $start
+              AND m.capture_local_date < $end
+              AND ($device IS NULL OR m.device_id = $device)
+            GROUP BY m.device_id, m.button
+            ORDER BY m.device_id, m.button;
+            """;
+        command.Parameters.AddWithValue("$mouse", (int)StorageDeviceKind.Mouse);
+        command.Parameters.AddWithValue("$zone", period.TimeZoneId);
+        command.Parameters.AddWithValue("$start", FormatDate(period.LocalStartDate));
+        command.Parameters.AddWithValue("$end", FormatDate(period.LocalEndDate));
+        command.Parameters.AddWithValue("$device", deviceId is Guid value
+            ? value.ToString("N")
+            : DBNull.Value);
+
+        using SqliteDataReader reader = command.ExecuteReader();
+        var rows = new List<StorageMouseButtonPeriodAggregate>();
+        while (reader.Read())
+        {
+            long button = reader.GetInt64(1);
+            long presses = reader.GetInt64(2);
+            if (!Guid.TryParseExact(reader.GetString(0), "N", out Guid rowDevice)
+                || rowDevice == Guid.Empty
+                || button is < (long)StorageMouseButton.Left or > (long)StorageMouseButton.X2
+                || presses <= 0)
+            {
+                throw new InvalidDataException("A mouse button aggregate is invalid.");
+            }
+
+            rows.Add(new StorageMouseButtonPeriodAggregate(
+                rowDevice,
+                (StorageMouseButton)button,
+                presses));
+        }
+
+        return new StorageMouseButtonPeriodResult(period, rows, zones);
+    }
+
     public static IAsyncEnumerable<StorageMouseRecord> CreateMouseSnapshot(
         StorageDatabase database,
         Guid deviceId,
@@ -419,6 +483,35 @@ internal static class StorageQuery
             ORDER BY k.time_zone_id;
             """;
         command.Parameters.AddWithValue("$keyboard", (int)StorageDeviceKind.Keyboard);
+        command.Parameters.AddWithValue("$device", deviceId is Guid value
+            ? value.ToString("N")
+            : DBNull.Value);
+        using SqliteDataReader reader = command.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read())
+        {
+            string zone = reader.GetString(0);
+            _ = StoragePeriodResolver.Resolve(StoragePeriodKind.Day, new DateOnly(2000, 1, 1), zone);
+            result.Add(zone);
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<string> ReadMouseButtonCaptureTimeZones(
+        SqliteConnection connection,
+        Guid? deviceId)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT DISTINCT m.time_zone_id
+            FROM mouse_button_daily m
+            JOIN devices d ON d.device_id = m.device_id
+            WHERE d.kind = $mouse
+              AND ($device IS NULL OR m.device_id = $device)
+            ORDER BY m.time_zone_id;
+            """;
+        command.Parameters.AddWithValue("$mouse", (int)StorageDeviceKind.Mouse);
         command.Parameters.AddWithValue("$device", deviceId is Guid value
             ? value.ToString("N")
             : DBNull.Value);

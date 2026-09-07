@@ -184,6 +184,25 @@ public sealed record StorageKeyboardPeriodResult(
     IReadOnlyList<StorageKeyboardPeriodAggregate> Aggregates,
     IReadOnlyList<string> AvailableCaptureTimeZoneIds);
 
+public enum StorageMouseButton
+{
+    Left = 0,
+    Right = 1,
+    Middle = 2,
+    X1 = 3,
+    X2 = 4
+}
+
+public sealed record StorageMouseButtonPeriodAggregate(
+    Guid DeviceId,
+    StorageMouseButton Button,
+    long PressCount);
+
+public sealed record StorageMouseButtonPeriodResult(
+    StorageResolvedPeriod Period,
+    IReadOnlyList<StorageMouseButtonPeriodAggregate> Aggregates,
+    IReadOnlyList<string> AvailableCaptureTimeZoneIds);
+
 public readonly record struct StorageMouseRecord(
     Guid DeviceId,
     long Sequence,
