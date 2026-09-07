@@ -136,12 +136,12 @@ internal static class FirstRunConsent
 internal sealed class WpfPortableConsentPrompt : IPortableConsentPrompt
 {
     public bool Confirm() => System.Windows.MessageBox.Show(
-        "InputTracker 将在后台接收物理键盘和鼠标输入。\n\n"
-        + "键盘仅累计设备、物理键和日期的次数/时长，不保存文字、事件顺序、窗口或进程。\n"
-        + "鼠标原始轨迹按设备保存在程序目录；当前测试版尚未提供范围删除，请只产生可接受保留的数据。\n"
-        + "你可随时暂停、退出，并在界面查看数据位置。未确认前不会启动采集。\n\n"
-        + "是否确认并启动采集？",
-        "InputTracker · 首次采集确认",
+        "InputTracker 会在后台记录键盘和鼠标活动。\n\n"
+        + "键盘只统计每个设备上实体按键的次数和按住时长，不保存输入内容、先后顺序、窗口或程序名称。\n"
+        + "鼠标移动路线按设备保存在当前程序文件夹；当前测试版还不能按范围删除，请只记录你愿意保留的数据。\n"
+        + "你可以随时暂停或退出，也能在界面中查看数据位置。确认前不会开始记录。\n\n"
+        + "现在开始记录吗？",
+        "InputTracker · 开始记录前确认",
         System.Windows.MessageBoxButton.YesNo,
         System.Windows.MessageBoxImage.Information,
         System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes;

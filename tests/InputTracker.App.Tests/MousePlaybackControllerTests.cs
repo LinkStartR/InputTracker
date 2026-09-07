@@ -269,8 +269,8 @@ public sealed class MousePlaybackControllerTests
     public void PresentationStringsDoNotCallBoundedOverviewFullPlayback()
     {
         string source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "InputTracker.App", "MainWindow.xaml"));
-        Assert.Contains("概览为完整枚举后的有界显示", source, StringComparison.Ordinal);
-        Assert.Contains("回放逐条处理", source, StringComparison.Ordinal);
+        Assert.Contains("画面一次最多显示 2048 个点", source, StringComparison.Ordinal);
+        Assert.Contains("回放仍会按完整记录进行", source, StringComparison.Ordinal);
         Assert.DoesNotContain("时间轴播放仍在开发中", source, StringComparison.Ordinal);
     }
 

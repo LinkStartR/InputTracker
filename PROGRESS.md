@@ -1246,3 +1246,12 @@
 - 发布：`dotnet publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/exit-fix4-test-20260906` exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/exit-fix4-test-20260906/InputTracker.exe`；484 files，初始无 `data/`、`logs/` 或 `backups/` 目录；exe SHA-256 `682D67A9225369CA05D7631389CFD4C64758FB509BD895407AFC7115D348A819`。
 - 停点：执行者未启动程序、未做 GUI/self-check、未重跑全量测试。人工先分别验证主界面“退出”和托盘“退出”均在 2 秒内结束进程；通过后再验证立即重启无单实例提示及同目录数据仍在。等待用户结果。
+
+## 2026-09-07 浅色界面、字体与文案收口
+
+- 用户已确认退出第四轮的主界面退出、托盘退出、2 秒内进程结束、立即重启与数据保留全部通过，并指定下一项只处理界面观感和文案；鼠标按键、移除轨迹、设备重命名与重连映射本轮均未开始。
+- 范围：浅色模式侧栏改为白色底、低饱和紫色选中态和深色可读文字；全局正文优先使用本机已安装的 `LXGW WenKai Screen` / `LXGW WenKai GB Screen R`，缺失时回退 `Segoe UI Variable Text` / `Segoe UI`，未复制字体、未新增依赖。
+- 文案：总览、键盘、鼠标、数据工具、设置、隐私、首次确认、托盘提示与记录状态改为面向普通用户的表达；仍明确每天按设备统计实体按键、不保存输入内容/顺序/窗口/程序名、鼠标路线当前仍保存且还不能按范围删除、暂停前数据已保存、异常时停止以避免统计不准。
+- 红→绿：首次 App.Tests 为 `125 passed / 9 failed / 0 skipped`，第二次 `129/5/0`，失败均是旧技术文案断言；同步断言后最终 `134 passed / 0 failed / 0 skipped`，exit `0`，约 4 秒。新门覆盖浅色侧栏亮度与 4.5:1 对比度、霞鹜文楷优先级和常规页面禁用实现术语。
+- 静态检查：`git diff --check` 无空白错误（仅 LF→CRLF 提示）；`App.xaml` 与 `MainWindow.xaml` XML parse 成功。本轮未启动 GUI，不把自动检查当作用户视觉确认。
+- 下一步：提交本切片，生成新的独立 win-x64 self-contained 绿色目录且不启动；随后立即停在用户人工检查点，只检查浅色侧栏、字体、文案、深浅切换、排版和退出回归。

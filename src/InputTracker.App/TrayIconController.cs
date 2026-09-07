@@ -125,12 +125,12 @@ public sealed class TrayIconController : IDisposable
         _notifyIcon.Text = snapshot.Mode switch
         {
             CollectionMode.Paused => "InputTracker - 已暂停",
-            CollectionMode.Collecting => "InputTracker - 采集中",
-            CollectionMode.IntegrityFault => "InputTracker - 完整性故障，采集已停止",
-            CollectionMode.ControlUncertain => "InputTracker - 状态不确定，采集可能仍在运行",
-            CollectionMode.StartFailed => "InputTracker - 采集启动失败",
-            CollectionMode.RejectedProgramDirectory => "InputTracker - 目录不可写，采集已拒绝",
-            _ => "InputTracker - 未采集"
+            CollectionMode.Collecting => "InputTracker - 记录中",
+            CollectionMode.IntegrityFault => "InputTracker - 记录异常，已停止",
+            CollectionMode.ControlUncertain => "InputTracker - 记录状态不确定",
+            CollectionMode.StartFailed => "InputTracker - 无法开始记录",
+            CollectionMode.RejectedProgramDirectory => "InputTracker - 文件夹不可写，未开始记录",
+            _ => "InputTracker - 未开始记录"
         };
         _openItem.Enabled = _exitSequence.CanShowWindow;
         _pauseItem.Enabled = snapshot.CanPause && _exitSequence.CanShowWindow;

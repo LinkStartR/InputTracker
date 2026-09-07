@@ -62,7 +62,7 @@ public partial class MainWindow : Window
         ValidateRestoreButton.IsEnabled = dataToolsAvailable;
         if (!dataToolsAvailable)
         {
-            DataToolsStatusText.Text = "Storage 未安全启动，本地数据工具不可用。";
+            DataToolsStatusText.Text = "本地数据没有成功打开，暂时不能使用数据工具。";
         }
         MousePlaybackPlayButton.IsEnabled = mousePlayback is not null;
         MousePlaybackPauseButton.IsEnabled = false;
@@ -70,7 +70,7 @@ public partial class MainWindow : Window
         MousePlaybackProgress.IsEnabled = false;
         if (mousePlayback is null)
         {
-            MousePlaybackStatus.Text = "Storage 未安全启动，无法打开固定轨迹快照。";
+            MousePlaybackStatus.Text = "本地数据没有成功打开，暂时不能查看鼠标路线。";
         }
         Loaded += MainWindow_Loaded;
     }
@@ -119,7 +119,7 @@ public partial class MainWindow : Window
         MousePlaybackProgress.IsEnabled = false;
         PauseButton.IsEnabled = false;
         ResumeButton.IsEnabled = false;
-        DataToolsStatusText.Text = "正在停止采集并释放本地数据所有权，准备离线恢复…";
+        DataToolsStatusText.Text = "正在停止记录并关闭本地数据，准备恢复备份…";
 
         MousePlaybackController? playback = _mousePlayback;
         if (playback is not null) playback.Changed -= MousePlayback_Changed;
@@ -261,7 +261,7 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            MousePlaybackStatus.Text = $"定位失败，未丢弃任何回放记录：{error.Message}";
+            MousePlaybackStatus.Text = $"无法跳到这个位置，原有记录没有改变：{error.Message}";
         }
     }
 
@@ -276,7 +276,7 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            StartupStatusText.Text = $"开机启动设置失败，未静默修改其他位置：{error.Message}";
+            StartupStatusText.Text = $"开机启动设置失败，没有改动其他位置：{error.Message}";
         }
     }
 
@@ -284,19 +284,19 @@ public partial class MainWindow : Window
     {
         if (_startup is null)
         {
-            StartupStatusText.Text = "开机启动控制不可用。";
+            StartupStatusText.Text = "当前无法设置开机启动。";
             return;
         }
 
         try
         {
             StartupStatusText.Text = _startup.IsEnabled
-                ? "已授权随 Windows 启动。关闭授权会立即删除 InputTracker 自身快捷方式。"
-                : "未授权随 Windows 启动。InputTracker 不写注册表。";
+                ? "InputTracker 会随 Windows 启动。关闭后会立即删除它创建的启动快捷方式。"
+                : "InputTracker 不会随 Windows 启动，也不会写入注册表。";
         }
         catch (Exception error)
         {
-            StartupStatusText.Text = $"无法安全确认开机启动状态：{error.Message}";
+            StartupStatusText.Text = $"无法读取开机启动状态：{error.Message}";
         }
     }
 
@@ -319,7 +319,7 @@ public partial class MainWindow : Window
     private async void CreateBackupButton_Click(object sender, RoutedEventArgs e) =>
         await RunDataToolAsync(async () =>
         {
-            if (_dataTools is null) throw new InvalidOperationException("Storage 数据工具不可用。");
+            if (_dataTools is null) throw new InvalidOperationException("本地数据工具暂时不可用。");
             StorageBackupArtifact result = await _dataTools.CreateBackupAsync();
             if (CanUpdateDataToolsUi())
                 DataToolsStatusText.Text = $"备份完成：{result.Path} · {result.FileCount:N0} 个文件";
@@ -355,7 +355,7 @@ public partial class MainWindow : Window
     {
         if (_dataTools is null)
         {
-            DataToolsStatusText.Text = "Storage 数据工具不可用。";
+            DataToolsStatusText.Text = "本地数据工具暂时不可用。";
             return;
         }
 
@@ -548,13 +548,13 @@ public partial class MainWindow : Window
                 HeatmapItems.ItemsSource = heatmap.PhysicalKeys;
                 OtherHeatmapItems.ItemsSource = heatmap.OtherKeys;
                 string mouseSummary = _dashboard.SelectedMouseDeviceId is null
-                    ? "选择鼠标后读取完整原始轨迹"
-                    : $"已完整读取 {_dashboard.TotalMousePointCount:N0} 个原始点 · 绘制 {_dashboard.MousePoints.Count:N0} 个有界显示点";
+                    ? "选择一只鼠标后查看移动路线"
+                    : $"共有 {_dashboard.TotalMousePointCount:N0} 条移动记录 · 当前画面显示 {_dashboard.MousePoints.Count:N0} 个点";
                 MouseSummary.Text = mouseSummary;
                 OverviewMouseSummary.Text = mouseSummary;
                 if (refreshMouse) RenderMouse(_dashboard.MousePoints);
                 if (refreshMouse) await RefreshMousePlaybackAsync();
-                DashboardRefreshStatusText.Text = $"已刷新 {DateTime.Now:HH:mm:ss} · 采集状态以页面顶部为准";
+                DashboardRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss} · 记录状态见页面顶部";
                 refreshMouse = false;
             }
             while (_dashboardRefreshPending && IsLoaded);
@@ -565,8 +565,8 @@ public partial class MainWindow : Window
         catch (Exception error)
         {
             KeyboardSummary.Text = $"读取失败：{error.Message}";
-            MouseSummary.Text = "读取失败；采集与持久化状态请以上方状态为准。";
-            DashboardRefreshStatusText.Text = $"刷新失败 {DateTime.Now:HH:mm:ss} · {error.Message}";
+            MouseSummary.Text = "暂时无法读取；请以页面顶部的记录状态为准。";
+            DashboardRefreshStatusText.Text = $"更新失败 {DateTime.Now:HH:mm:ss} · {error.Message}";
         }
         finally
         {
@@ -586,20 +586,20 @@ public partial class MainWindow : Window
         if (_mousePlayback is null || _dashboard?.SelectedMouseDeviceId is not Guid deviceId
             || _dashboard.ResolvedPeriod is not { } period)
         {
-            MousePlaybackStatus.Text = "选择鼠标后载入固定快照；回放逐条处理。";
+            MousePlaybackStatus.Text = "选择一只鼠标后即可准备回放。";
             return;
         }
         _mousePlaybackFrameTimer.Stop();
         ResetMousePlaybackClock();
         try
         {
-            MousePlaybackStatus.Text = "正在校验并打开固定轨迹快照…";
+            MousePlaybackStatus.Text = "正在准备移动路线…";
             await _mousePlayback.LoadAsync(deviceId, period.UtcRange);
             UpdateMousePlaybackUi();
         }
         catch (Exception error)
         {
-            MousePlaybackStatus.Text = $"无法安全打开回放快照：{error.Message}";
+            MousePlaybackStatus.Text = $"暂时无法打开这段路线：{error.Message}";
         }
     }
 
@@ -624,7 +624,7 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
-            MousePlaybackStatus.Text = $"回放失败，采集没有被暂停：{error.Message}";
+            MousePlaybackStatus.Text = $"回放遇到问题，后台记录仍在继续：{error.Message}";
             _mousePlaybackFrameTimer.Stop();
             ResetMousePlaybackClock();
         }
@@ -671,18 +671,18 @@ public partial class MainWindow : Window
 
         string state = diagnostics.State switch
         {
-            MousePlaybackState.Loading => "正在校验固定快照",
-            MousePlaybackState.Ready => "固定快照已就绪",
-            MousePlaybackState.Playing when diagnostics.IsCatchingUp => "正在追赶（逐条处理，不丢点）",
-            MousePlaybackState.Playing => "正在逐条回放",
+            MousePlaybackState.Loading => "正在准备路线",
+            MousePlaybackState.Ready => "路线已准备好",
+            MousePlaybackState.Playing when diagnostics.IsCatchingUp => "正在跟上进度（不会跳过记录）",
+            MousePlaybackState.Playing => "正在回放",
             MousePlaybackState.Paused => "回放已暂停",
-            MousePlaybackState.Seeking => "正在精确定位",
+            MousePlaybackState.Seeking => "正在跳到所选位置",
             MousePlaybackState.Completed => "回放完成",
-            MousePlaybackState.Faulted => "回放已安全停止",
-            _ => "选择鼠标后载入固定快照"
+            MousePlaybackState.Faulted => "回放遇到问题，已停止",
+            _ => "选择一只鼠标后准备回放"
         };
         string progress = diagnostics.Snapshot is { } snapshot
-            ? $" · 精确进度 {diagnostics.PositionCount:N0}/{snapshot.RecordCount:N0} 条"
+            ? $" · 进度 {diagnostics.PositionCount:N0}/{snapshot.RecordCount:N0} 条"
             : string.Empty;
         string calibration = diagnostics.HasUncalibratedAbsolute
             ? $" · {MousePlaybackRenderer.UncalibratedAbsoluteDisclosure}"

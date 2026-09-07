@@ -30,8 +30,8 @@ internal static class UiThemeCatalog
 {
     public static UiThemePalette Light { get; } = new(
         "#FFF4F6FB", "#FFFFFFFF", "#FFF0F3F8", "#FF18212F", "#FF647084",
-        "#FFDDE3EC", "#FF635BFF", "#FFECEBFF", "#FF121827", "#FFF8FAFC",
-        "#FFAAB3C2", "#FF2B2B55", "#FFFFFFFF",
+        "#FFDDE3EC", "#FF635BFF", "#FFECEBFF", "#FFFFFFFF", "#FF4038A5",
+        "#FF526078", "#FFE9E7FF", "#FFFFFFFF",
         ["#FFE2E8F0", "#FFDBEAFE", "#FF93C5FD", "#FF3B82F6", "#FF1D4ED8", "#FF172554"],
         ["#FF0F172A", "#FF0F172A", "#FF0F172A", "#FF0F172A", "#FFFFFFFF", "#FFFFFFFF"]);
 

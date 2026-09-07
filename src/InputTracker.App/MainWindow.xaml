@@ -5,7 +5,7 @@
         Width="1280" Height="800" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
-        FontFamily="Segoe UI Variable Text, Segoe UI"
+        FontFamily="{DynamicResource AppTextFontFamily}"
         Foreground="{DynamicResource PrimaryTextBrush}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -238,7 +238,7 @@
         </Style>
 
         <Style x:Key="PageTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI" />
+            <Setter Property="FontFamily" Value="{DynamicResource AppTextFontFamily}" />
             <Setter Property="FontSize" Value="27" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
@@ -421,18 +421,18 @@
                     <TextBlock Text="IT"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               FontFamily="Segoe UI Variable Display, Segoe UI"
+                               FontFamily="{DynamicResource AppTextFontFamily}"
                                FontSize="16"
                                FontWeight="Bold"
                                Foreground="{DynamicResource AccentTextBrush}" />
                 </Border>
                 <StackPanel Margin="12,0,0,0">
                     <TextBlock Text="InputTracker"
-                               FontFamily="Segoe UI Variable Display, Segoe UI"
+                               FontFamily="{DynamicResource AppTextFontFamily}"
                                FontSize="21"
                                FontWeight="SemiBold" />
                     <TextBlock Margin="0,3,0,0"
-                               Text="清楚记录，始终由你控制"
+                               Text="记录清晰，随时由你掌控"
                                FontSize="12"
                                Foreground="{DynamicResource SecondaryTextBrush}" />
                 </StackPanel>
@@ -508,7 +508,7 @@
                         <ColumnDefinition Width="16" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" Text="统计周期" FontSize="12" FontWeight="SemiBold"
+                    <TextBlock VerticalAlignment="Center" Text="查看范围" FontSize="12" FontWeight="SemiBold"
                                Foreground="{DynamicResource SecondaryTextBrush}" />
                     <ComboBox x:Name="PeriodSelector" Grid.Column="2" Width="104"
                               SelectionChanged="QuerySelection_Changed">
@@ -529,7 +529,7 @@
                                VerticalAlignment="Center"
                                FontSize="11"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               Text="统计每 2 秒自动刷新"
+                               Text="数据每 2 秒自动更新"
                                TextWrapping="Wrap" />
                 </Grid>
             </Border>
@@ -544,7 +544,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="活动概览" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="当前周期内的键盘与鼠标活动，按设备独立统计。" />
+                                       Text="看看这段时间里，每个键盘和鼠标分别有多少活动。" />
                             <Grid Margin="0,16,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -565,16 +565,16 @@
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <StackPanel Grid.Column="2">
-                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="键盘活动" />
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="键盘使用" />
                                             <TextBlock x:Name="OverviewKeyboardSummary"
                                                        Margin="0,9,0,0"
-                                                       Text="尚无键盘聚合"
+                                                       Text="还没有键盘记录"
                                                        FontSize="21"
                                                        FontWeight="SemiBold"
                                                        TextWrapping="Wrap" />
                                             <TextBlock Margin="0,8,0,0"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       Text="在热力图中查看每个物理键位的强度与次数。"
+                                                   Text="到键盘热力图里看看哪些按键最常用。"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -593,16 +593,16 @@
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <StackPanel Grid.Column="2">
-                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="鼠标活动" />
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="鼠标使用" />
                                             <TextBlock x:Name="OverviewMouseSummary"
                                                        Margin="0,9,0,0"
-                                                       Text="尚未选择鼠标"
+                                                       Text="还没有选择鼠标"
                                                        FontSize="21"
                                                        FontWeight="SemiBold"
                                                        TextWrapping="Wrap" />
                                             <TextBlock Margin="0,8,0,0"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       Text="选择设备后查看当前周期内的完整原始轨迹。"
+                                                   Text="选择一只鼠标，查看这段时间的移动路线。"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -624,9 +624,9 @@
                                                    FontSize="15" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
                                     </Border>
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Text="隐私边界持续生效" FontWeight="SemiBold" />
+                                        <TextBlock Text="你的隐私设置一直有效" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,3,0,0"
-                                                   Text="键盘不保存文字、按键顺序、窗口或进程信息。"
+                                                   Text="只统计按键次数和按住时长，不保存你输入的内容。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}" />
                                     </StackPanel>
@@ -641,7 +641,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="键盘热力图" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="按物理扫描码查看使用强度，不保存文字和按键顺序。" />
+                                       Text="看看哪些实体按键使用得最多，不会记录输入内容或先后顺序。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>
@@ -650,9 +650,9 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="所选设备" />
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="当前键盘" />
                                             <TextBlock x:Name="KeyboardSummary" Margin="0,8,16,0"
-                                                       Text="尚无键盘聚合" FontSize="16" FontWeight="SemiBold"
+                                                       Text="还没有键盘记录" FontSize="16" FontWeight="SemiBold"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                         <ComboBox x:Name="KeyboardDeviceSelector" Grid.Column="1" Width="260"
@@ -697,10 +697,10 @@
                                             </ItemsControl>
                                         </Viewbox>
                                     </Border>
-                                    <TextBlock Margin="0,14,0,0" Text="其他物理键" FontWeight="SemiBold" />
+                                    <TextBlock Margin="0,14,0,0" Text="其他按键" FontWeight="SemiBold" />
                                     <TextBlock Margin="0,4,0,10"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               Text="未识别的扫描码仍会显示在这里，不会从聚合中丢失。" />
+                                               Text="暂时无法显示名称的按键会放在这里，统计不会遗漏。" />
                                     <ItemsControl x:Name="OtherHeatmapItems" ItemTemplate="{StaticResource KeyboardKeyTemplate}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
@@ -717,7 +717,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="鼠标轨迹" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="逐设备查看当前周期内的完整原始移动轨迹。" />
+                                       Text="选择一只鼠标，回看这段时间的移动路线。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>
@@ -726,9 +726,9 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="轨迹画布" />
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="移动路线" />
                                             <TextBlock x:Name="MouseSummary" Margin="0,8,16,0"
-                                                       Text="选择鼠标后读取完整原始轨迹"
+                                                       Text="选择鼠标后显示路线"
                                                        FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                                         </StackPanel>
                                         <ComboBox x:Name="MouseDeviceSelector" Grid.Column="1" Width="260"
@@ -756,7 +756,7 @@
                                                                Foreground="{DynamicResource AccentBrush}"
                                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Border>
-                                                <TextBlock Margin="0,12,0,0" Text="选择鼠标设备，轨迹会在这里出现"
+                                                <TextBlock Margin="0,12,0,0" Text="选择一只鼠标，移动路线会显示在这里"
                                                            FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{DynamicResource SecondaryTextBrush}" />
                                             </StackPanel>
@@ -797,11 +797,11 @@
                                     </Border>
                                     <TextBlock x:Name="MousePlaybackStatus" Margin="2,10,0,0"
                                                Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap"
-                                               Text="选择鼠标后载入固定快照；回放逐条处理。" />
+                                               Text="选择鼠标后即可准备回放。" />
                                     <TextBlock Margin="0,10,0,0"
                                                FontSize="11"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               Text="概览为完整枚举后的有界显示（最多 2048 点）；回放逐条处理每个原始记录，尾迹显示同样有界。"
+                                               Text="画面一次最多显示 2048 个点；回放仍会按完整记录进行，不会为了显示速度丢掉路线数据。"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -814,7 +814,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="数据工具" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="导出、备份和数据范围预览均只使用程序目录。" />
+                                       Text="导出、备份和查看删除范围都只使用当前程序文件夹。" />
                             <Grid Margin="0,16,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -824,9 +824,9 @@
                                 <Border Style="{StaticResource CardStyle}">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="导出与备份" />
-                                        <TextBlock Margin="0,8,0,0" Text="创建可携带的本地副本" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,8,0,0" Text="保存一份可以带走的数据副本" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="导出当前键盘统计，或备份整个本地数据集。"
+                                                   Text="可以导出当前键盘统计，也可以备份全部本地数据。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="ExportKeyboardButton" Style="{StaticResource PrimaryButtonStyle}"
@@ -839,9 +839,9 @@
                                 <Border Grid.Column="2" Style="{StaticResource CardStyle}">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="敏感操作" />
-                                        <TextBlock Margin="0,8,0,0" Text="先预览，再由你确认" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock Margin="0,8,0,0" Text="先看影响范围，再决定是否继续" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="当前版本只预览删除影响；恢复需要用户暂停并再次确认，完成或失败后都会退出。"
+                                                   Text="删除功能目前只提供预览。恢复备份前需要先暂停并再次确认，完成后程序会退出。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
@@ -872,7 +872,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="设置" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="外观和开机启动都由你明确控制。" />
+                                       Text="在这里调整外观和是否随 Windows 启动。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -912,7 +912,7 @@
                                 </Grid>
                             </Border>
                             <TextBlock Margin="4,16,4,0"
-                                       Text="数据、配置、日志和备份均位于上方显示的程序目录。卸载前先退出 InputTracker 并关闭开机启动；需要保留数据时先备份整个程序目录，然后删除该绿色目录即可。"
+                                       Text="所有数据都在上方显示的程序文件夹里。卸载前先退出并关闭开机启动；需要保留记录时，先备份整个文件夹，再删除程序即可。"
                                        FontSize="11"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                        TextWrapping="Wrap" />
@@ -925,7 +925,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="隐私与控制" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="你始终知道采集状态，也可以随时暂停或退出。" />
+                                       Text="你可以随时查看状态、暂停记录或退出程序。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -940,7 +940,7 @@
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="当前采集边界" />
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="现在会记录什么" />
                                         <TextBlock x:Name="PrivacyExplanation"
                                                    Margin="0,8,0,0"
                                                    FontSize="14"
@@ -959,7 +959,7 @@
                                     <StackPanel>
                                         <TextBlock Text="键盘" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="只累计设备、物理键、日期的次数与时长。"
+                                                   Text="按设备统计实体按键的次数和按住时长，不保存输入内容。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
@@ -969,7 +969,7 @@
                                     <StackPanel>
                                         <TextBlock Text="鼠标" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="原始轨迹按设备保存在程序目录，直到你主动删除。"
+                                                   Text="移动路线按设备保存在当前程序文件夹，直到你主动删除。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />

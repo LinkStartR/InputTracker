@@ -92,6 +92,43 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
+    public void LightThemeUsesALightReadableNavigationSurface()
+    {
+        UiThemePalette palette = UiThemeCatalog.Light;
+        RgbColor background = ParseColor(palette.SidebarBackground);
+        RgbColor normalText = ParseColor(palette.SidebarMutedText);
+        RgbColor selectedBackground = ParseColor(palette.SidebarSelection);
+        RgbColor selectedText = ParseColor(palette.SidebarText);
+
+        Assert.True(RelativeLuminance(background) >= 0.80, "Light navigation background must remain visibly light.");
+        Assert.True(ContrastRatio(normalText, background) >= 4.5);
+        Assert.True(ContrastRatio(selectedText, selectedBackground) >= 4.5);
+    }
+
+    [Fact]
+    public void ApplicationTypographyPrefersLxgwWenKaiScreenWithSystemFallbacks()
+    {
+        string appXaml = LoadXaml("App.xaml").ToString(SaveOptions.DisableFormatting);
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("x:Key=\"AppTextFontFamily\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("LXGW WenKai Screen", appXaml, StringComparison.Ordinal);
+        Assert.Contains("Segoe UI Variable Text", appXaml, StringComparison.Ordinal);
+        Assert.Contains("FontFamily=\"{DynamicResource AppTextFontFamily}\"", windowXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NormalPageDescriptionsAvoidImplementationJargon()
+    {
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.DoesNotContain("Storage", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("固定快照", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("完整枚举后的有界显示", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("未识别的扫描码", windowXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultKeyboardLayoutCoversMainModifiersNavigationArrowsAndNumpad()
     {
         KeyboardLayoutModel layout = KeyboardLayoutModel.CreateDefault();

@@ -30,7 +30,7 @@ public sealed class CollectionControllerTests
         Assert.Equal(CollectionMode.RejectedProgramDirectory, controller.Current.Mode);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
-        Assert.Contains("不会改用 AppData", controller.Current.Explanation);
+        Assert.Contains("不会把数据改存到 AppData", controller.Current.Explanation);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class CollectionControllerTests
             collectionConsentGranted: false);
 
         Assert.Equal(CollectionMode.ConsentRequired, controller.Current.Mode);
-        Assert.Contains("Storage 和 Raw Input 均未启动", controller.Current.Explanation);
+        Assert.Contains("确认前不会接收键盘或鼠标活动", controller.Current.Explanation);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
     }
@@ -58,7 +58,7 @@ public sealed class CollectionControllerTests
             new InvalidOperationException("registration denied"));
 
         Assert.Equal(CollectionMode.StartFailed, controller.Current.Mode);
-        Assert.Contains("Raw Input 尚未启动", controller.Current.Explanation);
+        Assert.Contains("当前没有接收键盘或鼠标活动", controller.Current.Explanation);
         Assert.DoesNotContain("可能仍在运行", controller.Current.Explanation);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
@@ -73,19 +73,20 @@ public sealed class CollectionControllerTests
             capture);
 
         Assert.Equal(CollectionMode.Collecting, controller.Current.Mode);
-        Assert.Equal("采集中", controller.Current.Label);
-        Assert.Contains("后台接收物理键盘和鼠标事件", controller.Current.Explanation);
-        Assert.Contains("写入程序目录中的 Storage", controller.Current.Explanation);
+        Assert.Equal("记录中", controller.Current.Label);
+        Assert.Contains("后台记录键盘和鼠标活动", controller.Current.Explanation);
+        Assert.Contains("当前程序文件夹", controller.Current.Explanation);
 
         await controller.PauseAsync();
         Assert.Equal(PauseReason.User, capture.CurrentStatus.PauseReasons);
         Assert.Equal(CollectionMode.Paused, controller.Current.Mode);
         Assert.Equal("已暂停", controller.Current.Label);
-        Assert.Contains("后台输入接收已停止", controller.Current.Explanation);
+        Assert.Contains("停止接收新的键盘和鼠标活动", controller.Current.Explanation);
+        Assert.Contains("暂停前的数据已保存", controller.Current.Explanation);
 
         capture.Publish(InputCaptureState.IntegrityFault, PauseReason.User, "queue overflow");
         Assert.Equal(CollectionMode.IntegrityFault, controller.Current.Mode);
-        Assert.Equal("完整性故障 · 已停止", controller.Current.Label);
+        Assert.Equal("记录异常 · 已停止", controller.Current.Label);
         Assert.Contains("queue overflow", controller.Current.Explanation);
         Assert.False(controller.Current.CanResume);
     }
@@ -102,8 +103,8 @@ public sealed class CollectionControllerTests
         controller.HandleCaptureControlException("启动采集", new IOException("start failed"));
 
         Assert.Equal(CollectionMode.StartFailed, controller.Current.Mode);
-        Assert.Equal("采集启动失败", controller.Current.Label);
-        Assert.Contains("不会假装正在采集", controller.Current.Explanation);
+        Assert.Equal("记录启动失败", controller.Current.Label);
+        Assert.Contains("当前没有接收键盘或鼠标活动", controller.Current.Explanation);
         Assert.Contains("registration denied", controller.Current.Explanation);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
@@ -122,7 +123,7 @@ public sealed class CollectionControllerTests
         Assert.Equal(CollectionMode.ControlUncertain, controller.Current.Mode);
         Assert.Contains("暂停采集", controller.Current.Explanation);
         Assert.Contains("unexpected failure", controller.Current.Explanation);
-        Assert.Contains("采集可能仍在运行", controller.Current.Explanation);
+        Assert.Contains("后台可能仍在接收活动", controller.Current.Explanation);
         Assert.DoesNotContain("已停止", controller.Current.Label + controller.Current.Explanation);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
@@ -143,13 +144,13 @@ public sealed class CollectionControllerTests
         capture.Publish(InputCaptureState.IntegrityFault, PauseReason.None, "unregister failed");
 
         Assert.Equal(CollectionMode.ControlUncertain, controller.Current.Mode);
-        Assert.Contains("采集可能仍在运行", controller.Current.Explanation);
+        Assert.Contains("后台可能仍在接收活动", controller.Current.Explanation);
         Assert.Contains("unregister failed", controller.Current.Explanation);
         Assert.DoesNotContain("已停止", controller.Current.Label + controller.Current.Explanation);
     }
 
     [Theory]
-    [InlineData((int)AppOfflineRestorePhase.Restoring, CollectionMode.Restoring, "正在停止采集")]
+    [InlineData((int)AppOfflineRestorePhase.Restoring, CollectionMode.Restoring, "正在停止记录")]
     [InlineData((int)AppOfflineRestorePhase.SucceededAwaitExit, CollectionMode.RestoreSucceededAwaitExit, "恢复成功")]
     [InlineData((int)AppOfflineRestorePhase.FailedAwaitExit, CollectionMode.RestoreFailedAwaitExit, "恢复失败")]
     [InlineData((int)AppOfflineRestorePhase.RecoveryRequired, CollectionMode.RestoreRecoveryRequired, "下次启动")]
@@ -174,7 +175,7 @@ public sealed class CollectionControllerTests
         Assert.False(controller.Current.CanResume);
         if ((AppOfflineRestorePhase)phaseValue == AppOfflineRestorePhase.Restoring)
         {
-            Assert.Contains("尚未确认 Raw Input 已完全关闭", controller.Current.Explanation);
+            Assert.Contains("后台接收还在关闭中", controller.Current.Explanation);
             Assert.DoesNotContain("采集已停止", controller.Current.Label + controller.Current.Explanation);
         }
     }
@@ -193,7 +194,7 @@ public sealed class CollectionControllerTests
             CaptureConfirmedClosed: false));
 
         Assert.Equal(CollectionMode.RestoreControlUncertainAwaitExit, controller.Current.Mode);
-        Assert.Contains("是否完全关闭仍不确定", controller.Current.Explanation);
+        Assert.Contains("无法确认后台接收是否完全关闭", controller.Current.Explanation);
         Assert.DoesNotContain("采集已停止", controller.Current.Label + controller.Current.Explanation);
         Assert.False(controller.Current.CanPause);
         Assert.False(controller.Current.CanResume);
