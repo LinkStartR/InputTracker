@@ -1279,3 +1279,10 @@
 - 兼容绿：无按键段直接写去重标记；只有实际按下事件才解析一次段时区；去重标记随 spool 目录行级联删除；v3 fixture 精确移除 v6 表。定向兼容/新功能 `45 passed / 0 failed / 0 skipped`。
 - 最终自动证据：solution Release build exit `0`，7 projects，`0 warnings / 0 errors`，3.81s；Storage 非 Spike exit `0`，`208 passed / 0 failed / 0 skipped`，22s，TRX `.tools/test-results/mouse-button-storage-green-20260907/storage-nonspike.trx`；App.Tests exit `0`，`134 passed / 0 failed / 0 skipped`，4s。`git diff --check` 无空白错误（仅 LF→CRLF 提示），MainWindow XAML parse 成功，禁用 skip/TODO/吞错标记无命中，运行中 InputTracker 进程 `0`。
 - 未验证/下一步：自动测试使用真实 Storage 文件与 SQLite，但不冒充真实物理鼠标。先本地提交并生成唯一自包含测试目录，执行者不启动；随后立即停下，请用户逐键点击、核对设备隔离、自动刷新与重启保留。
+
+## 2026-09-07 鼠标按键统计人工测试包
+
+- 产品提交：`a4c9f73 feat: add mouse button statistics`；精确 19 个实现、普通测试与断点文件，未改 Acceptance、verify、依赖、权限或 GitHub。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/mouse-button-stats-test-20260907`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/mouse-button-stats-test-20260907/InputTracker.exe`；484 files，初始无 `data/`、`logs/`、`backups/`，SHA-256 `15214BACE19B78B31B3F204DF676BEF52BE40A2BBC0B51D71D359ED834B9AA4F`，运行中 InputTracker 进程 `0`。
+- 停点：执行者未启动程序、未做 GUI/self-check、未继续移除轨迹或设备功能。用户只需验证选定鼠标后的五类按键增量、松开不重复、2 秒刷新、设备隔离和同目录重启保留；收到结果前不推进下一项。
