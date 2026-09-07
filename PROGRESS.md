@@ -1334,3 +1334,11 @@
 
 - 用户反馈：设备重连测试清单全部通过；`3f413fc` 的真实设备拔插、统计连续、同目录重启保留及身份提示人工验收完成。
 - 下一项只实现“设备重命名标记”：为当前明确选中的键盘或鼠标设置、修改或清除本地显示名称，继续使用既有 Storage alias，不改设备身份或历史归属。完成本地包后立即停下；文案与小字号仍暂缓。
+
+## 2026-09-07 设备重命名实现与自动回归
+
+- 最小实现：直接复用既有 `StorageService.SetDeviceAlias`，未新增数据库表、迁移、依赖或身份规则。键盘热力图和鼠标按键页各提供最长 128 字符的名称输入框、保存与清除按钮；名称只替换显示文本，DeviceId、设备映射和历史统计不变。
+- 交互边界：必须先明确选择设备；保存或清除后立即刷新设备列表，空白名称由 Storage 归一化为清除；设备切换时载入对应名称。离线恢复期间选择器、输入框和按钮全部停用，避免与 Storage owner 交接并发。
+- 红证据：测试先行的 App.Tests build exit `1`、`0 warnings / 1 error`，明确缺少 `DashboardViewModel.SetDeviceAliasAsync`；接线后一次 build exit `1`、`0 warnings / 2 errors`，为 WPF 与托盘库的 `Button` 类型名冲突，改用精确 WPF 类型后转绿，未改行为或断言。
+- 绿证据：聚焦重命名/UI `7 passed / 0 failed / 0 skipped`；solution Release build exit `0`，7 projects、`0 warnings / 0 errors`，1.76s；不含 StorageSpike 的 solution 回归为 App `139/0/0`、Input `38/0/0`、Storage `209/0/0`、Acceptance `32/0/0`，合计 418；最后一处设备切换提示修正后 App build exit `0`、`0 warnings / 0 errors`，App `139/0/0`。
+- 未验证/下一步：尚未由执行者启动真实 WPF，不宣称控件布局、输入法、保存/清除或重启保留人工通过。提交后生成独立绿色目录并立即停下，请用户验证一把键盘和一只鼠标的设置、修改、清除、统计不变与重启保留；文案和小字号仍不处理。

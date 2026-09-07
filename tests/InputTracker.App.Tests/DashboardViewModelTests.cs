@@ -125,11 +125,28 @@ public sealed class DashboardViewModelTests
         Assert.Equal("Desk mouse · 已记忆重连，非永久唯一", label);
     }
 
+    [Fact]
+    public async Task RenameDeviceUpdatesDisplayWithoutChangingDeviceId()
+    {
+        Guid keyboard = Guid.NewGuid();
+        var source = new FakeDashboardDataSource(keyboard, Guid.NewGuid());
+        var model = new DashboardViewModel(source);
+        await model.RefreshAsync();
+
+        StorageDeviceInfo renamed = await model.SetDeviceAliasAsync(keyboard, "工作键盘");
+
+        Assert.Equal((keyboard, "工作键盘"), source.AliasRequest);
+        Assert.Equal(keyboard, renamed.DeviceId);
+        Assert.Equal("工作键盘", renamed.Alias);
+        Assert.Equal("工作键盘", Assert.Single(model.Devices, value => value.DeviceId == keyboard).Alias);
+    }
+
     private sealed class FakeDashboardDataSource(Guid keyboard, Guid mouse) : IDashboardDataSource
     {
         public (StoragePeriodKind, Guid?) KeyboardRequest { get; private set; }
         public (StoragePeriodKind, Guid?) MouseButtonsRequest { get; private set; }
         public int MouseButtonQueryCount { get; private set; }
+        public (Guid DeviceId, string? Alias)? AliasRequest { get; private set; }
 
         public Task<IReadOnlyList<StorageDeviceInfo>> ListDevicesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<StorageDeviceInfo>>([
@@ -162,6 +179,17 @@ public sealed class DashboardViewModelTests
                 [zone]));
         }
 
+        public Task<StorageDeviceInfo> SetDeviceAliasAsync(
+            Guid deviceId, string? alias, CancellationToken cancellationToken)
+        {
+            AliasRequest = (deviceId, alias);
+            StorageDeviceKind kind = deviceId == keyboard ? StorageDeviceKind.Keyboard : StorageDeviceKind.Mouse;
+            return Task.FromResult(new StorageDeviceInfo(
+                deviceId, kind, StorageDeviceIdentityConfidence.ReconnectableHardware,
+                StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier,
+                alias, 0, 0));
+        }
+
     }
 
     private sealed class LargeMouseDataSource(Guid mouse) : IDashboardDataSource
@@ -185,6 +213,9 @@ public sealed class DashboardViewModelTests
                 StoragePeriodResolver.Resolve(kind, date, zone),
                 [new(mouse, StorageMouseButton.Left, 1_000_000)], []));
         }
+        public Task<StorageDeviceInfo> SetDeviceAliasAsync(
+            Guid deviceId, string? alias, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         private void RecordThread()
         {

@@ -18,6 +18,10 @@ internal interface IDashboardDataSource
         string timeZoneId,
         Guid? deviceId,
         CancellationToken cancellationToken);
+    Task<StorageDeviceInfo> SetDeviceAliasAsync(
+        Guid deviceId,
+        string? alias,
+        CancellationToken cancellationToken);
 }
 
 internal sealed class StorageDashboardDataSource(StorageService service) : IDashboardDataSource
@@ -48,6 +52,15 @@ internal sealed class StorageDashboardDataSource(StorageService service) : IDash
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(service.QueryMouseButtonsPeriod(kind, date, timeZoneId, deviceId));
+    }
+
+    public Task<StorageDeviceInfo> SetDeviceAliasAsync(
+        Guid deviceId,
+        string? alias,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(service.SetDeviceAlias(deviceId, alias));
     }
 }
 
@@ -111,6 +124,23 @@ internal sealed class DashboardViewModel
             value.PressCount, value.HoldDurationMicroseconds)).ToArray();
         TotalPressCount = loaded.Keyboard.Aggregates.Sum(value => value.PressCount);
         TotalHoldDurationMicroseconds = loaded.Keyboard.Aggregates.Sum(value => value.HoldDurationMicroseconds);
+    }
+
+    public async Task<StorageDeviceInfo> SetDeviceAliasAsync(
+        Guid deviceId,
+        string? alias,
+        CancellationToken cancellationToken = default)
+    {
+        if (deviceId == Guid.Empty || !Devices.Any(device => device.DeviceId == deviceId))
+        {
+            throw new InvalidOperationException("Please select an existing device before changing its alias.");
+        }
+
+        StorageDeviceInfo updated = await Task.Run(
+            () => _dataSource.SetDeviceAliasAsync(deviceId, alias, cancellationToken),
+            cancellationToken);
+        Devices = Devices.Select(device => device.DeviceId == deviceId ? updated : device).ToArray();
+        return updated;
     }
 
     private async Task<DashboardLoadResult> LoadAsync(

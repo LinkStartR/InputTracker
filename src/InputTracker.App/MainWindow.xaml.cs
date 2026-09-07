@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private bool _dashboardRefreshInProgress;
     private bool _dashboardRefreshPending;
     private bool _updatingDeviceSelectors;
+    private bool _deviceAliasChangeInProgress;
 
     internal MainWindow(
         CollectionController collection,
@@ -83,6 +84,12 @@ public partial class MainWindow : Window
         PeriodSelector.IsEnabled = false;
         KeyboardDeviceSelector.IsEnabled = false;
         MouseDeviceSelector.IsEnabled = false;
+        KeyboardAliasInput.IsEnabled = false;
+        MouseAliasInput.IsEnabled = false;
+        SaveKeyboardAliasButton.IsEnabled = false;
+        ClearKeyboardAliasButton.IsEnabled = false;
+        SaveMouseAliasButton.IsEnabled = false;
+        ClearMouseAliasButton.IsEnabled = false;
         PauseButton.IsEnabled = false;
         ResumeButton.IsEnabled = false;
         DataToolsStatusText.Text = "正在停止记录并关闭本地数据，准备恢复备份…";
@@ -368,7 +375,66 @@ public partial class MainWindow : Window
 
     private async void QuerySelection_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!_updatingDeviceSelectors) await RefreshDashboardAsync();
+        UpdateDeviceAliasEditors();
+        if (_updatingDeviceSelectors) return;
+
+        if (ReferenceEquals(sender, KeyboardDeviceSelector))
+            KeyboardAliasStatusText.Text = "名称只用于显示，不会改变统计归属。";
+        else if (ReferenceEquals(sender, MouseDeviceSelector))
+            MouseAliasStatusText.Text = "名称只用于显示，不会改变统计归属。";
+        await RefreshDashboardAsync();
+    }
+
+    private async void SaveKeyboardAliasButton_Click(object sender, RoutedEventArgs e) =>
+        await ChangeDeviceAliasAsync(
+            KeyboardDeviceSelector, KeyboardAliasInput, KeyboardAliasStatusText, clear: false);
+
+    private async void ClearKeyboardAliasButton_Click(object sender, RoutedEventArgs e) =>
+        await ChangeDeviceAliasAsync(
+            KeyboardDeviceSelector, KeyboardAliasInput, KeyboardAliasStatusText, clear: true);
+
+    private async void SaveMouseAliasButton_Click(object sender, RoutedEventArgs e) =>
+        await ChangeDeviceAliasAsync(
+            MouseDeviceSelector, MouseAliasInput, MouseAliasStatusText, clear: false);
+
+    private async void ClearMouseAliasButton_Click(object sender, RoutedEventArgs e) =>
+        await ChangeDeviceAliasAsync(
+            MouseDeviceSelector, MouseAliasInput, MouseAliasStatusText, clear: true);
+
+    private async Task ChangeDeviceAliasAsync(
+        System.Windows.Controls.ComboBox selector,
+        System.Windows.Controls.TextBox input,
+        TextBlock status,
+        bool clear)
+    {
+        if (_dashboard is null || selector.SelectedValue is not Guid deviceId)
+        {
+            status.Text = "请先选择一个设备。";
+            return;
+        }
+
+        string? requestedAlias = clear ? null : input.Text;
+        _deviceAliasChangeInProgress = true;
+        UpdateDeviceAliasEditors();
+        try
+        {
+            StorageDeviceInfo updated = await _dashboard.SetDeviceAliasAsync(
+                deviceId, requestedAlias);
+            input.Text = updated.Alias ?? string.Empty;
+            status.Text = updated.Alias is null
+                ? "名称已清除，统计仍保留在原设备下。"
+                : $"已保存为“{updated.Alias}”。";
+            await RefreshDashboardAsync();
+        }
+        catch (Exception error)
+        {
+            status.Text = $"名称没有保存：{error.Message}";
+        }
+        finally
+        {
+            _deviceAliasChangeInProgress = false;
+            UpdateDeviceAliasEditors();
+        }
     }
 
     private async Task RefreshDashboardAsync()
@@ -409,6 +475,7 @@ public partial class MainWindow : Window
                 {
                     UpdateDeviceSelector(KeyboardDeviceSelector, keyboards, _dashboard.SelectedKeyboardDeviceId);
                     UpdateDeviceSelector(MouseDeviceSelector, mice, _dashboard.SelectedMouseDeviceId);
+                    UpdateDeviceAliasEditors();
                 }
                 finally
                 {
@@ -451,6 +518,39 @@ public partial class MainWindow : Window
         DeviceChoice[] current = selector.Items.Cast<DeviceChoice>().ToArray();
         if (!current.SequenceEqual(choices)) selector.ItemsSource = choices;
         selector.SelectedValue = selectedDeviceId;
+    }
+
+    private void UpdateDeviceAliasEditors()
+    {
+        UpdateDeviceAliasEditor(
+            KeyboardDeviceSelector, KeyboardAliasInput,
+            SaveKeyboardAliasButton, ClearKeyboardAliasButton,
+            StorageDeviceKind.Keyboard);
+        UpdateDeviceAliasEditor(
+            MouseDeviceSelector, MouseAliasInput,
+            SaveMouseAliasButton, ClearMouseAliasButton,
+            StorageDeviceKind.Mouse);
+    }
+
+    private void UpdateDeviceAliasEditor(
+        System.Windows.Controls.ComboBox selector,
+        System.Windows.Controls.TextBox input,
+        System.Windows.Controls.Button save,
+        System.Windows.Controls.Button clear,
+        StorageDeviceKind kind)
+    {
+        Guid? selectedId = selector.SelectedValue is Guid value ? value : null;
+        StorageDeviceInfo? selected = _dashboard?.Devices.FirstOrDefault(device =>
+            device.DeviceId == selectedId && device.Kind == kind);
+        if (!input.IsKeyboardFocusWithin)
+        {
+            input.Text = selected?.Alias ?? string.Empty;
+        }
+
+        bool enabled = selected is not null && !_deviceAliasChangeInProgress;
+        input.IsEnabled = enabled;
+        save.IsEnabled = enabled;
+        clear.IsEnabled = enabled && selected!.Alias is not null;
     }
 
     internal static string FormatMouseSummary(MouseButtonCounts buttons)
