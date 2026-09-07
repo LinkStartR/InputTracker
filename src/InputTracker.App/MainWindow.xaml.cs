@@ -460,15 +460,23 @@ public partial class MainWindow : Window
             + $"侧键一 {buttons.X1:N0} 次 · 侧键二 {buttons.X2:N0} 次";
     }
 
+    internal static string FormatDeviceDisplayName(StorageDeviceInfo value)
+    {
+        string confidence = value.IdentityConfidence switch
+        {
+            StorageDeviceIdentityConfidence.PersistentHardware => "可稳定识别",
+            StorageDeviceIdentityConfidence.ReconnectableHardware => "已记忆重连，非永久唯一",
+            _ when value.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MultipleCandidates) =>
+                "有多个相似设备，未自动合并",
+            _ => "临时身份，重插可能变化"
+        };
+        return $"{value.Alias ?? value.DeviceId.ToString("N")[..8]} · {confidence}";
+    }
+
     private sealed record DeviceChoice(Guid DeviceId, string DisplayName)
     {
-        public static DeviceChoice From(StorageDeviceInfo value)
-        {
-            string confidence = value.IdentityConfidence == StorageDeviceIdentityConfidence.PersistentHardware
-                ? "可稳定识别"
-                : "临时身份，重插可能变化";
-            return new DeviceChoice(value.DeviceId, $"{value.Alias ?? value.DeviceId.ToString("N")[..8]} · {confidence}");
-        }
+        public static DeviceChoice From(StorageDeviceInfo value) =>
+            new(value.DeviceId, FormatDeviceDisplayName(value));
     }
 }
 

@@ -114,7 +114,7 @@ public sealed class StorageDeviceCatalogTests
     }
 
     [Fact]
-    public void ContainerWithoutSerialDoesNotClaimPermanentCrossInterfaceIdentity()
+    public void PhysicalContainerReusesDeviceAcrossInterfaceWithoutClaimingPermanentIdentity()
     {
         using var directory = new TemporaryDirectory();
         using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
@@ -127,9 +127,133 @@ public sealed class StorageDeviceCatalogTests
         StorageDeviceResolution original = database.ObserveDevice(first, 1);
         StorageDeviceResolution changedInterface = database.ObserveDevice(second, 2);
 
+        Assert.Equal(original.Device.DeviceId, changedInterface.Device.DeviceId);
+        Assert.True(changedInterface.ReusedExisting);
+        Assert.Equal(StorageDeviceIdentityConfidence.ReconnectableHardware, original.Device.IdentityConfidence);
+        Assert.Equal(StorageDeviceIdentityConfidence.ReconnectableHardware, changedInterface.Device.IdentityConfidence);
+        Assert.True(original.Device.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier));
+        Assert.Single(database.ListDevices());
+        Assert.Equal(2, CountMappings(database.Connection));
+    }
+
+    [Fact]
+    public void PhysicalContainerAndAliasSurviveCloseReopenAndChangedInterface()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid container = Guid.NewGuid();
+        Guid originalId;
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock()))
+        {
+            StorageDeviceResolution original = database.ObserveDevice(
+                Observation("HID#FIRST", serial: null) with { ContainerId = container }, 1);
+            originalId = original.Device.DeviceId;
+            database.SetDeviceAlias(originalId, "Desk keyboard");
+        }
+
+        using StorageDatabase reopened = StorageDatabase.Open(layout, new FakeClock());
+        StorageDeviceResolution reinserted = reopened.ObserveDevice(
+            Observation("HID#SECOND", serial: null) with { ContainerId = container }, 2);
+
+        Assert.True(reinserted.ReusedExisting);
+        Assert.Equal(originalId, reinserted.Device.DeviceId);
+        Assert.Equal("Desk keyboard", reinserted.Device.Alias);
+        Assert.Equal(StorageDeviceIdentityConfidence.ReconnectableHardware, reinserted.Device.IdentityConfidence);
+        Assert.True(reinserted.Device.IdentityAmbiguity.HasFlag(
+            StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier));
+    }
+
+    [Fact]
+    public void SameContainerWithDifferentHardwareDoesNotMerge()
+    {
+        using var directory = new TemporaryDirectory();
+        using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
+        Guid container = Guid.NewGuid();
+        StorageDeviceObservation first = Observation("HID#FIRST", serial: null) with
+        {
+            ContainerId = container
+        };
+        StorageDeviceObservation second = first with
+        {
+            InterfacePath = "HID#SECOND",
+            HardwareIds = ["HID\\VID_9999&PID_0001"]
+        };
+
+        StorageDeviceResolution original = database.ObserveDevice(first, 1);
+        StorageDeviceResolution changedHardware = database.ObserveDevice(second, 2);
+
+        Assert.False(changedHardware.ReusedExisting);
+        Assert.NotEqual(original.Device.DeviceId, changedHardware.Device.DeviceId);
+    }
+
+    [Fact]
+    public void IndeterminateTransportNeverReusesContainerAcrossInterfaces()
+    {
+        using var directory = new TemporaryDirectory();
+        using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
+        Guid container = Guid.NewGuid();
+        StorageDeviceObservation first = Observation("HID#A", serial: null) with
+        {
+            ContainerId = container,
+            IsIndeterminate = true
+        };
+
+        StorageDeviceResolution original = database.ObserveDevice(first, 1);
+        StorageDeviceResolution changedInterface = database.ObserveDevice(
+            first with { InterfacePath = "HID#B" }, 2);
+
         Assert.NotEqual(original.Device.DeviceId, changedInterface.Device.DeviceId);
         Assert.Equal(StorageDeviceIdentityConfidence.TransientInterface, original.Device.IdentityConfidence);
-        Assert.True(original.Device.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier));
+        Assert.True(original.Device.IdentityAmbiguity.HasFlag(
+            StorageDeviceIdentityAmbiguity.IndeterminateTransport));
+    }
+
+    [Fact]
+    public void MultipleContainerCandidatesStaySeparateAndAreReportedAsAmbiguous()
+    {
+        using var directory = new TemporaryDirectory();
+        using StorageDatabase database = StorageDatabase.Open(StorageLayout.Create(directory.Path), new FakeClock());
+        StorageDeviceObservation observation = Observation("HID#FIRST", serial: null) with
+        {
+            ContainerId = Guid.NewGuid()
+        };
+        StorageDeviceResolution first = database.ObserveDevice(observation, 1);
+        byte[] hardwareFingerprint;
+        using (SqliteCommand read = database.Connection.CreateCommand())
+        {
+            read.CommandText = "SELECT hardware_fingerprint FROM device_identity_mappings LIMIT 1;";
+            hardwareFingerprint = (byte[])read.ExecuteScalar()!;
+        }
+
+        Guid duplicate = Guid.NewGuid();
+        database.RegisterDevice(duplicate, kind: 1, identityConfidence: 1, createdUtcMicroseconds: 2);
+        using (SqliteCommand insert = database.Connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO device_identity_mappings(
+                    interface_fingerprint, device_id, kind, hardware_fingerprint,
+                    stable_hardware_fingerprint, first_seen_utc_us, last_seen_utc_us)
+                VALUES ($interface, $device, 1, $hardware, NULL, 2, 2);
+                """;
+            insert.Parameters.AddWithValue("$interface", Enumerable.Repeat((byte)0xA5, 32).ToArray());
+            insert.Parameters.AddWithValue("$device", duplicate.ToString("N"));
+            insert.Parameters.AddWithValue("$hardware", hardwareFingerprint);
+            insert.ExecuteNonQuery();
+        }
+
+        StorageDeviceResolution result = database.ObserveDevice(
+            observation with { InterfacePath = "HID#THIRD" }, 3);
+
+        Assert.False(result.ReusedExisting);
+        Assert.NotEqual(first.Device.DeviceId, result.Device.DeviceId);
+        Assert.NotEqual(duplicate, result.Device.DeviceId);
+        Assert.Equal(StorageDeviceIdentityConfidence.TransientInterface, result.Device.IdentityConfidence);
+        Assert.True(result.Device.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MultipleCandidates));
+        Assert.All(database.ListDevices(), device =>
+        {
+            Assert.Equal(StorageDeviceIdentityConfidence.TransientInterface, device.IdentityConfidence);
+            Assert.True(device.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MultipleCandidates));
+        });
     }
 
     [Theory]
@@ -180,7 +304,7 @@ public sealed class StorageDeviceCatalogTests
     [Theory]
     [InlineData("kind", 99)]
     [InlineData("identity_confidence", 99)]
-    [InlineData("identity_ambiguity", 16)]
+    [InlineData("identity_ambiguity", 64)]
     public void UnsupportedLegacyDeviceEnumValuesFailClosed(string column, int invalidValue)
     {
         using var directory = new TemporaryDirectory();

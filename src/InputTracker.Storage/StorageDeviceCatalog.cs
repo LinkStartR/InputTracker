@@ -40,10 +40,15 @@ internal static class StorageDeviceCatalog
             identity.ContainerId));
         StorageDeviceIdentityAmbiguity ambiguity = GetAmbiguity(observation, identity);
         bool mayPersistAcrossInterfaces = ambiguity == StorageDeviceIdentityAmbiguity.None;
+        bool mayReconnectAcrossInterfaces = ambiguity == StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier
+            && identity.ContainerId.Length > 0
+            && identity.HardwareIds.Count > 0;
         byte[]? stableHardwareFingerprint = mayPersistAcrossInterfaces ? hardwareFingerprint : null;
-        StorageDeviceIdentityConfidence confidence = stableHardwareFingerprint is null
-            ? StorageDeviceIdentityConfidence.TransientInterface
-            : StorageDeviceIdentityConfidence.PersistentHardware;
+        StorageDeviceIdentityConfidence confidence = stableHardwareFingerprint is not null
+            ? StorageDeviceIdentityConfidence.PersistentHardware
+            : mayReconnectAcrossInterfaces
+                ? StorageDeviceIdentityConfidence.ReconnectableHardware
+                : StorageDeviceIdentityConfidence.TransientInterface;
 
         SqliteConnection connection = database.Connection;
         using SqliteTransaction transaction = connection.BeginTransaction();
@@ -58,6 +63,10 @@ internal static class StorageDeviceCatalog
             }
 
             Touch(connection, transaction, interfaceMatch.DeviceId, interfaceFingerprint, observedUtcMicroseconds);
+            if (confidence == StorageDeviceIdentityConfidence.ReconnectableHardware)
+            {
+                UpdateIdentityAssessment(connection, transaction, interfaceMatch.DeviceId, confidence, ambiguity);
+            }
             StorageDeviceInfo existing = ReadDevice(connection, transaction, interfaceMatch.DeviceId);
             transaction.Commit();
             return new StorageDeviceResolution(existing, ReusedExisting: true);
@@ -80,6 +89,25 @@ internal static class StorageDeviceCatalog
             reused = stableMatches.Count == 1;
             deviceId = reused ? stableMatches[0] : Guid.NewGuid();
         }
+        else if (mayReconnectAcrossInterfaces)
+        {
+            IReadOnlyList<Guid> reconnectMatches = FindHardware(
+                connection,
+                transaction,
+                hardwareFingerprint,
+                observation.Kind);
+            reused = reconnectMatches.Count == 1;
+            deviceId = reused ? reconnectMatches[0] : Guid.NewGuid();
+            if (reconnectMatches.Count > 1)
+            {
+                confidence = StorageDeviceIdentityConfidence.TransientInterface;
+                ambiguity |= StorageDeviceIdentityAmbiguity.MultipleCandidates;
+                foreach (Guid candidate in reconnectMatches)
+                {
+                    UpdateIdentityAssessment(connection, transaction, candidate, confidence, ambiguity);
+                }
+            }
+        }
         else
         {
             reused = false;
@@ -101,6 +129,10 @@ internal static class StorageDeviceCatalog
         else
         {
             TouchDevice(connection, transaction, deviceId, observedUtcMicroseconds);
+            if (confidence == StorageDeviceIdentityConfidence.ReconnectableHardware)
+            {
+                UpdateIdentityAssessment(connection, transaction, deviceId, confidence, ambiguity);
+            }
         }
 
         InsertMapping(
@@ -210,6 +242,11 @@ internal static class StorageDeviceCatalog
             result |= StorageDeviceIdentityAmbiguity.VirtualDevice;
         }
 
+        if (observation.IsIndeterminate)
+        {
+            result |= StorageDeviceIdentityAmbiguity.IndeterminateTransport;
+        }
+
         return result;
     }
 
@@ -270,6 +307,32 @@ internal static class StorageDeviceCatalog
             LIMIT 2;
             """;
         command.Parameters.AddWithValue("$stable", stableHardwareFingerprint);
+        command.Parameters.AddWithValue("$kind", (int)kind);
+        using SqliteDataReader reader = command.ExecuteReader();
+        var matches = new List<Guid>(2);
+        while (reader.Read())
+        {
+            matches.Add(Guid.ParseExact(reader.GetString(0), "N"));
+        }
+
+        return matches;
+    }
+
+    private static IReadOnlyList<Guid> FindHardware(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        byte[] hardwareFingerprint,
+        StorageDeviceKind kind)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT DISTINCT device_id
+            FROM device_identity_mappings
+            WHERE hardware_fingerprint = $hardware AND kind = $kind
+            LIMIT 2;
+            """;
+        command.Parameters.AddWithValue("$hardware", hardwareFingerprint);
         command.Parameters.AddWithValue("$kind", (int)kind);
         using SqliteDataReader reader = command.ExecuteReader();
         var matches = new List<Guid>(2);
@@ -376,6 +439,37 @@ internal static class StorageDeviceCatalog
         command.ExecuteNonQuery();
     }
 
+    private static void UpdateIdentityAssessment(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid deviceId,
+        StorageDeviceIdentityConfidence confidence,
+        StorageDeviceIdentityAmbiguity ambiguity)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE devices
+            SET identity_confidence = CASE
+                    WHEN (identity_ambiguity & $multiple) = 0 THEN $confidence
+                    ELSE identity_confidence
+                END,
+                identity_ambiguity = CASE
+                    WHEN (identity_ambiguity & $multiple) = 0 THEN $ambiguity
+                    ELSE identity_ambiguity
+                END
+            WHERE device_id = $device;
+            """;
+        command.Parameters.AddWithValue("$confidence", (int)confidence);
+        command.Parameters.AddWithValue("$ambiguity", (int)ambiguity);
+        command.Parameters.AddWithValue("$multiple", (int)StorageDeviceIdentityAmbiguity.MultipleCandidates);
+        command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        if (command.ExecuteNonQuery() != 1)
+        {
+            throw new InvalidDataException("A device identity mapping references a missing device.");
+        }
+    }
+
     private static StorageDeviceInfo ReadDevice(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -408,7 +502,9 @@ internal static class StorageDeviceCatalog
             StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier
             | StorageDeviceIdentityAmbiguity.BluetoothTransport
             | StorageDeviceIdentityAmbiguity.RemoteDesktop
-            | StorageDeviceIdentityAmbiguity.VirtualDevice;
+            | StorageDeviceIdentityAmbiguity.VirtualDevice
+            | StorageDeviceIdentityAmbiguity.IndeterminateTransport
+            | StorageDeviceIdentityAmbiguity.MultipleCandidates;
         if (!Enum.IsDefined(kind)
             || !Enum.IsDefined(confidence)
             || (ambiguity & ~knownAmbiguity) != 0)

@@ -130,7 +130,8 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
             containerId,
             isBluetooth,
             isRemoteDesktop,
-            isVirtual));
+            isVirtual,
+            isIndeterminate));
         MapRuntimeDevice(runtimeId, resolution.Device.DeviceId);
     }
 

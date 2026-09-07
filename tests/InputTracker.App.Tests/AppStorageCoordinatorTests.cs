@@ -166,6 +166,7 @@ public sealed class AppStorageCoordinatorTests
         Assert.False(store.Observation.IsBluetooth);
         Assert.False(store.Observation.IsRemoteDesktop);
         Assert.False(store.Observation.IsVirtual);
+        Assert.True(store.Observation.IsIndeterminate);
         Assert.Equal(StorageDeviceIdentityConfidence.TransientInterface, store.LastResolution!.Device.IdentityConfidence);
     }
 

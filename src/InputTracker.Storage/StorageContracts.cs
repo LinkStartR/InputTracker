@@ -10,7 +10,8 @@ public enum StorageDeviceIdentityConfidence
 {
     Unknown = 0,
     TransientInterface = 1,
-    PersistentHardware = 2
+    PersistentHardware = 2,
+    ReconnectableHardware = 3
 }
 
 [Flags]
@@ -20,7 +21,9 @@ public enum StorageDeviceIdentityAmbiguity
     MissingPermanentIdentifier = 1,
     BluetoothTransport = 2,
     RemoteDesktop = 4,
-    VirtualDevice = 8
+    VirtualDevice = 8,
+    IndeterminateTransport = 16,
+    MultipleCandidates = 32
 }
 
 public sealed record StorageDeviceObservation(
@@ -31,7 +34,8 @@ public sealed record StorageDeviceObservation(
     Guid? ContainerId,
     bool IsBluetooth,
     bool IsRemoteDesktop,
-    bool IsVirtual);
+    bool IsVirtual,
+    bool IsIndeterminate = false);
 
 public sealed record StorageDeviceInfo(
     Guid DeviceId,

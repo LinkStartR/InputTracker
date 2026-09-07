@@ -96,7 +96,8 @@
 
 ## B-010：设备身份自动 merge / split 暂缓
 
-- 当前实现：Storage 只在接口指纹未变且硬件指纹一致时复用，或在具备 serial、且非 Bluetooth/RDP/virtual 的强身份跨接口复用；container 仅加强指纹，不能替代缺失 serial。其余情况保留歧义并创建独立持久 GUID，不伪称永久唯一。
+- 当前实现：Storage 在接口指纹未变且硬件指纹一致时复用；具备 serial 且非 Bluetooth/RDP/virtual 的强身份可跨接口稳定复用。2026-09-07 按用户明确要求增加保守的重连记忆：物理分类完整、ContainerId 存在、HardwareIds 非空且候选唯一时允许跨接口复用，但标记为 `ReconnectableHardware` / “非永久唯一”，不冒充强身份。
+- 安全边界：Bluetooth、RDP、virtual、分类不完整、无 ContainerId、硬件信息变化均不跨接口复用；若同一哈希已对应多个历史设备，则所有候选标记 `MultipleCandidates` 并新建独立设备，不自动合并或猜测归属。
 - 阻塞原因：两个历史 GUID 的 merge 会重写既有键盘聚合、mouse spool/chunk/catalog 外键与查询语义；split 同样需要可审计的记录归属规则。当前没有真实多设备证据、用户确认或可逆重写协议。
 - 当前处置：强身份若已映射到多个设备则 fail closed；不自动 merge、split、删除、移动或覆盖任何用户 spool/chunk/tmp/corrupt 文件。
 - 解除门槛：独立迁移设计、冲突预览、备份/回滚、逐记录归属证明、真实重复设备/重插测试及 C2 Acceptance seam 全部通过后，才可在用户明确确认下实施。

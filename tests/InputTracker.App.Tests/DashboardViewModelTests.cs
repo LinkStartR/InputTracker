@@ -108,6 +108,23 @@ public sealed class DashboardViewModelTests
         Assert.DoesNotContain("移动", summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReconnectableDeviceLabelDoesNotClaimPermanentUniqueness()
+    {
+        var device = new StorageDeviceInfo(
+            Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            StorageDeviceKind.Mouse,
+            StorageDeviceIdentityConfidence.ReconnectableHardware,
+            StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier,
+            "Desk mouse",
+            1,
+            2);
+
+        string label = MainWindow.FormatDeviceDisplayName(device);
+
+        Assert.Equal("Desk mouse · 已记忆重连，非永久唯一", label);
+    }
+
     private sealed class FakeDashboardDataSource(Guid keyboard, Guid mouse) : IDashboardDataSource
     {
         public (StoragePeriodKind, Guid?) KeyboardRequest { get; private set; }
