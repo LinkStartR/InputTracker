@@ -1329,3 +1329,8 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-reconnect-test-20260907`，exit `0`，8.51s；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/device-reconnect-test-20260907/InputTracker.exe`；484 files，初始无 `data/`，SHA-256 `03B79FBF542C9F5BCE90050044D632DF2FD2AE068DE0384EFA538BE00D34A8DD`，运行中 InputTracker 进程 `0`。
 - 停点：执行者未启动程序、未做真实拔插，也未开始设备重命名、文案或字号。用户只需对一只键盘和一只鼠标分别验证“产生统计→拔插→列表仍为同一项→次数连续→退出重启仍保留”，并核对设备旁的身份提示；收到结果前不推进下一项。
+
+## 2026-09-07 设备重连人工通过与设备重命名起点
+
+- 用户反馈：设备重连测试清单全部通过；`3f413fc` 的真实设备拔插、统计连续、同目录重启保留及身份提示人工验收完成。
+- 下一项只实现“设备重命名标记”：为当前明确选中的键盘或鼠标设置、修改或清除本地显示名称，继续使用既有 Storage alias，不改设备身份或历史归属。完成本地包后立即停下；文案与小字号仍暂缓。
