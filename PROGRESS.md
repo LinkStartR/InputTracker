@@ -1308,3 +1308,8 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/no-mouse-trajectory-test-20260907`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/no-mouse-trajectory-test-20260907/InputTracker.exe`；484 files，初始无 `data/`，SHA-256 `A26F856E36C748623A4A75C81B06DD214E6A806B1D1EC761DFA50E98A0CE0C1D`，运行中 InputTracker 进程 `0`。
 - 停点：执行者未启动程序、未做 GUI/self-check，也未开始设备重连映射、设备重命名、文案或字号。本轮只请用户验证鼠标页只剩五键次数、持续移动/滚轮不产生 `.mspool` / `.mchunk`、按键次数继续增长与重启保留、主界面/托盘退出正常。
+
+## 2026-09-07 鼠标轨迹移除人工通过与设备重连起点
+
+- 用户反馈：无轨迹入口、持续移动/滚轮不生成轨迹文件、五键统计继续增长、重启保留以及主界面/托盘退出等 6 项人工检查全部通过；`281263d` 的鼠标轨迹完整移除人工验收完成。
+- 下一项只处理“设备重连后仍对应原来的统计”。先核对现有接口、硬件与容器身份规则，再做最小且可解释的重连映射；相同型号或身份不足时不得伪称永久唯一。设备重命名、文案和小字号继续暂缓。
