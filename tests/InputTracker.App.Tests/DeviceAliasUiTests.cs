@@ -19,6 +19,20 @@ public sealed class DeviceAliasUiTests
         Assert.Contains("SetDeviceAliasAsync", code);
     }
 
+    [Fact]
+    public void SelectionChangeWaitsUntilAllAliasControlsExist()
+    {
+        string root = FindRepositoryRoot();
+        string code = File.ReadAllText(Path.Combine(root, "src", "InputTracker.App", "MainWindow.xaml.cs"));
+        int handler = code.IndexOf("private async void QuerySelection_Changed", StringComparison.Ordinal);
+        int readinessGuard = code.IndexOf("if (!AreDeviceAliasEditorsReady()) return;", handler, StringComparison.Ordinal);
+        int editorUpdate = code.IndexOf("UpdateDeviceAliasEditors();", handler, StringComparison.Ordinal);
+
+        Assert.True(handler >= 0);
+        Assert.True(readinessGuard > handler);
+        Assert.True(editorUpdate > readinessGuard);
+    }
+
     private static int CountOccurrences(string value, string expected)
     {
         int count = 0;

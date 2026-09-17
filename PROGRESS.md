@@ -1349,3 +1349,11 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-alias-test-20260907`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/device-alias-test-20260907/InputTracker.exe`；484 files，初始无 `data/`，SHA-256 `0B94C094FCAD492F972F417FF7129847600E92E0696DF80E1F9E28C2E6FDC09A`，运行中 InputTracker 进程 `0`。
 - 停点：执行者未启动程序，也未继续文案或字号。用户只需验证键盘和鼠标名称的保存、修改、清除、统计归属不变、重启保留及布局无明显挤压；收到结果前不推进下一项。
+
+## 2026-09-17 设备重命名测试包启动闪退修复
+
+- 用户报告当前测试包会自动闪退，设备重命名人工验收暂停。Windows Application 日志在 `20:20:23` 与 `20:20:44` 两次记录相同未处理异常：`NullReferenceException`，位置为 `MainWindow.UpdateDeviceAliasEditor` 第 542 行；调用来自 XAML 初始化期间的 `QuerySelection_Changed`。数据库文件仍在，运行中 InputTracker 进程为 `0`，没有数据损坏证据。
+- 根因：`PeriodSelector` 在 `InitializeComponent` 尚未创建页面下方的键盘/鼠标重命名控件时就触发选择变更，事件处理器提前访问了尚为 null 的控件。
+- 最小修复：`QuerySelection_Changed` 先确认两组选择器、输入框、状态文本及保存/清除按钮均已创建；未就绪时直接等待后续正常刷新，不改数据库、设备身份、统计或重命名规则。新增回归测试锁定“就绪检查必须先于编辑器更新”的调用顺序。
+- 验证：首次沙箱 test 因 Windows SDK 目录权限报既知 `MSB4184`，获准使用仓库本地 .NET 后，`DeviceAliasUiTests` 为 `2 passed / 0 failed / 0 skipped`；随后 Release solution build exit `0`，7 projects，`0 warnings / 0 errors`，2.40s。执行者未启动 GUI。
+- 下一步：提交修复，发布新的独立 win-x64 self-contained 目录，并复制旧测试包的数据快照以便继续原验收；随后立即停下，请用户只验证启动不闪退、退出后能再次启动，以及名称保存/修改/清除。

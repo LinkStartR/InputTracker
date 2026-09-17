@@ -375,6 +375,8 @@ public partial class MainWindow : Window
 
     private async void QuerySelection_Changed(object sender, SelectionChangedEventArgs e)
     {
+        if (!AreDeviceAliasEditorsReady()) return;
+
         UpdateDeviceAliasEditors();
         if (_updatingDeviceSelectors) return;
 
@@ -384,6 +386,18 @@ public partial class MainWindow : Window
             MouseAliasStatusText.Text = "名称只用于显示，不会改变统计归属。";
         await RefreshDashboardAsync();
     }
+
+    private bool AreDeviceAliasEditorsReady() =>
+        KeyboardDeviceSelector is not null
+        && KeyboardAliasInput is not null
+        && KeyboardAliasStatusText is not null
+        && SaveKeyboardAliasButton is not null
+        && ClearKeyboardAliasButton is not null
+        && MouseDeviceSelector is not null
+        && MouseAliasInput is not null
+        && MouseAliasStatusText is not null
+        && SaveMouseAliasButton is not null
+        && ClearMouseAliasButton is not null;
 
     private async void SaveKeyboardAliasButton_Click(object sender, RoutedEventArgs e) =>
         await ChangeDeviceAliasAsync(
