@@ -1364,3 +1364,8 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-alias-crashfix-test-20260917`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/device-alias-crashfix-test-20260917/InputTracker.exe`；复制旧测试包在进程为 `0` 时的完整 `data` 快照到新目录，旧包未覆盖。共 488 files，SHA-256 `7CFD76735C1DE779BC9411C693630BA85069BC51C05543FCE2A0884B3D9AA4E4`，发布后 InputTracker 进程 `0`。
 - 停点：执行者未启动 GUI。用户只需先验证程序能保持运行、托盘/界面退出后 2 秒内进程消失、立即重启不提示“已在运行”；这三项通过后，再继续名称保存、修改、清除及重启保留。收到结果前不继续文案、字号或其他功能。
+
+## 2026-09-17 启动闪退修复人工通过
+
+- 用户反馈三项全部通过：启动后保持运行、不再闪退；从界面或托盘退出后 2 秒内进程消失；立即重启不再误报“InputTracker 已在运行”。`9b089f2` 的启动顺序修复人工验收完成。
+- 下一步只恢复被闪退打断的设备重命名验收，继续使用 `.tools/publish/device-alias-crashfix-test-20260917/InputTracker.exe`。先验证键盘和鼠标名称的保存、修改、清除、统计归属不变及重启保留；收到结果前不推进文案、字号或其他功能。
