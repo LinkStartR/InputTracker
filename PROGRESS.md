@@ -1377,3 +1377,10 @@
 - 最小修复：仅在现有 ComboBox 模板的 ComboBox→ToggleButton→ContentPresenter 两级补传 `ContentTemplateSelector`，不改 DeviceChoice、名称数据、统计或设备映射。
 - 红→绿证据：新增模板回归断言后，定向测试 exit `1`，`0 passed / 1 failed / 0 skipped`，失败明确为缺少 `ContentTemplateSelector`；产品窄修后同一测试 exit `0`，`1/0/0`。App.Tests 全量随后 exit `0`，`140 passed / 0 failed / 0 skipped`，269ms；`git diff --check` 无空白错误（仅 LF→CRLF 提示），运行中 InputTracker 进程 `0`。
 - 下一步：提交并发布新的独立绿色目录，复制上一测试目录的最新 `data` 快照；执行者不启动 GUI，随后只请用户检查键盘和鼠标下拉框关闭后均显示友好名称，而非 `DeviceChoice { ... }`。
+
+## 2026-09-17 设备名称选中框显示人工测试包
+
+- 修复提交：`c5758ff fix: show device names in combo selection`；只修改 ComboBox 模板、对应 App 回归断言和本文件。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-alias-displayfix-test-20260917`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/device-alias-displayfix-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `F05021821BD13A1F89BBDD4ACCBA96D3455591592C8D4763E4E6A08C9240DE0A`。旧测试包未覆盖，发布后进程仍为 `0`。
+- 停点：执行者未启动 GUI。用户本轮只需检查键盘和鼠标设备框在下拉关闭后显示已保存的友好名称与身份提示，不再显示 `DeviceChoice { ... }`；收到结果前不推进其他工作。
