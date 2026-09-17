@@ -265,7 +265,7 @@
         </Style>
 
         <Style x:Key="CardTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
         </Style>
@@ -356,7 +356,7 @@
                                     </Grid.RowDefinitions>
                                     <TextBlock Margin="10,6,0,0"
                                                Text="浏览"
-                                               FontSize="11"
+                                               FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource SidebarMutedTextBrush}" />
                                     <TabPanel Grid.Row="2" IsItemsHost="True" />
@@ -403,9 +403,9 @@
                     </Style>
                 </Border.Resources>
                 <Grid>
-                    <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
                                HorizontalAlignment="Center" VerticalAlignment="Top" />
-                    <TextBlock Text="{Binding CountText}" FontSize="10"
+                    <TextBlock Text="{Binding CountText}" FontSize="12"
                                HorizontalAlignment="Center" VerticalAlignment="Bottom" />
                 </Grid>
             </Border>
@@ -488,7 +488,7 @@
                                Margin="0,4,16,0"
                                TextTrimming="CharacterEllipsis"
                                FontFamily="Cascadia Mono, Consolas"
-                               FontSize="10"
+                               FontSize="12"
                                Foreground="{DynamicResource SecondaryTextBrush}" />
                 </StackPanel>
                 <WrapPanel Grid.Column="3" VerticalAlignment="Center">
@@ -540,7 +540,7 @@
                                Grid.Column="6"
                                HorizontalAlignment="Right"
                                VerticalAlignment="Center"
-                               FontSize="11"
+                               FontSize="12"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                Text="数据每 2 秒自动更新"
                                TextWrapping="Wrap" />
@@ -697,7 +697,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="11"
+                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}" />
                                         <WrapPanel Grid.Column="1" Margin="8,0,0,0">
                                             <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel0Brush}" CornerRadius="3" />
@@ -706,7 +706,7 @@
                                             <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel3Brush}" CornerRadius="3" />
                                             <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel4Brush}" CornerRadius="3" />
                                             <Border Width="30" Height="10" Margin="0,0,8,0" Background="{DynamicResource HeatmapLevel5Brush}" CornerRadius="3" />
-                                            <TextBlock Margin="0,-3,0,0" Text="高" FontSize="11"
+                                            <TextBlock Margin="0,-3,0,0" Text="高" FontSize="12"
                                                        Foreground="{DynamicResource SecondaryTextBrush}" />
                                         </WrapPanel>
                                     </Grid>
@@ -849,7 +849,7 @@
                                     Style="{StaticResource CompactCardStyle}"
                                     Background="{DynamicResource SubtleBackgroundBrush}">
                                 <StackPanel>
-                                    <TextBlock Text="操作状态" FontSize="11" FontWeight="SemiBold"
+                                    <TextBlock Text="操作状态" FontSize="12" FontWeight="SemiBold"
                                                Foreground="{DynamicResource SecondaryTextBrush}" />
                                     <TextBlock x:Name="DataToolsStatusText" Margin="0,5,0,0"
                                                Text="尚未执行数据操作。" TextWrapping="Wrap" />
@@ -905,7 +905,7 @@
                             </Border>
                             <TextBlock Margin="4,16,4,0"
                                        Text="所有数据都在上方显示的程序文件夹里。卸载前先退出并关闭开机启动；需要保留记录时，先备份整个文件夹，再删除程序即可。"
-                                       FontSize="11"
+                                       FontSize="12"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                        TextWrapping="Wrap" />
                         </StackPanel>

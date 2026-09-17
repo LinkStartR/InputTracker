@@ -113,6 +113,16 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
+    public void CaptionsStayReadableWithTheApplicationFont()
+    {
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.DoesNotContain("FontSize=\"10\"", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("FontSize=\"11\"", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Property=\"FontSize\" Value=\"11\"", windowXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void VisualShellUsesDedicatedNavigationPaletteAndRestrainedElevation()
     {
         string appXaml = LoadXaml("App.xaml").ToString(SaveOptions.DisableFormatting);
