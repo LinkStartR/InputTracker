@@ -1,6 +1,6 @@
 # Codex 线程索引
 
-最后更新：2026-09-07
+最后更新：2026-09-17
 
 - 项目目标：Windows 10/11 x64 本地绿色版 InputTracker。
 - 工作流：完整编排；前置 PR 依赖串行，低耦合准备工作可并行。
@@ -43,7 +43,7 @@
 | C38 | 用户测试与下一步建议 | 离线恢复 Acceptance、反向验证、可丢弃绿色副本 runbook 与交付门 | 已完成并本地提交；人工终验 pending | `tests/Acceptance/**`、`scripts/verify.ps1`、`docs/acceptance-plan.md`、验收 runbook | `c25ce96`；红灯记录 `82175ff` | 是：前任 `/root/offline_restore_acceptance`；容量失败 `/root/offline_restore_acceptance_recovery`；最终续作 `/root/offline_restore_acceptance_final` | 推荐 terra / high；实际继承当前可用模型 | 跨 App/Storage、数据替换、进程重启与防作弊判卷需要独立高判断 QA；terra 容量不可用 | 7 个新增 Acceptance 全绿，400/0/0；PowerShell 5 兼容窄修已提交，未重跑第三轮。已生成本地包，按用户指令停在真实 WPF/恢复副本测试 |
 | C39 | 鼠标轨迹移除 | 移除轨迹采集、持久化、查询、回放、界面和删除预览，保留五键次数 | 已完成，人工通过 | `src/**`、相关普通/Acceptance tests、当前说明文档 | 产品 `281263d`；交接 `f3f32f3` | 当前主任务 `/root` | 当前可用模型；顺序执行 | 隐私和旧数据不被自动删除优先 | 6 项人工检查全部通过；旧轨迹文件只保留不读取，物理删除仍需用户单独确认 |
 | C40 | 设备重连映射 | 重插后安全对应既有设备统计并明确身份置信度 | 已完成，人工通过 | Input 身份、Storage 设备目录、App 设备展示及普通测试 | 产品 `3f413fc`；交接 `8cf4ed3` | 当前主任务 `/root` | 当前可用模型；顺序执行 | 防止历史串线优先于自动合并 | 真实拔插、统计连续、重启保留及身份提示全部通过；多候选仍不自动合并 |
-| C41 | 设备重命名 | 为明确选择的键盘或鼠标设置、修改和清除本地显示名称 | 已实现，待人工测试 | App 控制器、WPF 控件与普通测试 | `codex/ui-storage-integration` 待提交 | 当前主任务 `/root` | 当前可用模型；顺序执行 | 直接复用既有 alias，避免新增 schema 或抽象 | 名称最长128字符；保存/清除不改 DeviceId；solution 非 Spike 418/0/0，App 最终 139/0/0 |
+| C41 | 设备重命名 | 为明确选择的键盘或鼠标设置、修改和清除本地显示名称 | 已实现，待人工测试 | App 控制器、WPF 控件与普通测试 | 产品 `63867b6`；本地包 `device-alias-test-20260907` | 当前主任务 `/root` | 当前可用模型；顺序执行 | 直接复用既有 alias，避免新增 schema 或抽象 | 名称最长128字符；保存/清除不改 DeviceId；solution 非 Spike 418/0/0，App 139/0/0；执行者未启动测试包 |
 
 ## 协调说明
 

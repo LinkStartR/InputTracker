@@ -1342,3 +1342,10 @@
 - 红证据：测试先行的 App.Tests build exit `1`、`0 warnings / 1 error`，明确缺少 `DashboardViewModel.SetDeviceAliasAsync`；接线后一次 build exit `1`、`0 warnings / 2 errors`，为 WPF 与托盘库的 `Button` 类型名冲突，改用精确 WPF 类型后转绿，未改行为或断言。
 - 绿证据：聚焦重命名/UI `7 passed / 0 failed / 0 skipped`；solution Release build exit `0`，7 projects、`0 warnings / 0 errors`，1.76s；不含 StorageSpike 的 solution 回归为 App `139/0/0`、Input `38/0/0`、Storage `209/0/0`、Acceptance `32/0/0`，合计 418；最后一处设备切换提示修正后 App build exit `0`、`0 warnings / 0 errors`，App `139/0/0`。
 - 未验证/下一步：尚未由执行者启动真实 WPF，不宣称控件布局、输入法、保存/清除或重启保留人工通过。提交后生成独立绿色目录并立即停下，请用户验证一把键盘和一只鼠标的设置、修改、清除、统计不变与重启保留；文案和小字号仍不处理。
+
+## 2026-09-17 设备重命名人工测试包
+
+- 产品提交：`63867b6 feat: add device display names`。首次 publish 在 2026-09-07 因 Codex 额度审批临时拒绝，未绕过；超过系统给出的重试时间后于 2026-09-17 原样重跑成功。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-alias-test-20260907`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/device-alias-test-20260907/InputTracker.exe`；484 files，初始无 `data/`，SHA-256 `0B94C094FCAD492F972F417FF7129847600E92E0696DF80E1F9E28C2E6FDC09A`，运行中 InputTracker 进程 `0`。
+- 停点：执行者未启动程序，也未继续文案或字号。用户只需验证键盘和鼠标名称的保存、修改、清除、统计归属不变、重启保留及布局无明显挤压；收到结果前不推进下一项。
