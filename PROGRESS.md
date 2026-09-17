@@ -1384,3 +1384,8 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-alias-displayfix-test-20260917`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/device-alias-displayfix-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `F05021821BD13A1F89BBDD4ACCBA96D3455591592C8D4763E4E6A08C9240DE0A`。旧测试包未覆盖，发布后进程仍为 `0`。
 - 停点：执行者未启动 GUI。用户本轮只需检查键盘和鼠标设备框在下拉关闭后显示已保存的友好名称与身份提示，不再显示 `DeviceChoice { ... }`；收到结果前不推进其他工作。
+
+## 2026-09-17 设备重命名人工验收完成
+
+- 用户确认键盘与鼠标设备框关闭后已显示友好名称，不再出现 `DeviceChoice { ... }`；结合前一轮结果，名称保存、修改、清除、统计归属不变、重启保留、布局、启动与退出均已通过人工检查。`63867b6`、`9b089f2`、`c5758ff` 组成的设备重命名切片验收完成。
+- 下一项按此前人工反馈只处理“小字号不适配霞鹜文楷、阅读不舒服”。文案仍按用户要求保留为已记录但暂时跳过；不改统计、采集、Storage、设备映射或退出逻辑。完成独立测试包后立即停下交给用户查看。
