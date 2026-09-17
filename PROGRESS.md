@@ -1410,3 +1410,10 @@
 - 最小变更：只把 `AppTextFontFamily` 从 `LXGW WenKai Screen / LXGW WenKai GB Screen R` 改为 `Microsoft YaHei UI / Microsoft YaHei`，继续以 `Segoe UI Variable Text / Segoe UI` 回退。保持现有 12 号下限、布局、文案、颜色和全部功能不变，未新增字体文件或依赖。
 - 红→绿证据：字体回归先改期望后，定向测试 exit `1`，`0 passed / 1 failed / 0 skipped`，明确缺少 `Microsoft YaHei UI`；资源窄修后同一测试 exit `0`，`1/0/0`。App.Tests 全量 exit `0`，`141 passed / 0 failed / 0 skipped`，241ms；源码确认产品无 `LXGW WenKai`，`git diff --check` 无空白错误（仅 LF→CRLF 提示），运行中 InputTracker 进程 `0`。
 - 下一步：提交并发布新的独立绿色目录，复制上一测试目录的最新数据快照；执行者不启动 GUI。用户只需比较微软雅黑 UI 下的小字舒适度、热力图标签和整体层级。
+
+## 2026-09-17 Microsoft YaHei UI 人工测试包
+
+- 产品提交：`21e9e4b fix: use Microsoft YaHei UI for app text`；只修改全局字体资源、对应 App 回归断言和本文件。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/yahei-ui-test-20260917`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/yahei-ui-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `A79B09D0FB3A3F3A5BE84F0820B232AEDA5DB93D845D0A3497AE0E0CCDD869B0`，发布后进程仍为 `0`。
+- 停点：执行者未启动 GUI。本轮只请用户比较小字舒适度、热力图标签清晰度和整体层级；收到结果前不推进文案或其他工作。
