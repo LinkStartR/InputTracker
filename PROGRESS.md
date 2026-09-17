@@ -1357,3 +1357,10 @@
 - 最小修复：`QuerySelection_Changed` 先确认两组选择器、输入框、状态文本及保存/清除按钮均已创建；未就绪时直接等待后续正常刷新，不改数据库、设备身份、统计或重命名规则。新增回归测试锁定“就绪检查必须先于编辑器更新”的调用顺序。
 - 验证：首次沙箱 test 因 Windows SDK 目录权限报既知 `MSB4184`，获准使用仓库本地 .NET 后，`DeviceAliasUiTests` 为 `2 passed / 0 failed / 0 skipped`；随后 Release solution build exit `0`，7 projects，`0 warnings / 0 errors`，2.40s。执行者未启动 GUI。
 - 下一步：提交修复，发布新的独立 win-x64 self-contained 目录，并复制旧测试包的数据快照以便继续原验收；随后立即停下，请用户只验证启动不闪退、退出后能再次启动，以及名称保存/修改/清除。
+
+## 2026-09-17 启动闪退修复人工测试包
+
+- 修复提交：`9b089f2 fix: prevent startup alias editor crash`；精确修改 `MainWindow.xaml.cs`、对应 App 回归测试和本文件，未改 Storage schema、统计、设备身份、依赖、权限或 GitHub。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/device-alias-crashfix-test-20260917`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/device-alias-crashfix-test-20260917/InputTracker.exe`；复制旧测试包在进程为 `0` 时的完整 `data` 快照到新目录，旧包未覆盖。共 488 files，SHA-256 `7CFD76735C1DE779BC9411C693630BA85069BC51C05543FCE2A0884B3D9AA4E4`，发布后 InputTracker 进程 `0`。
+- 停点：执行者未启动 GUI。用户只需先验证程序能保持运行、托盘/界面退出后 2 秒内进程消失、立即重启不提示“已在运行”；这三项通过后，再继续名称保存、修改、清除及重启保留。收到结果前不继续文案、字号或其他功能。
