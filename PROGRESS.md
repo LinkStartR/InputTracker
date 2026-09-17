@@ -1417,3 +1417,9 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/yahei-ui-test-20260917`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/yahei-ui-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `A79B09D0FB3A3F3A5BE84F0820B232AEDA5DB93D845D0A3497AE0E0CCDD869B0`，发布后进程仍为 `0`。
 - 停点：执行者未启动 GUI。本轮只请用户比较小字舒适度、热力图标签清晰度和整体层级；收到结果前不推进文案或其他工作。
+
+## 2026-09-17 Microsoft YaHei UI 人工通过
+
+- 用户反馈 `ok`：Microsoft YaHei UI 下的小字舒适度、热力图标签清晰度及整体层级人工通过。`767b34e` 保留的 12 号最低字号与 `21e9e4b` 的字体选择共同作为当前视觉基线。
+- 设备重命名、重连记忆、鼠标按键统计、鼠标轨迹完整移除、退出/重启修复、浅色侧栏、深浅切换和当前字体均已逐项完成人工检查。
+- 剩余已记录的界面反馈是“描述文案不够友好、太理工科”；用户此前明确要求先记录并跳过，因此当前不擅自改写。下一步需由用户确认是否恢复文案调整，或指定转入其他验收项。
