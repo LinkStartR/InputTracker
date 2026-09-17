@@ -1439,3 +1439,13 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/friendly-copy-test-20260917`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/friendly-copy-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `4ADC4EDD9ADB931F7213B5E1E765729B791D925476E833298693F50ACC2A4CBA`，发布后进程仍为 `0`。
 - 停点：执行者未启动 GUI。本轮只请用户逐页阅读文字，确认容易理解、隐私边界准确、设备身份提示不含糊且没有挤压；收到结果前不推进其他工作。
+
+## 2026-09-17 文案结果与剩余工作盘点
+
+- 用户评价当前文案“勉勉强强”。本切片按可继续使用记录，但不冒充最终视觉满意；不再无目标反复润色。Microsoft YaHei UI、12 号最低字号、浅色侧栏、深浅切换和当前排版继续作为本地测试基线。
+- 当前唯一明确缺失的产品功能是实际按范围删除。现有实现只能只读预览，`ExecuteDeletion` 按 B-011 fail closed；精确删除仍需要版本化的数据格式与崩溃回滚，不能把预览称为删除完成。
+- 最近多轮 UI、退出、鼠标按键、轨迹移除、设备重连与重命名之后，尚未重新执行统一 restore/build/全量 test/Portable verify/publish；最终自动回归仍 pending。
+- 仍需现场证据：CSV/PNG 导出与备份恢复、Startup 快捷方式启停、锁屏/休眠暂停、普通用户/UAC、运行时无网络、Windows 10/11、1440×900 与 1920×1080 的 100%/150% 浅深色矩阵、两键盘两鼠标 2 小时和 1000Hz 鼠标 30 分钟性能。
+- 发布风险仍有 B-007：当前 native SQLite 3.49.1 位于已知 WAL-reset 风险范围；虽然单 writer/无池化规避已知触发条件，正式发布前仍需升级到修复线并回归，或由用户明确接受风险。
+- B-016 仍保留：旧测试目录里若存在历史 `.mspool` / `.mchunk`，未经单独授权不得物理删除。GitHub 按用户要求继续忽略，本地交付不等待 push/PR。
+- 建议顺序：先决定并实现安全范围删除；随后解决 SQLite 版本风险；再跑一次统一自动回归；最后只做一轮集中现场验收与最终绿色目录交付。
