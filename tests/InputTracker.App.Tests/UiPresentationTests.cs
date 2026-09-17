@@ -154,13 +154,14 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
-    public void ApplicationTypographyPrefersLxgwWenKaiScreenWithSystemFallbacks()
+    public void ApplicationTypographyPrefersMicrosoftYaHeiUiWithSystemFallbacks()
     {
         string appXaml = LoadXaml("App.xaml").ToString(SaveOptions.DisableFormatting);
         string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
 
         Assert.Contains("x:Key=\"AppTextFontFamily\"", appXaml, StringComparison.Ordinal);
-        Assert.Contains("LXGW WenKai Screen", appXaml, StringComparison.Ordinal);
+        Assert.Contains("Microsoft YaHei UI", appXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("LXGW WenKai", appXaml, StringComparison.Ordinal);
         Assert.Contains("Segoe UI Variable Text", appXaml, StringComparison.Ordinal);
         Assert.Contains("FontFamily=\"{DynamicResource AppTextFontFamily}\"", windowXaml, StringComparison.Ordinal);
     }

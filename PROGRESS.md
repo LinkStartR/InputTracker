@@ -1403,3 +1403,10 @@
 - 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/readability-test-20260917`，exit `0`；Input、Storage、App 均成功。
 - 交付物：`.tools/publish/readability-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `34A503C18DFEE542D3AAB645426E7211EAB108EFE4378D9D4310665DF0D07AEC`，发布后进程仍为 `0`。
 - 停点：执行者未启动 GUI。本轮只请用户查看各页面小字是否舒适、热力图键名和次数是否挤压、整体层级是否仍清楚；收到结果前不推进文案或其他工作。
+
+## 2026-09-17 正文字体改为 Microsoft YaHei UI
+
+- 人工结果：用户截图显示 12 号下限后热力图没有明显文字截断或重叠，设备框空白由用户确认不是问题；但用户仍觉得整体字体偏小，并确认接受判断：霞鹜文楷字面偏小、笔画与留白不适合紧凑桌面 UI。上一版字号调整因此不算最终视觉通过。
+- 最小变更：只把 `AppTextFontFamily` 从 `LXGW WenKai Screen / LXGW WenKai GB Screen R` 改为 `Microsoft YaHei UI / Microsoft YaHei`，继续以 `Segoe UI Variable Text / Segoe UI` 回退。保持现有 12 号下限、布局、文案、颜色和全部功能不变，未新增字体文件或依赖。
+- 红→绿证据：字体回归先改期望后，定向测试 exit `1`，`0 passed / 1 failed / 0 skipped`，明确缺少 `Microsoft YaHei UI`；资源窄修后同一测试 exit `0`，`1/0/0`。App.Tests 全量 exit `0`，`141 passed / 0 failed / 0 skipped`，241ms；源码确认产品无 `LXGW WenKai`，`git diff --check` 无空白错误（仅 LF→CRLF 提示），运行中 InputTracker 进程 `0`。
+- 下一步：提交并发布新的独立绿色目录，复制上一测试目录的最新数据快照；执行者不启动 GUI。用户只需比较微软雅黑 UI 下的小字舒适度、热力图标签和整体层级。
