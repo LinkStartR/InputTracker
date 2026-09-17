@@ -1460,3 +1460,11 @@
 - 项目回归：`dotnet build InputTracker.sln -c Release --no-restore` exit `0`，7 个项目成功、0 warnings / 0 errors、1.91s；Storage non-Spike `210/0/0`、5s；既有空范围删除 Acceptance 兼容检查 `1/0/0`、185ms。未运行 GUI、StorageSpike、全量 solution test 或 verify，也未碰现有发布数据。
 - 文档状态：B-011 改为“完整统计日已实现、日内部分范围阻断”；旧 Acceptance/verify 的“一律阻断”描述仍需由其固定维护范围追加新 gate，当前不把兼容单测冒充最终删除判卷。
 - 下一步：审查白名单并提交当前切片；发布一个没有复制历史数据的全新绿色测试目录。到达人工测试点立即停止，由用户在新目录生成少量可丢弃按键记录，验证暂停、取消、确认删除、自动备份、其他日期/设备不受影响和重启持久性。
+
+## 2026-09-17 键盘范围删除人工测试包
+
+- 产品提交：`b1d6db9 feat: add safe keyboard range deletion`；12 个文件，范围仅为 Storage/App 删除实现、普通测试、Storage 文档、`PROGRESS.md` 与 `BLOCKED.md`。提交后分支 `codex/ui-storage-integration` 比远端 ahead 62，未 push。
+- 发布：`.tools/dotnet/dotnet.exe publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\keyboard-delete-test-20260917`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/keyboard-delete-test-20260917/InputTracker.exe`，484 files，SHA-256 `EA633968A1CB078A5F0E992B1F738C6E3C94D940FB01D441B524B39BF21BFBC5`。这是全新目录，没有复制任何历史 `data`；首次检查 `DATA_EXISTS=False`。
+- 自检：隐藏进程执行 `InputTracker.exe --self-check`，exit `0`；未启动 GUI，未读取或删除旧测试包数据。
+- 人工停点：只测试当前删除功能。先在此全新目录同意采集并产生少量可丢弃键盘记录；暂停后分别验证取消不删除、确认后数量清零/减少、`backups/before-delete-*.itbackup` 自动生成、其他日期/设备不变，以及退出重启后删除结果仍保持。收到人工结果前不推进 SQLite 升级或统一终验。
