@@ -122,7 +122,7 @@ public sealed class DashboardViewModelTests
 
         string label = MainWindow.FormatDeviceDisplayName(device);
 
-        Assert.Equal("Desk mouse · 已记忆重连，非永久唯一", label);
+        Assert.Equal("Desk mouse · 已记住，同型号设备可能混淆", label);
     }
 
     [Fact]

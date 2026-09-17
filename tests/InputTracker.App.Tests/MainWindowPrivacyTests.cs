@@ -3,11 +3,11 @@ namespace InputTracker.App.Tests;
 public sealed class MainWindowPrivacyTests
 {
     [Theory]
-    [InlineData(CollectionMode.Collecting, "顶部显示“记录中”")]
-    [InlineData(CollectionMode.StartFailed, "记录启动失败，当前没有接收键盘或鼠标活动")]
+    [InlineData(CollectionMode.Collecting, "顶部显示“记录中”时，InputTracker 会在后台统计")]
+    [InlineData(CollectionMode.StartFailed, "记录启动失败，目前没有记录键盘或鼠标操作")]
     [InlineData(CollectionMode.RejectedProgramDirectory, "当前程序文件夹不能写入，因此没有开始记录")]
     [InlineData(CollectionMode.Restoring, "正在停止记录")]
-    [InlineData(CollectionMode.RestoreControlUncertainAwaitExit, "无法确认后台接收是否完全关闭")]
+    [InlineData(CollectionMode.RestoreControlUncertainAwaitExit, "无法确认记录是否完全停止")]
     public void PrivacyBoundaryMatchesVisibleCollectionState(CollectionMode mode, string expectedState)
     {
         var snapshot = new CollectionSnapshot(mode, "status", "explanation", false, false);
@@ -16,11 +16,11 @@ public sealed class MainWindowPrivacyTests
 
         Assert.Contains(expectedState, disclosure);
         Assert.DoesNotContain("Storage 尚未接通", disclosure);
-        Assert.Contains("按设备、每天统计实体按键", disclosure);
-        Assert.Contains("不保存输入内容、先后顺序、窗口或程序名称", disclosure);
-        Assert.Contains("鼠标只统计各按键的次数", disclosure);
+        Assert.Contains("按设备和日期，记录每个按键的次数和按住时长", disclosure);
+        Assert.Contains("不保存你输入的文字、按键顺序、窗口或程序名称", disclosure);
+        Assert.Contains("鼠标会按设备记录各个按键的次数", disclosure);
         Assert.Contains("不保存移动位置或路线", disclosure);
-        Assert.Contains("旧版本已经保存的轨迹文件会原样保留", disclosure);
+        Assert.DoesNotContain("轨迹", disclosure);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class MainWindowPrivacyTests
         Assert.Contains("_startup.Disable()", code);
 
         string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "PortableSettings.cs"));
-        Assert.Contains("鼠标只统计各按键的次数，不保存移动位置或路线", consent);
-        Assert.Contains("旧版本已经保存的轨迹文件不会自动删除", consent);
+        Assert.Contains("鼠标会分设备记录各个按键的次数，不保存移动位置或路线", consent);
+        Assert.DoesNotContain("轨迹", consent);
     }
 
     [Fact]

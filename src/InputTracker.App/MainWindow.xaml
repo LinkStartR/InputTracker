@@ -445,7 +445,7 @@
                                FontSize="21"
                                FontWeight="SemiBold" />
                     <TextBlock Margin="0,3,0,0"
-                               Text="记录清晰，随时由你掌控"
+                               Text="只记使用次数，不记输入内容"
                                FontSize="12"
                                Foreground="{DynamicResource SecondaryTextBrush}" />
                 </StackPanel>
@@ -556,7 +556,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="活动概览" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="看看这段时间里，每个键盘和鼠标分别有多少活动。" />
+                                       Text="键盘按了多少次、鼠标点了多少次，一眼就能看到。" />
                             <Grid Margin="0,16,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -586,7 +586,7 @@
                                                        TextWrapping="Wrap" />
                                             <TextBlock Margin="0,8,0,0"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   Text="到键盘热力图里看看哪些按键最常用。"
+                                                       Text="打开热力图，就能看出哪些按键最常用。"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -614,7 +614,7 @@
                                                        TextWrapping="Wrap" />
                                             <TextBlock Margin="0,8,0,0"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       Text="选择一只鼠标，查看各个按键的使用次数。"
+                                                       Text="选一只鼠标，看看左键、右键和侧键各用了多少次。"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -636,9 +636,9 @@
                                                    FontSize="15" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
                                     </Border>
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Text="你的隐私设置一直有效" FontWeight="SemiBold" />
+                                        <TextBlock Text="只统计次数，不查看内容" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,3,0,0"
-                                                   Text="只统计按键次数和按住时长，不保存你输入的内容。"
+                                                   Text="InputTracker 只记下按了多少次、按住多久，不会保存你输入的文字。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}" />
                                     </StackPanel>
@@ -653,7 +653,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="键盘热力图" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="看看哪些实体按键使用得最多，不会记录输入内容或先后顺序。" />
+                                       Text="颜色越深，说明这个按键用得越多。不会保存你输入的文字，也不会记下按键顺序。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>
@@ -688,7 +688,7 @@
                                                         Click="ClearKeyboardAliasButton_Click" />
                                             </Grid>
                                             <TextBlock x:Name="KeyboardAliasStatusText" Margin="0,6,0,0"
-                                                       Text="名称只用于显示，不会改变统计归属。" FontSize="12"
+                                                       Text="改名只方便你辨认，已有记录不会变化。" FontSize="12"
                                                        Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -733,7 +733,7 @@
                                     <TextBlock Margin="0,14,0,0" Text="其他按键" FontWeight="SemiBold" />
                                     <TextBlock Margin="0,4,0,10"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               Text="暂时无法显示名称的按键会放在这里，统计不会遗漏。" />
+                                               Text="没有常用名称的按键会显示在这里，次数照常保留。" />
                                     <ItemsControl x:Name="OtherHeatmapItems" ItemTemplate="{StaticResource KeyboardKeyTemplate}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
@@ -785,7 +785,7 @@
                                                         Click="ClearMouseAliasButton_Click" />
                                             </Grid>
                                             <TextBlock x:Name="MouseAliasStatusText" Margin="0,6,0,0"
-                                                       Text="名称只用于显示，不会改变统计归属。" FontSize="12"
+                                                       Text="改名只方便你辨认，已有记录不会变化。" FontSize="12"
                                                        Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -793,7 +793,7 @@
                                             Padding="14,12"
                                             Background="{DynamicResource SubtleBackgroundBrush}"
                                             CornerRadius="12">
-                                        <TextBlock Text="只统计按键次数，不保存鼠标移动位置。"
+                                        <TextBlock Text="这里只记录各个按键用了多少次，不会保存鼠标移动位置。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                     </Border>
@@ -808,7 +808,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="数据工具" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="导出、备份和查看删除范围都只使用当前程序文件夹。" />
+                                       Text="需要带走、备份或整理记录时，可以在这里操作。所有文件都留在当前程序文件夹。" />
                             <Grid Margin="0,16,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -832,14 +832,14 @@
                                 </Border>
                                 <Border Grid.Column="2" Style="{StaticResource CardStyle}">
                                     <StackPanel>
-                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="敏感操作" />
-                                        <TextBlock Margin="0,8,0,0" Text="先看影响范围，再决定是否继续" FontSize="17" FontWeight="SemiBold" />
+                                        <TextBlock Style="{StaticResource CardTitleStyle}" Text="删除与恢复" />
+                                        <TextBlock Margin="0,8,0,0" Text="动手前先看清会改动哪些记录" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="删除功能目前只提供预览。恢复备份前需要先暂停并再次确认，完成后程序会退出。"
+                                                   Text="删除前只能查看范围，不会直接动数据。恢复备份时，程序会先暂停记录并请你确认，完成后自动退出。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
-                                                Click="PreviewKeyboardDeletionButton_Click" Content="预览键盘删除" />
+                                                Click="PreviewKeyboardDeletionButton_Click" Content="查看可删除记录" />
                                         <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"
                                                 Click="ValidateRestoreButton_Click" Content="恢复本地备份" />
                                     </StackPanel>
@@ -951,7 +951,7 @@
                                     <StackPanel>
                                         <TextBlock Text="键盘" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="按设备统计实体按键的次数和按住时长，不保存输入内容。"
+                                                   Text="分别记录每把键盘的按键次数和按住时长，不保存你输入的文字。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
@@ -961,7 +961,7 @@
                                     <StackPanel>
                                         <TextBlock Text="鼠标" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="只统计各个按键的次数，不保存鼠标移动位置或路线。"
+                                                   Text="分别记录每只鼠标的按键次数，不保存移动位置或路线。"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />

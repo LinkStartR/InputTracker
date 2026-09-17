@@ -381,9 +381,9 @@ public partial class MainWindow : Window
         if (_updatingDeviceSelectors) return;
 
         if (ReferenceEquals(sender, KeyboardDeviceSelector))
-            KeyboardAliasStatusText.Text = "名称只用于显示，不会改变统计归属。";
+            KeyboardAliasStatusText.Text = "改名只方便你辨认，已有记录不会变化。";
         else if (ReferenceEquals(sender, MouseDeviceSelector))
-            MouseAliasStatusText.Text = "名称只用于显示，不会改变统计归属。";
+            MouseAliasStatusText.Text = "改名只方便你辨认，已有记录不会变化。";
         await RefreshDashboardAsync();
     }
 
@@ -436,7 +436,7 @@ public partial class MainWindow : Window
                 deviceId, requestedAlias);
             input.Text = updated.Alias ?? string.Empty;
             status.Text = updated.Alias is null
-                ? "名称已清除，统计仍保留在原设备下。"
+                ? "名称已清除，原来的记录仍在。"
                 : $"已保存为“{updated.Alias}”。";
             await RefreshDashboardAsync();
         }
@@ -578,11 +578,11 @@ public partial class MainWindow : Window
     {
         string confidence = value.IdentityConfidence switch
         {
-            StorageDeviceIdentityConfidence.PersistentHardware => "可稳定识别",
-            StorageDeviceIdentityConfidence.ReconnectableHardware => "已记忆重连，非永久唯一",
+            StorageDeviceIdentityConfidence.PersistentHardware => "重连后仍可识别",
+            StorageDeviceIdentityConfidence.ReconnectableHardware => "已记住，同型号设备可能混淆",
             _ when value.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MultipleCandidates) =>
-                "有多个相似设备，未自动合并",
-            _ => "临时身份，重插可能变化"
+                "有相似设备，请按名称辨认",
+            _ => "重连后可能显示为新设备"
         };
         return $"{value.Alias ?? value.DeviceId.ToString("N")[..8]} · {confidence}";
     }
