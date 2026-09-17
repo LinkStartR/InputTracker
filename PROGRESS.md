@@ -1432,3 +1432,10 @@
 - 红证据：文案测试先改期望后，定向回归 exit `1`，`2 passed / 7 failed / 0 skipped`；失败分别命中旧页面说明、旧隐私措辞和旧首次确认文案。
 - 绿证据：产品窄修后同组定向测试 exit `0`，`9/0/0`；App.Tests 全量 exit `0`，`141 passed / 0 failed / 0 skipped`，233ms。`MainWindow.xaml` XML parse 成功；产品源码无 `统计归属/实体按键/敏感操作/影响范围/旧版本已经保存的轨迹/LXGW WenKai` 命中；`git diff --check` 无空白错误（仅 LF→CRLF 提示）；运行中 InputTracker 进程 `0`。
 - 下一步：提交并发布独立绿色目录，复制上一测试目录的最新数据快照；执行者不启动 GUI。用户只需逐页阅读总览、热力图、鼠标按键、数据工具、设置、隐私和首次确认文案，标出仍别扭或含糊的句子。
+
+## 2026-09-17 用户友好文案人工测试包
+
+- 产品提交：`706be55 fix: make interface copy more approachable`；只修改用户可见文案与对应 App 回归断言，未改功能、布局、字体、字号、数据或设备规则。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/friendly-copy-test-20260917`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/friendly-copy-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `4ADC4EDD9ADB931F7213B5E1E765729B791D925476E833298693F50ACC2A4CBA`，发布后进程仍为 `0`。
+- 停点：执行者未启动 GUI。本轮只请用户逐页阅读文字，确认容易理解、隐私边界准确、设备身份提示不含糊且没有挤压；收到结果前不推进其他工作。
