@@ -835,11 +835,11 @@
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="删除与恢复" />
                                         <TextBlock Margin="0,8,0,0" Text="动手前先看清会改动哪些记录" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="删除前只能查看范围，不会直接动数据。恢复备份时，程序会先暂停记录并请你确认，完成后自动退出。"
+                                                   Text="先暂停采集，再删除当前所选键盘和时间范围内的统计。程序会先说明数量、创建完整备份，并在最终确认后执行。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
-                                                Click="PreviewKeyboardDeletionButton_Click" Content="查看可删除记录" />
+                                                Click="PreviewKeyboardDeletionButton_Click" Content="删除当前范围记录" />
                                         <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"
                                                 Click="ValidateRestoreButton_Click" Content="恢复本地备份" />
                                     </StackPanel>

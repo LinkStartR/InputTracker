@@ -1449,3 +1449,14 @@
 - 发布风险仍有 B-007：当前 native SQLite 3.49.1 位于已知 WAL-reset 风险范围；虽然单 writer/无池化规避已知触发条件，正式发布前仍需升级到修复线并回归，或由用户明确接受风险。
 - B-016 仍保留：旧测试目录里若存在历史 `.mspool` / `.mchunk`，未经单独授权不得物理删除。GitHub 按用户要求继续忽略，本地交付不等待 push/PR。
 - 建议顺序：先决定并实现安全范围删除；随后解决 SQLite 版本风险；再跑一次统一自动回归；最后只做一轮集中现场验收与最终绿色目录交付。
+
+## 2026-09-17 键盘完整统计日范围删除
+
+- 分支：`codex/ui-storage-integration`。用户确认先实现实际范围删除；本轮只改 Storage 删除协议、App 的暂停/确认接线、普通测试、Storage 文档及进度/阻塞记录，不修改固定归属的 `tests/Acceptance/**` 或 `scripts/verify.ps1`，不操作任何现有发布目录或用户数据。
+- 最小语义：删除只针对明确选择的键盘和当前日/周/月/年范围。Storage 按每行保存的 Windows 时区还原统计日；全部相交日桶都被完整包含时才可执行。半日边界、混合时区部分相交、空范围、错误 token、预览后状态变化或非安全生命周期均 fail closed，禁止按比例猜测。
+- 数据安全：执行前 App 强制 `PauseReason.User`、Capture=Paused、Storage=Paused 且 `AcceptingWrites=false`，再显示最终 `Yes/No` 确认。确认后先创建程序目录内 `.itbackup`，随后在单个 SQLite 事务中只删除所选设备的目标日桶，并在 commit 前核对精确行数；备份或事务失败不宣称删除成功。
+- 红证据：先只增加隔离临时库测试，`dotnet test ... --filter FullyQualifiedName~StorageDeletionPreviewTests` exit `1`，0 warnings / 9 compile errors；错误精确缺少 `StorageDeletionResult`、`ExactKeyboardDailyAggregates`、preview 次数/时长及三参数 execute，证明旧实现仍只能阻断。
+- 绿证据：实现后同组 `3 passed / 0 failed / 0 skipped`，604ms；覆盖所选设备完整日删除、其他设备/日期不变、自动备份可恢复、错误与过期 token、Pacific 23 小时日、半日和混合时区切边阻断。App.Tests 首轮因旧文案断言为 `141 passed / 1 failed / 0 skipped`，只同步新可见文案期望后全量 `142/0/0`，282ms。
+- 项目回归：`dotnet build InputTracker.sln -c Release --no-restore` exit `0`，7 个项目成功、0 warnings / 0 errors、1.91s；Storage non-Spike `210/0/0`、5s；既有空范围删除 Acceptance 兼容检查 `1/0/0`、185ms。未运行 GUI、StorageSpike、全量 solution test 或 verify，也未碰现有发布数据。
+- 文档状态：B-011 改为“完整统计日已实现、日内部分范围阻断”；旧 Acceptance/verify 的“一律阻断”描述仍需由其固定维护范围追加新 gate，当前不把兼容单测冒充最终删除判卷。
+- 下一步：审查白名单并提交当前切片；发布一个没有复制历史数据的全新绿色测试目录。到达人工测试点立即停止，由用户在新目录生成少量可丢弃按键记录，验证暂停、取消、确认删除、自动备份、其他日期/设备不受影响和重启持久性。

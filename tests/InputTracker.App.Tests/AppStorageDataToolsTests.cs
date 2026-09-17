@@ -59,7 +59,11 @@ public sealed class AppStorageDataToolsTests
     public async Task KeyboardDeletionPreviewNeverExposesConfirmationToken()
     {
         var storage = new FakeStorageTools { DeviceKind = StorageDeviceKind.Keyboard };
-        var controller = new AppStorageDataToolsController(storage, new FakeCaptureControl(), @"C:\portable", Clock);
+        var controller = new AppStorageDataToolsController(
+            storage,
+            new FakeCaptureControl(PauseReason.User),
+            @"C:\portable",
+            Clock);
         var range = new StorageUtcRange(10, 20);
 
         Guid deviceId = Guid.Parse("12345678-1234-1234-1234-1234567890ab");
@@ -70,8 +74,40 @@ public sealed class AppStorageDataToolsTests
         Assert.Equal(StorageDeviceKind.Keyboard, result.DeviceKind);
         Assert.Equal(range, result.UtcRange);
         Assert.Equal(3, result.KeyboardAggregateCount);
-        Assert.Contains("当前存储格式", result.Status);
+        Assert.Equal(6, result.KeyboardPressCount);
+        Assert.True(result.CanExecute);
+        Assert.Contains("自动备份", result.Status);
         Assert.DoesNotContain("SECRET-TOKEN", result.ToString());
+    }
+
+    [Fact]
+    public async Task KeyboardDeletionRequiresUserPauseAndExecutesOnlyThePreparedConfirmedPreview()
+    {
+        Guid deviceId = Guid.Parse("12345678-1234-1234-1234-1234567890ab");
+        var range = new StorageUtcRange(10, 20);
+        var storage = new FakeStorageTools { DeviceKind = StorageDeviceKind.Keyboard };
+        var running = new AppStorageDataToolsController(
+            storage, new FakeCaptureControl(), @"C:\portable", Clock);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => running.PreviewDeletionAsync(
+            deviceId, StorageDeviceKind.Keyboard, range));
+        Assert.Empty(storage.Operations);
+
+        var capture = new FakeCaptureControl(PauseReason.User);
+        var controller = new AppStorageDataToolsController(storage, capture, @"C:\portable", Clock);
+        StorageDeletionDisplay display = await controller.PreviewDeletionAsync(
+            deviceId, StorageDeviceKind.Keyboard, range);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            controller.ExecutePreparedDeletionAsync(display, finalConfirmed: false));
+        Assert.DoesNotContain("delete", storage.Operations);
+
+        StorageDeletionResult result = await controller.ExecutePreparedDeletionAsync(
+            display, finalConfirmed: true);
+        Assert.Equal(6, result.DeletedKeyboardPressCount);
+        Assert.Contains("delete", storage.Operations);
+        Assert.Equal(PauseReason.User, capture.CurrentStatus.PauseReasons);
+        Assert.StartsWith(Path.Combine("backups", "before-delete-20260813-123456-000"), storage.DeletionBackupPath);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            controller.ExecutePreparedDeletionAsync(display, finalConfirmed: true));
     }
 
     [Fact]
@@ -277,7 +313,7 @@ public sealed class AppStorageDataToolsTests
             ReturnedRange = new StorageUtcRange(11, 20)
         };
         controller = new AppStorageDataToolsController(
-            storage, new FakeCaptureControl(), @"C:\portable", Clock);
+            storage, new FakeCaptureControl(PauseReason.User), @"C:\portable", Clock);
         await Assert.ThrowsAsync<InvalidDataException>(() => controller.PreviewDeletionAsync(
             device, StorageDeviceKind.Keyboard, new StorageUtcRange(10, 20)));
     }
@@ -315,6 +351,7 @@ public sealed class AppStorageDataToolsTests
         public StorageUtcRange? ReturnedRange { get; init; }
         public List<string> Operations { get; } = [];
         public StorageDeviceKind DeviceKind { get; init; } = StorageDeviceKind.Mouse;
+        public string? DeletionBackupPath { get; private set; }
 
         public StorageExportArtifact ExportKeyboardCsv(StorageKeyboardPeriodResult period, string relativePath)
         {
@@ -339,8 +376,27 @@ public sealed class AppStorageDataToolsTests
 
         public Task<StorageDeletionPreview> PreviewDeletionAsync(Guid deviceId, StorageUtcRange range, CancellationToken token) =>
             Task.FromResult(new StorageDeletionPreview(
-                deviceId, ReturnedRange ?? range, 3, StorageDeletionCapability.BlockedByCurrentFormat,
-                "当前存储格式无法安全执行精确范围删除。", "SECRET-TOKEN", "SECRET-FINGERPRINT"));
+                deviceId, ReturnedRange ?? range, 3, 6, 600,
+                StorageDeletionCapability.ExactKeyboardDailyAggregates,
+                null, "SECRET-TOKEN", "SECRET-FINGERPRINT"));
+
+        public StorageDeletionResult ExecuteDeletion(
+            StorageDeletionPreview preview,
+            string confirmationToken,
+            string preDeletionBackupRelativePath)
+        {
+            Operations.Add("delete");
+            DeletionBackupPath = preDeletionBackupRelativePath;
+            Assert.Equal("SECRET-TOKEN", confirmationToken);
+            return new StorageDeletionResult(
+                preview.DeviceId,
+                preview.UtcRange,
+                preview.KeyboardAggregateCount,
+                preview.KeyboardPressCount,
+                preview.KeyboardHoldDurationMicroseconds,
+                new StorageBackupArtifact(
+                    Path.Combine(@"C:\portable", preDeletionBackupRelativePath), "BACKUP", 1, 1));
+        }
 
         public IReadOnlyList<StorageDeviceInfo> ListDevices() =>
         [

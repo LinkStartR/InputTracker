@@ -13,6 +13,8 @@ internal interface IAppStorageDataTools
     StorageBackupArtifact CreateBackup(string relativePath);
     Task<StorageDeletionPreview> PreviewDeletionAsync(
         Guid deviceId, StorageUtcRange range, CancellationToken token);
+    StorageDeletionResult ExecuteDeletion(
+        StorageDeletionPreview preview, string confirmationToken, string preDeletionBackupRelativePath);
     IReadOnlyList<StorageDeviceInfo> ListDevices();
 }
 
@@ -28,6 +30,9 @@ internal sealed class StorageServiceDataTools(StorageService service) : IAppStor
     public Task<StorageDeletionPreview> PreviewDeletionAsync(
         Guid deviceId, StorageUtcRange range, CancellationToken token) =>
         service.PreviewDeletionAsync(deviceId, range, token);
+    public StorageDeletionResult ExecuteDeletion(
+        StorageDeletionPreview preview, string confirmationToken, string preDeletionBackupRelativePath) =>
+        service.ExecuteDeletion(preview, confirmationToken, preDeletionBackupRelativePath);
     public IReadOnlyList<StorageDeviceInfo> ListDevices() => service.ListDevices();
 }
 
@@ -35,12 +40,32 @@ internal sealed record StorageDataToolsExportResult(
     StorageExportArtifact Csv,
     StorageExportArtifact Png);
 
-internal sealed record StorageDeletionDisplay(
-    Guid DeviceId,
-    StorageDeviceKind DeviceKind,
-    StorageUtcRange UtcRange,
-    long KeyboardAggregateCount,
-    string Status);
+internal sealed class StorageDeletionDisplay
+{
+    internal StorageDeletionDisplay(
+        StorageDeletionPreview preview,
+        StorageDeviceKind deviceKind,
+        string status)
+    {
+        Preview = preview;
+        DeviceKind = deviceKind;
+        Status = status;
+    }
+
+    internal StorageDeletionPreview Preview { get; }
+    public Guid DeviceId => Preview.DeviceId;
+    public StorageDeviceKind DeviceKind { get; }
+    public StorageUtcRange UtcRange => Preview.UtcRange;
+    public long KeyboardAggregateCount => Preview.KeyboardAggregateCount;
+    public long KeyboardPressCount => Preview.KeyboardPressCount;
+    public long KeyboardHoldDurationMicroseconds => Preview.KeyboardHoldDurationMicroseconds;
+    public bool CanExecute => Preview.Capability == StorageDeletionCapability.ExactKeyboardDailyAggregates
+        && Preview.KeyboardAggregateCount > 0;
+    public string Status { get; }
+
+    public override string ToString() =>
+        $"StorageDeletionDisplay {{ DeviceId = {DeviceId}, DeviceKind = {DeviceKind}, UtcRange = {UtcRange}, KeyboardAggregateCount = {KeyboardAggregateCount}, CanExecute = {CanExecute}, Status = {Status} }}";
+}
 
 internal sealed record RestoreSelection(
     string RelativePath,
@@ -60,6 +85,7 @@ internal sealed class AppStorageDataToolsController
     private readonly Func<DateTimeOffset> _clock;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly object _lifecycleGate = new();
+    private StorageDeletionDisplay? _preparedDeletion;
     private bool _closing;
 
     public AppStorageDataToolsController(
@@ -125,6 +151,7 @@ internal sealed class AppStorageDataToolsController
 
         return await RunExclusiveAsync(async () =>
         {
+            EnsureUserPausedAtSafeStorageBoundary("删除预览");
             StorageDeviceInfo? device = _storage.ListDevices()
                 .SingleOrDefault(value => value.DeviceId == deviceId);
             if (device is null || device.Kind != expectedKind)
@@ -138,16 +165,59 @@ internal sealed class AppStorageDataToolsController
             {
                 throw new InvalidDataException("Storage returned a deletion preview for a different device or range.");
             }
-            string status = preview.Capability == StorageDeletionCapability.BlockedByCurrentFormat
-                ? $"当前存储格式阻塞实际范围删除：{preview.BlockedReason}"
-                : "删除能力状态未知，未执行任何删除。";
-            return new StorageDeletionDisplay(
-                preview.DeviceId,
-                expectedKind,
-                preview.UtcRange,
-                preview.KeyboardAggregateCount,
-                status);
+            string status = preview.Capability switch
+            {
+                StorageDeletionCapability.BlockedByCurrentFormat =>
+                    preview.KeyboardAggregateCount == 0
+                        ? "这个键盘在当前范围内没有可删除的记录。"
+                        : $"这个范围切到了某个统计日的中间，无法准确删除，因此没有改动数据。{preview.BlockedReason}",
+                StorageDeletionCapability.ExactKeyboardDailyAggregates =>
+                    $"将删除 {preview.KeyboardPressCount:N0} 次按键（{preview.KeyboardAggregateCount:N0} 条统计），执行前会自动备份。",
+                _ => "删除能力状态未知，未执行任何删除。"
+            };
+            var display = new StorageDeletionDisplay(preview, expectedKind, status);
+            _preparedDeletion = display;
+            return display;
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StorageDeletionResult> ExecutePreparedDeletionAsync(
+        StorageDeletionDisplay display,
+        bool finalConfirmed,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(display);
+        return await RunExclusiveAsync(() => Task.Run(() =>
+        {
+            if (!finalConfirmed)
+                throw new InvalidOperationException("删除需要明确的最终确认。");
+            EnsureUserPausedAtSafeStorageBoundary("删除");
+            if (!ReferenceEquals(Interlocked.Exchange(ref _preparedDeletion, null), display))
+                throw new InvalidOperationException("删除预览已失效，请重新查看范围后再确认。");
+            if (!display.CanExecute)
+                throw new InvalidOperationException(display.Status);
+
+            return _storage.ExecuteDeletion(
+                display.Preview,
+                display.Preview.Token,
+                Path.Combine("backups", $"before-delete-{Timestamp()}.itbackup"));
+        }, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    private void EnsureUserPausedAtSafeStorageBoundary(string operationName)
+    {
+        InputCaptureStatus capture = _capture.CurrentStatus;
+        if (capture.State != InputCaptureState.Paused
+            || (capture.PauseReasons & PauseReason.User) == 0)
+        {
+            throw new InvalidOperationException($"{operationName}前，请先点击页面顶部的“暂停采集”。");
+        }
+
+        StorageServiceHealth storage = _storage.Health;
+        if (storage.State != StorageServiceState.Paused || storage.AcceptingWrites)
+        {
+            throw new InvalidOperationException($"{operationName}尚未到达安全暂停状态，请稍后重试。");
+        }
     }
 
     private RestoreSelection ValidateRestoreSelectionCore(string selectedPath)

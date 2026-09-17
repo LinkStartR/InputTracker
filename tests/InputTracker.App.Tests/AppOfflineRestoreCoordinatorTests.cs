@@ -283,6 +283,9 @@ public sealed class AppOfflineRestoreCoordinatorTests
         public StorageExportArtifact ExportKeyboardHeatmapPng(StorageKeyboardPeriodResult period, string relativePath, int width, int height) => throw new NotSupportedException();
         public StorageBackupArtifact CreateBackup(string relativePath) => throw new NotSupportedException();
         public Task<StorageDeletionPreview> PreviewDeletionAsync(Guid deviceId, StorageUtcRange range, CancellationToken token) => throw new NotSupportedException();
+        public StorageDeletionResult ExecuteDeletion(
+            StorageDeletionPreview preview, string confirmationToken, string preDeletionBackupRelativePath) =>
+            throw new NotSupportedException();
         public IReadOnlyList<StorageDeviceInfo> ListDevices() => [];
     }
 

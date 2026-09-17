@@ -242,16 +242,15 @@ public sealed class StorageService : IDisposable
         CancellationToken cancellationToken = default)
     {
         utcRange.Validate();
-        StorageDeviceKind kind;
-        long keyboardCount;
+        StorageDeletionImpact impact;
         StorageDurableWatermark watermark;
         lock (_gate)
         {
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
-            (kind, keyboardCount) = StorageDeletion.DescribeKeyboardImpact(
+            impact = StorageDeletion.DescribeKeyboardImpact(
                 _database.Connection, deviceId, utcRange);
-            if (kind == StorageDeviceKind.Mouse)
+            if (impact.Kind == StorageDeviceKind.Mouse)
             {
                 throw new InvalidOperationException(
                     "Mouse trajectory deletion is unavailable because InputTracker no longer collects trajectory data.");
@@ -260,16 +259,92 @@ public sealed class StorageService : IDisposable
         }
 
         string fingerprint = StorageDeletion.CreateStateFingerprint(
-            deviceId, utcRange, kind, keyboardCount, watermark);
+            deviceId, utcRange, impact, watermark);
+        StorageDeletionCapability capability = impact.HasPartialDayOverlap || impact.Rows.Count == 0
+            ? StorageDeletionCapability.BlockedByCurrentFormat
+            : StorageDeletionCapability.ExactKeyboardDailyAggregates;
         var preview = new StorageDeletionPreview(
             deviceId,
             utcRange,
-            keyboardCount,
-            StorageDeletionCapability.BlockedByCurrentFormat,
-            "Current keyboard storage is daily aggregate data; an arbitrary UTC range cannot be removed exactly within a day.",
+            impact.Rows.Count,
+            impact.PressCount,
+            impact.HoldDurationMicroseconds,
+            capability,
+            impact.HasPartialDayOverlap
+                ? "The selected UTC range cuts through a stored local-day aggregate; InputTracker will not estimate a partial deletion."
+                : impact.Rows.Count == 0
+                    ? "The selected range contains no matching keyboard aggregate records."
+                    : null,
             StorageDeletion.CreateToken(fingerprint),
             fingerprint);
         return Task.FromResult(preview);
+    }
+
+    public StorageDeletionResult ExecuteDeletion(
+        StorageDeletionPreview preview,
+        string confirmationToken,
+        string preDeletionBackupRelativePath)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentException.ThrowIfNullOrWhiteSpace(confirmationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(preDeletionBackupRelativePath);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (_state is not StorageServiceState.Created
+                and not StorageServiceState.Paused
+                and not StorageServiceState.Stopped
+                || _acceptingWrites
+                || _pending.Count != 0
+                || _openHolds.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    "Deletion requires Created, Paused, or Stopped storage with no buffered input.");
+            }
+            string expected = StorageDeletion.CreateToken(preview.StateFingerprint);
+            if (!StorageDeletion.FixedTimeTokenEquals(confirmationToken, expected))
+            {
+                throw new InvalidOperationException("Deletion confirmation token does not match its preview.");
+            }
+            if (preview.Capability != StorageDeletionCapability.ExactKeyboardDailyAggregates)
+            {
+                throw new InvalidOperationException(
+                    preview.BlockedReason ?? "Deletion is blocked by the current storage format.");
+            }
+
+            StorageDeletionImpact current = StorageDeletion.DescribeKeyboardImpact(
+                _database.Connection, preview.DeviceId, preview.UtcRange);
+            StorageDurableWatermark watermark = new(
+                _ordinals.CommitOrdinal,
+                _ordinals.KeyboardAggregateCommitOrdinal,
+                StorageDurabilityScope.SQLiteCommitted);
+            string currentFingerprint = StorageDeletion.CreateStateFingerprint(
+                preview.DeviceId, preview.UtcRange, current, watermark);
+            if (!StorageDeletion.FixedTimeTokenEquals(currentFingerprint, preview.StateFingerprint)
+                || current.HasPartialDayOverlap
+                || current.Rows.Count != preview.KeyboardAggregateCount
+                || current.PressCount != preview.KeyboardPressCount
+                || current.HoldDurationMicroseconds != preview.KeyboardHoldDurationMicroseconds)
+            {
+                throw new InvalidOperationException(
+                    "Stored data changed after the deletion preview; review the range again before deleting.");
+            }
+            if (current.Rows.Count == 0)
+            {
+                throw new InvalidOperationException("The selected range has no keyboard records to delete.");
+            }
+
+            StorageBackupArtifact backup = StorageBackup.Create(_database, preDeletionBackupRelativePath);
+            long deleted = StorageDeletion.DeleteKeyboardRows(
+                _database.Connection, preview.DeviceId, current.Rows);
+            return new StorageDeletionResult(
+                preview.DeviceId,
+                preview.UtcRange,
+                deleted,
+                current.PressCount,
+                current.HoldDurationMicroseconds,
+                backup);
+        }
     }
 
     public void ExecuteDeletion(StorageDeletionPreview preview, string confirmationToken)
@@ -285,7 +360,7 @@ public sealed class StorageService : IDisposable
                 throw new InvalidOperationException("Deletion confirmation token does not match its preview.");
             }
             throw new InvalidOperationException(
-                preview.BlockedReason ?? "Deletion is blocked by the current storage format.");
+                "Deletion requires an explicit program-directory backup path before execution.");
         }
     }
 

@@ -103,13 +103,13 @@
 - 当前处置：强身份若已映射到多个设备则 fail closed；不自动 merge、split、删除、移动或覆盖任何用户 spool/chunk/tmp/corrupt 文件。
 - 解除门槛：独立迁移设计、冲突预览、备份/回滚、逐记录归属证明、真实重复设备/重插测试及 C2 Acceptance seam 全部通过后，才可在用户明确确认下实施。
 
-## B-011：范围删除已完成只读预览，执行仍被当前格式阻断
+## B-011：完整统计日范围删除已实现；日内部分范围继续阻断
 
-- 已完成：Storage 提供按设备与 UTC 半开区间 `[start,end)` 的只读 `PreviewDeletionAsync`；它对鼠标完整验证已提交快照并精确计数，对键盘报告相交日聚合行数，返回包含当前水位的 state fingerprint 与 64 字符确认 token。`ExecuteDeletion` 先固定时校验 token，随后始终 fail closed，不改任何数据。
-- 阻断证据：mouse v4 的 durability/recovery/未来追加依赖每设备从 1 开始的连续 sequence prefix；删除内部范围会制造 gap，重编号会重写原始身份与恢复语义。键盘只有 capture-local daily 聚合，任意 UTC 日内范围无法反推出其精确次数与时长。粗删整块或按比例扣减都会违反数据正确性。
-- 已解除前置：程序目录内备份/恢复基础、恢复前自动备份、损坏/路径逃逸/reparse/version fail closed、安装失败回滚以及只读 preview 普通测试均已完成；但这不等于安全 delete execute。
-- 当前处置：UI 继续明确提示当前版本尚未提供范围删除；不得暗示 token 可以执行，不得直接操作用户数据文件。产品 execute API 的唯一行为是拒绝。
-- 解除门槛：设计版本化的 mouse prefix rewrite/tombstone 与 finer-grained keyboard 删除协议，证明 spool/chunk/catalog/watermark/聚合一致、崩溃回滚、后续追加和重开恢复；再由 C2 添加 Acceptance 红→绿及 UI 二次确认。任何实际删除前必须取得用户明确确认。
+- 2026-09-17 用户同意继续实现实际范围删除。当前产品只对明确选择的键盘执行删除；鼠标轨迹功能已经完整移除，不再设计轨迹重写。
+- 已实现：预览逐行按保存的 Windows 时区解析 `capture_local_date`；只有所有相交日桶都完整落在所选 `[start,end)` 内才允许执行。预览指纹包含目标行身份、次数、时长与 durable ordinals；状态变化、错误 token、空范围、半日边界或混合时区部分相交均 fail closed。
+- 数据安全：执行要求用户已明确暂停且 Storage 已排空；先在程序目录创建完整 `.itbackup`，再用单个 SQLite 事务删除所选设备的精确日桶，并在 commit 前核对删除行数。备份失败或事务失败不宣称成功。
+- 仍受限：键盘只保存 capture-local daily 聚合，无法从中精确拆出某天内部的任意小时/分钟。当前 UI 只提供日/周/月/年整周期，因此正常周期可执行；若未来增加自定义日内范围，必须先升级聚合格式，禁止按比例扣减。
+- 验收缺口：固定归属的 `tests/Acceptance/**` 与 `scripts/verify.ps1` 仍保留旧的“执行一律阻断”阶段 gate，本功能分支未擅自修改。最终统一判卷前须由其维护范围增加“备份→删除→恢复”、stale token、DST 23/25 小时与部分日阻断 gate，且测试数只能增加。
 # B-012：Codex 额度曾阻止主机权限下的 Windows SDK 编译验证（已解除）
 
 - 2026-08-13 在 `codex/ui-storage-integration@f5421aa` 上执行 `.\.tools\dotnet\dotnet.exe build tests\Acceptance\InputTracker.AcceptanceTests.csproj -c Release --no-restore`，沙箱内 exit 1、0 warnings / 1 error；唯一错误为 `MSB4184`，读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 被拒绝，尚未进入新增源码编译。

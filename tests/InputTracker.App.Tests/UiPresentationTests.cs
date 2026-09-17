@@ -174,7 +174,7 @@ public sealed class UiPresentationTests
         Assert.Contains("键盘按了多少次、鼠标点了多少次，一眼就能看到。", windowXaml, StringComparison.Ordinal);
         Assert.Contains("颜色越深，说明这个按键用得越多。", windowXaml, StringComparison.Ordinal);
         Assert.Contains("改名只方便你辨认，已有记录不会变化。", windowXaml, StringComparison.Ordinal);
-        Assert.Contains("删除前只能查看范围，不会直接动数据。", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("程序会先说明数量、创建完整备份，并在最终确认后执行。", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Storage", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("固定快照", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("完整枚举后的有界显示", windowXaml, StringComparison.Ordinal);

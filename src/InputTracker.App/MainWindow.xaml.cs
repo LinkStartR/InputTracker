@@ -234,25 +234,45 @@ public partial class MainWindow : Window
         });
 
     private async void PreviewKeyboardDeletionButton_Click(object sender, RoutedEventArgs e) =>
-        await PreviewDeletionAsync(StorageDeviceKind.Keyboard, _dashboard?.SelectedKeyboardDeviceId);
+        await DeleteKeyboardRangeAsync(_dashboard?.SelectedKeyboardDeviceId);
 
-    private async Task PreviewDeletionAsync(StorageDeviceKind kind, Guid? deviceId) =>
+    private async Task DeleteKeyboardRangeAsync(Guid? deviceId) =>
         await RunDataToolAsync(async () =>
         {
             if (_dataTools is null || _dashboard?.ResolvedPeriod is not { } period || deviceId is not Guid selected)
             {
-                throw new InvalidOperationException(
-                    kind == StorageDeviceKind.Keyboard
-                        ? "请先明确选择一个键盘并完成当前周期读取。"
-                        : "请先明确选择一个鼠标并完成当前周期读取。");
+                throw new InvalidOperationException("请先选择一个键盘并完成当前周期读取。");
             }
 
             StorageDeletionDisplay preview = await _dataTools.PreviewDeletionAsync(
-                selected, kind, period.UtcRange);
+                selected, StorageDeviceKind.Keyboard, period.UtcRange);
+            if (!preview.CanExecute)
+            {
+                if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = preview.Status;
+                return;
+            }
+
+            string localRange = period.LocalEndDate == period.LocalStartDate.AddDays(1)
+                ? period.LocalStartDate.ToString("yyyy-MM-dd")
+                : $"{period.LocalStartDate:yyyy-MM-dd} 至 {period.LocalEndDate.AddDays(-1):yyyy-MM-dd}";
+            MessageBoxResult confirmation = System.Windows.MessageBox.Show(
+                $"将永久删除所选键盘在 {localRange} 的 {preview.KeyboardPressCount:N0} 次按键统计。\n\n"
+                + "删除前会自动创建完整备份；其他设备和其他日期不受影响。是否继续？",
+                "最终确认 · 删除键盘统计",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = "已取消删除，没有改动数据。";
+                return;
+            }
+
+            StorageDeletionResult result = await _dataTools.ExecutePreparedDeletionAsync(
+                preview, finalConfirmed: true);
             if (CanUpdateDataToolsUi())
                 DataToolsStatusText.Text =
-                    $"删除预览目标：键盘 {preview.DeviceId.ToString("N")[..8]}，UTC [{preview.UtcRange.StartUtcMicroseconds}, {preview.UtcRange.EndUtcMicroseconds})；"
-                    + $"键盘聚合 {preview.KeyboardAggregateCount:N0} 行。{preview.Status}";
+                    $"已删除 {result.DeletedKeyboardPressCount:N0} 次按键统计。删除前备份：{result.PreDeletionBackup.Path}";
         });
 
     private void ValidateRestoreButton_Click(object sender, RoutedEventArgs e)

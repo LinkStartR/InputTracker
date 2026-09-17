@@ -1,4 +1,4 @@
-# Storage export, backup, restore, and deletion preview v1
+# Storage export, backup, restore, and deletion v2
 
 ## Export
 
@@ -8,7 +8,7 @@
 
 ## Backup and restore
 
-- A backup is a `.itbackup` ZIP with format version 1, storage schema version 4, and a manifest containing every declared file's exact length and SHA-256.
+- A backup is a `.itbackup` ZIP with format version 1, the current storage schema version, and a manifest containing every declared file's exact length and SHA-256.
 - SQLite is copied with the SQLite online backup API. Only top-level committed spool and chunk artifacts are copied. Every staged backup is reopened through `StorageService` before the archive is published.
 - Backup is allowed only while Storage is Created, Paused, or Stopped and has no open holds, pending keyboard rows, or buffered mouse data.
 - Restore accepts only a contained, non-reparse backup file. Before extraction it enforces at most 100,000 payload entries, 64 GiB per entry, 512 GiB total uncompressed bytes, a 1000:1 expansion ceiling with 64 MiB slack, and at least 2 GiB free-space reserve. It then extracts only the allowlisted database/spool/chunk paths, checks lengths, SHA-256, format/schema versions, and reopens the staged store before touching live data.
@@ -16,10 +16,11 @@
 - The restore commit point is deletion of the operation journal after the installed store reopens successfully. Resolved staging and rollback directories are then removed only after every traversed object has passed reparse checks.
 - Unknown live files are not claimed as committed backup data and are not silently deleted by restore.
 
-## Deletion preview and current block
+## Keyboard range deletion
 
-- `PreviewDeletionAsync` is read-only. It accepts one device and a UTC half-open range `[start,end)`, validates the complete committed mouse snapshot when applicable, and returns exact mouse record count or overlapping keyboard aggregate row count plus a state fingerprint and confirmation token.
-- `ExecuteDeletion` always fails closed in format v4. The token is checked in fixed time first, but no user data is modified.
-- Mouse v4 durability is one device-global continuous sequence prefix. Removing an interior time range would introduce a gap; renumbering would rewrite original identity and future append/recovery semantics.
-- Keyboard data is stored per capture-local day. An arbitrary UTC sub-day deletion cannot recover the exact contribution from daily counts and durations.
-- Safe execution therefore requires a later versioned rewrite protocol that can preserve mouse ordering/watermark recovery and finer-grained keyboard deletion semantics, with pre-delete backup, crash rollback, and Acceptance red-to-green evidence. Whole-block deletion or proportional keyboard subtraction is forbidden.
+- Mouse trajectory collection and playback have been removed. This operation applies only to one explicitly selected keyboard.
+- `PreviewDeletionAsync` accepts a UTC half-open range `[start,end)`. It resolves every overlapping `capture_local_date` with that row's stored Windows time-zone identifier. Execution is available only when every overlapping local-day bucket lies wholly inside the selected range; a partial day or mixed-zone boundary fails closed instead of estimating counts.
+- The preview fingerprint covers the device, range, durable ordinals, every targeted physical-key row, its local date/time zone, press count, and hold duration. The 64-character confirmation token is tied to that fingerprint. Any data change after preview makes execution fail and requires a new preview.
+- Execution requires Created, user-paused, or Stopped Storage with no accepted writes, open holds, or pending aggregates. The App narrows this to an explicit user pause and a final `Yes/No` warning.
+- Before deletion, InputTracker creates a complete `.itbackup` inside the program directory. It then deletes only the confirmed device's fully contained daily buckets in one SQLite transaction and verifies the exact row count before commit. A process failure before commit leaves the database unchanged; after commit the pre-delete backup remains available for offline restore.
+- An empty range, partial local day, unsupported device, stale preview, wrong token, unsafe lifecycle state, backup failure, or changed row count performs no deletion. Proportional subtraction is forbidden.
