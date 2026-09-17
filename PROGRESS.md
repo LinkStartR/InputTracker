@@ -1396,3 +1396,10 @@
 - 红证据：新增可读性回归后，定向测试 exit `1`，`0 passed / 1 failed / 0 skipped`，首个失败明确命中热力图次数的 `FontSize="10"`。
 - 绿证据：删除全部显式 10/11 号正文及 11 号卡片标题后，同一测试 exit `0`，`1/0/0`；App.Tests 全量 exit `0`，`141 passed / 0 failed / 0 skipped`，238ms。`MainWindow.xaml` XML parse 成功；源码扫描无剩余 10/11 号命中；`git diff --check` 无空白错误（仅 LF→CRLF 提示）；运行中 InputTracker 进程 `0`。
 - 下一步：提交并发布独立绿色目录，复制上一测试目录的最新数据快照；执行者不启动 GUI。用户只需在总览、键盘热力图、数据工具、设置与隐私页查看小字是否更舒适，以及热力图按键内容是否挤压。
+
+## 2026-09-17 小字号可读性人工测试包
+
+- 产品提交：`767b34e fix: raise minimum UI caption size`；只修改字号、对应 App 回归断言和本文件，未修改文案、功能、Storage 或设备数据。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/readability-test-20260917`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/readability-test-20260917/InputTracker.exe`；在 InputTracker 进程为 `0` 时复制上一测试目录的最新 `data` 快照，共 486 files、2 data files，SHA-256 `34A503C18DFEE542D3AAB645426E7211EAB108EFE4378D9D4310665DF0D07AEC`，发布后进程仍为 `0`。
+- 停点：执行者未启动 GUI。本轮只请用户查看各页面小字是否舒适、热力图键名和次数是否挤压、整体层级是否仍清楚；收到结果前不推进文案或其他工作。
