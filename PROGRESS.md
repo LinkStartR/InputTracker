@@ -1369,3 +1369,11 @@
 
 - 用户反馈三项全部通过：启动后保持运行、不再闪退；从界面或托盘退出后 2 秒内进程消失；立即重启不再误报“InputTracker 已在运行”。`9b089f2` 的启动顺序修复人工验收完成。
 - 下一步只恢复被闪退打断的设备重命名验收，继续使用 `.tools/publish/device-alias-crashfix-test-20260917/InputTracker.exe`。先验证键盘和鼠标名称的保存、修改、清除、统计归属不变及重启保留；收到结果前不推进文案、字号或其他功能。
+
+## 2026-09-17 设备名称当前选中项显示修复
+
+- 用户人工结果：设备名称的保存、修改、清除、统计归属、重启保留及布局均无其他问题；唯一缺陷是展开列表已显示新名称，但 ComboBox 关闭后的当前选中框显示 `DeviceChoice { DeviceId = ... }`，未显示设备名称。
+- 根因：自定义 ComboBox 模板把 `SelectionBoxItemTemplate` 传给内部 ToggleButton，却没有继续传递 `ItemTemplateSelector`。`DisplayMemberPath="DisplayName"` 因此只在下拉列表生效，关闭状态回退到 record 默认 `ToString()`。
+- 最小修复：仅在现有 ComboBox 模板的 ComboBox→ToggleButton→ContentPresenter 两级补传 `ContentTemplateSelector`，不改 DeviceChoice、名称数据、统计或设备映射。
+- 红→绿证据：新增模板回归断言后，定向测试 exit `1`，`0 passed / 1 failed / 0 skipped`，失败明确为缺少 `ContentTemplateSelector`；产品窄修后同一测试 exit `0`，`1/0/0`。App.Tests 全量随后 exit `0`，`140 passed / 0 failed / 0 skipped`，269ms；`git diff --check` 无空白错误（仅 LF→CRLF 提示），运行中 InputTracker 进程 `0`。
+- 下一步：提交并发布新的独立绿色目录，复制上一测试目录的最新 `data` 快照；执行者不启动 GUI，随后只请用户检查键盘和鼠标下拉框关闭后均显示友好名称，而非 `DeviceChoice { ... }`。

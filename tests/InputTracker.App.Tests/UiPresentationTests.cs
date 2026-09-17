@@ -107,6 +107,8 @@ public sealed class UiPresentationTests
         Assert.Contains("{DynamicResource CardBackgroundBrush}", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{DynamicResource PrimaryTextBrush}\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("TextElement.Foreground=\"{TemplateBinding Foreground}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("ContentTemplateSelector=\"{TemplateBinding ItemTemplateSelector}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("ContentTemplateSelector=\"{TemplateBinding ContentTemplateSelector}\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"PART_Popup\"", windowXaml, StringComparison.Ordinal);
     }
 

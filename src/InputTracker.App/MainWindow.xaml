@@ -135,6 +135,7 @@
                                           Foreground="{DynamicResource PrimaryTextBrush}"
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
                                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
@@ -150,9 +151,10 @@
                                                 </Grid.ColumnDefinitions>
                                                 <ContentPresenter Margin="11,0,4,0"
                                                                   VerticalAlignment="Center"
-                                                                  Content="{TemplateBinding Content}"
-                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
-                                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                                                                   Content="{TemplateBinding Content}"
+                                                                   ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                   ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
+                                                                   TextElement.Foreground="{TemplateBinding Foreground}" />
                                                 <Path Grid.Column="1"
                                                       Width="8" Height="5"
                                                       HorizontalAlignment="Center"
