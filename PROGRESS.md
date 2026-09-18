@@ -1468,3 +1468,12 @@
 - 交付物：`.tools/publish/keyboard-delete-test-20260917/InputTracker.exe`，484 files，SHA-256 `EA633968A1CB078A5F0E992B1F738C6E3C94D940FB01D441B524B39BF21BFBC5`。这是全新目录，没有复制任何历史 `data`；首次检查 `DATA_EXISTS=False`。
 - 自检：隐藏进程执行 `InputTracker.exe --self-check`，exit `0`；未启动 GUI，未读取或删除旧测试包数据。
 - 人工停点：只测试当前删除功能。先在此全新目录同意采集并产生少量可丢弃键盘记录；暂停后分别验证取消不删除、确认后数量清零/减少、`backups/before-delete-*.itbackup` 自动生成、其他日期/设备不变，以及退出重启后删除结果仍保持。收到人工结果前不推进 SQLite 升级或统一终验。
+
+## 2026-09-18 删除对象增加鼠标按键选择
+
+- 用户反馈：删除工具只能删除键盘数据，要求键盘/鼠标可选；同时要求查看范围和删除记录加入类似 CC Switch 的日期表。按“完成一个就暂停”约定，本切片只完成删除对象选择，日期范围日历登记为下一项，不混入同一人工包。
+- 边界：鼠标仅删除 `mouse_button_daily` 中左、右、中、侧键一、侧键二的每日次数，不恢复或创建鼠标移动、坐标、滚轮、轨迹、spool/chunk 运行链。键盘与鼠标都继续只允许完整统计日，不支持小时/分钟拆分。
+- 红证据：Storage focused 首轮 exit `1`，0 warnings / 5 errors，精确缺少 mouse capability、preview/result count；App focused exit `1`，缺少通用 `PressCount`。旧实现因此不能删除鼠标按键，也没有类型选择。
+- 实现：Storage 以同一 preview fingerprint、stale-token 检查、程序目录备份和 SQLite 单事务支持两类日聚合；App 数据工具增加“键盘统计 / 鼠标按键统计”下拉框，沿用对应页面当前选中的设备，最终确认和完成状态明确显示目标类型。
+- 绿证据：Storage 删除 focused 首轮 `3/0/0`、710ms；App 类型/控制链 focused `4/0/0`、37ms。solution Release build exit `0`，7 项目成功、0 warnings / 0 errors、1.84s；Storage non-Spike `210/0/0`、8s；App 全量 `143/0/0`、267ms。随后补回“鼠标按键删除不得创建轨迹文件”的独立隐私回归，使测试数只增加不减少；最终 Storage 删除类 `4/0/0`、746ms。
+- 下一步：复核新增隐私用例、提交并发布全新无历史数据测试目录；用户只验证删除类型选择、鼠标按键删除、键盘删除回归、备份和重启持久性。通过后再单独实现“查看范围 + 删除记录”的快捷日期与日历起止日选择。

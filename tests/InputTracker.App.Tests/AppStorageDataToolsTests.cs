@@ -298,14 +298,17 @@ public sealed class AppStorageDataToolsTests
     }
 
     [Fact]
-    public async Task PreviewRejectsMouseTrajectoryAndDifferentKeyboardRange()
+    public async Task PreviewSupportsSelectedMouseButtonsAndRejectsDifferentKeyboardRange()
     {
         Guid device = Guid.Parse("12345678-1234-1234-1234-1234567890ab");
-        var storage = new FakeStorageTools { ReturnedRange = new StorageUtcRange(11, 20) };
+        var storage = new FakeStorageTools { DeviceKind = StorageDeviceKind.Mouse };
         var controller = new AppStorageDataToolsController(
-            storage, new FakeCaptureControl(), @"C:\portable", Clock);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.PreviewDeletionAsync(
-            device, StorageDeviceKind.Mouse, new StorageUtcRange(10, 20)));
+            storage, new FakeCaptureControl(PauseReason.User), @"C:\portable", Clock);
+        StorageDeletionDisplay mouse = await controller.PreviewDeletionAsync(
+            device, StorageDeviceKind.Mouse, new StorageUtcRange(10, 20));
+        Assert.True(mouse.CanExecute);
+        Assert.Equal(6, mouse.PressCount);
+        Assert.Contains("鼠标按键", mouse.Status);
 
         storage = new FakeStorageTools
         {
@@ -376,8 +379,16 @@ public sealed class AppStorageDataToolsTests
 
         public Task<StorageDeletionPreview> PreviewDeletionAsync(Guid deviceId, StorageUtcRange range, CancellationToken token) =>
             Task.FromResult(new StorageDeletionPreview(
-                deviceId, ReturnedRange ?? range, 3, 6, 600,
-                StorageDeletionCapability.ExactKeyboardDailyAggregates,
+                deviceId,
+                ReturnedRange ?? range,
+                DeviceKind == StorageDeviceKind.Keyboard ? 3 : 0,
+                DeviceKind == StorageDeviceKind.Keyboard ? 6 : 0,
+                DeviceKind == StorageDeviceKind.Keyboard ? 600 : 0,
+                DeviceKind == StorageDeviceKind.Mouse ? 3 : 0,
+                DeviceKind == StorageDeviceKind.Mouse ? 6 : 0,
+                DeviceKind == StorageDeviceKind.Keyboard
+                    ? StorageDeletionCapability.ExactKeyboardDailyAggregates
+                    : StorageDeletionCapability.ExactMouseButtonDailyAggregates,
                 null, "SECRET-TOKEN", "SECRET-FINGERPRINT"));
 
         public StorageDeletionResult ExecuteDeletion(
@@ -394,6 +405,8 @@ public sealed class AppStorageDataToolsTests
                 preview.KeyboardAggregateCount,
                 preview.KeyboardPressCount,
                 preview.KeyboardHoldDurationMicroseconds,
+                preview.MouseButtonAggregateCount,
+                preview.MouseButtonPressCount,
                 new StorageBackupArtifact(
                     Path.Combine(@"C:\portable", preDeletionBackupRelativePath), "BACKUP", 1, 1));
         }

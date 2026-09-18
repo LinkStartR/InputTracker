@@ -3,7 +3,7 @@ namespace InputTracker.Storage.Tests;
 public sealed class StorageDeletionPreviewTests
 {
     [Fact]
-    public async Task MouseTrajectoryDeletionPreviewIsUnavailableAfterFeatureRemoval()
+    public async Task MouseButtonDeletionNeverCreatesTrajectoryArtifacts()
     {
         using var directory = new TemporaryDirectory();
         StorageLayout layout = StorageLayout.Create(directory.Path);
@@ -11,15 +11,70 @@ public sealed class StorageDeletionPreviewTests
         using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock()))
         {
             database.RegisterDevice(mouse, (int)StorageDeviceKind.Mouse, 0, 1);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 18), "UTC",
+                [StorageMouseButton.Left], NoStorageServiceFaultInjector.Instance);
         }
+        StorageUtcRange day = StoragePeriodResolver.Resolve(
+            StoragePeriodKind.Day, new DateOnly(2026, 9, 18), "UTC").UtcRange;
         using StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock());
 
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.PreviewDeletionAsync(mouse, new StorageUtcRange(0, long.MaxValue)));
+        StorageDeletionPreview preview = await service.PreviewDeletionAsync(mouse, day);
+        service.ExecuteDeletion(preview, preview.Token, "backups/no-trajectory.itbackup");
 
-        Assert.Contains("no longer collects trajectory", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.GetFiles(layout.SpoolDirectory, "*.mspool"));
         Assert.Empty(Directory.GetFiles(layout.ChunkDirectory, "*.mchunk"));
+    }
+
+    [Fact]
+    public async Task MouseButtonFullDayDeletionCreatesBackupAndKeepsOtherDeviceAndDate()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid mouse = Guid.NewGuid();
+        Guid otherMouse = Guid.NewGuid();
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock()))
+        {
+            database.RegisterDevice(mouse, (int)StorageDeviceKind.Mouse, 0, 1);
+            database.RegisterDevice(otherMouse, (int)StorageDeviceKind.Mouse, 0, 1);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 18), "UTC",
+                [StorageMouseButton.Left, StorageMouseButton.Right], NoStorageServiceFaultInjector.Instance);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 18), "UTC",
+                [StorageMouseButton.Left], NoStorageServiceFaultInjector.Instance);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 17), "UTC",
+                [StorageMouseButton.Middle], NoStorageServiceFaultInjector.Instance);
+            database.CommitMouseButtonPresses(otherMouse, new DateOnly(2026, 9, 18), "UTC",
+                [StorageMouseButton.X1], NoStorageServiceFaultInjector.Instance);
+        }
+        StorageUtcRange day = StoragePeriodResolver.Resolve(
+            StoragePeriodKind.Day, new DateOnly(2026, 9, 18), "UTC").UtcRange;
+        StorageDeletionResult deleted;
+        using (StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock()))
+        {
+            StorageDeletionPreview preview = await service.PreviewDeletionAsync(mouse, day);
+
+            Assert.Equal(StorageDeletionCapability.ExactMouseButtonDailyAggregates, preview.Capability);
+            Assert.Equal(2, preview.MouseButtonAggregateCount);
+            Assert.Equal(3, preview.MouseButtonPressCount);
+            Assert.Equal(0, preview.KeyboardAggregateCount);
+
+            deleted = service.ExecuteDeletion(
+                preview, preview.Token, "backups/before-mouse-delete.itbackup");
+
+            Assert.Equal(2, deleted.DeletedMouseButtonAggregateCount);
+            Assert.Equal(3, deleted.DeletedMouseButtonPressCount);
+            Assert.Empty(service.QueryMouseButtonsPeriod(
+                StoragePeriodKind.Day, new DateOnly(2026, 9, 18), "UTC", mouse).Aggregates);
+            Assert.Equal(1, Assert.Single(service.QueryMouseButtonsPeriod(
+                StoragePeriodKind.Day, new DateOnly(2026, 9, 17), "UTC", mouse).Aggregates).PressCount);
+            Assert.Equal(1, Assert.Single(service.QueryMouseButtonsPeriod(
+                StoragePeriodKind.Day, new DateOnly(2026, 9, 18), "UTC", otherMouse).Aggregates).PressCount);
+            Assert.True(File.Exists(deleted.PreDeletionBackup.Path));
+        }
+
+        StorageBackup.Restore(layout, Path.GetRelativePath(layout.ProgramDirectory, deleted.PreDeletionBackup.Path));
+        using StorageService restored = StorageService.OpenForTests(layout, new ControllableStorageClock());
+        Assert.Equal(3, restored.QueryMouseButtonsPeriod(
+            StoragePeriodKind.Day, new DateOnly(2026, 9, 18), "UTC", mouse).Aggregates.Sum(x => x.PressCount));
     }
 
     [Fact]

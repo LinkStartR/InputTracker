@@ -59,8 +59,16 @@ internal sealed class StorageDeletionDisplay
     public long KeyboardAggregateCount => Preview.KeyboardAggregateCount;
     public long KeyboardPressCount => Preview.KeyboardPressCount;
     public long KeyboardHoldDurationMicroseconds => Preview.KeyboardHoldDurationMicroseconds;
-    public bool CanExecute => Preview.Capability == StorageDeletionCapability.ExactKeyboardDailyAggregates
-        && Preview.KeyboardAggregateCount > 0;
+    public long MouseButtonAggregateCount => Preview.MouseButtonAggregateCount;
+    public long MouseButtonPressCount => Preview.MouseButtonPressCount;
+    public long AggregateCount => DeviceKind == StorageDeviceKind.Keyboard
+        ? KeyboardAggregateCount : MouseButtonAggregateCount;
+    public long PressCount => DeviceKind == StorageDeviceKind.Keyboard
+        ? KeyboardPressCount : MouseButtonPressCount;
+    public bool CanExecute =>
+        (Preview.Capability is StorageDeletionCapability.ExactKeyboardDailyAggregates
+            or StorageDeletionCapability.ExactMouseButtonDailyAggregates)
+        && AggregateCount > 0;
     public string Status { get; }
 
     public override string ToString() =>
@@ -144,10 +152,8 @@ internal sealed class AppStorageDataToolsController
         StorageUtcRange range,
         CancellationToken cancellationToken = default)
     {
-        if (expectedKind != StorageDeviceKind.Keyboard)
-        {
-            throw new InvalidOperationException("鼠标轨迹功能已移除，没有可预览的鼠标轨迹删除范围。");
-        }
+        if (expectedKind is not StorageDeviceKind.Keyboard and not StorageDeviceKind.Mouse)
+            throw new InvalidDataException("删除目标类型无效。");
 
         return await RunExclusiveAsync(async () =>
         {
@@ -168,11 +174,13 @@ internal sealed class AppStorageDataToolsController
             string status = preview.Capability switch
             {
                 StorageDeletionCapability.BlockedByCurrentFormat =>
-                    preview.KeyboardAggregateCount == 0
-                        ? "这个键盘在当前范围内没有可删除的记录。"
+                    preview.KeyboardAggregateCount + preview.MouseButtonAggregateCount == 0
+                        ? $"这个{(expectedKind == StorageDeviceKind.Keyboard ? "键盘" : "鼠标")}在当前范围内没有可删除的记录。"
                         : $"这个范围切到了某个统计日的中间，无法准确删除，因此没有改动数据。{preview.BlockedReason}",
                 StorageDeletionCapability.ExactKeyboardDailyAggregates =>
                     $"将删除 {preview.KeyboardPressCount:N0} 次按键（{preview.KeyboardAggregateCount:N0} 条统计），执行前会自动备份。",
+                StorageDeletionCapability.ExactMouseButtonDailyAggregates =>
+                    $"将删除 {preview.MouseButtonPressCount:N0} 次鼠标按键（{preview.MouseButtonAggregateCount:N0} 条统计），执行前会自动备份。",
                 _ => "删除能力状态未知，未执行任何删除。"
             };
             var display = new StorageDeletionDisplay(preview, expectedKind, status);

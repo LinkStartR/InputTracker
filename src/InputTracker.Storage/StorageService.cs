@@ -248,32 +248,30 @@ public sealed class StorageService : IDisposable
         {
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
-            impact = StorageDeletion.DescribeKeyboardImpact(
-                _database.Connection, deviceId, utcRange);
-            if (impact.Kind == StorageDeviceKind.Mouse)
-            {
-                throw new InvalidOperationException(
-                    "Mouse trajectory deletion is unavailable because InputTracker no longer collects trajectory data.");
-            }
+            impact = StorageDeletion.DescribeImpact(_database.Connection, deviceId, utcRange);
             watermark = Health.DurableWatermark;
         }
 
         string fingerprint = StorageDeletion.CreateStateFingerprint(
             deviceId, utcRange, impact, watermark);
-        StorageDeletionCapability capability = impact.HasPartialDayOverlap || impact.Rows.Count == 0
+        StorageDeletionCapability capability = impact.HasPartialDayOverlap || impact.AggregateCount == 0
             ? StorageDeletionCapability.BlockedByCurrentFormat
-            : StorageDeletionCapability.ExactKeyboardDailyAggregates;
+            : impact.Kind == StorageDeviceKind.Keyboard
+                ? StorageDeletionCapability.ExactKeyboardDailyAggregates
+                : StorageDeletionCapability.ExactMouseButtonDailyAggregates;
         var preview = new StorageDeletionPreview(
             deviceId,
             utcRange,
-            impact.Rows.Count,
-            impact.PressCount,
-            impact.HoldDurationMicroseconds,
+            impact.Kind == StorageDeviceKind.Keyboard ? impact.AggregateCount : 0,
+            impact.Kind == StorageDeviceKind.Keyboard ? impact.PressCount : 0,
+            impact.Kind == StorageDeviceKind.Keyboard ? impact.HoldDurationMicroseconds : 0,
+            impact.Kind == StorageDeviceKind.Mouse ? impact.AggregateCount : 0,
+            impact.Kind == StorageDeviceKind.Mouse ? impact.PressCount : 0,
             capability,
             impact.HasPartialDayOverlap
                 ? "The selected UTC range cuts through a stored local-day aggregate; InputTracker will not estimate a partial deletion."
-                : impact.Rows.Count == 0
-                    ? "The selected range contains no matching keyboard aggregate records."
+                : impact.AggregateCount == 0
+                    ? "The selected range contains no matching daily aggregate records."
                     : null,
             StorageDeletion.CreateToken(fingerprint),
             fingerprint);
@@ -306,13 +304,14 @@ public sealed class StorageService : IDisposable
             {
                 throw new InvalidOperationException("Deletion confirmation token does not match its preview.");
             }
-            if (preview.Capability != StorageDeletionCapability.ExactKeyboardDailyAggregates)
+            if (preview.Capability is not StorageDeletionCapability.ExactKeyboardDailyAggregates
+                and not StorageDeletionCapability.ExactMouseButtonDailyAggregates)
             {
                 throw new InvalidOperationException(
                     preview.BlockedReason ?? "Deletion is blocked by the current storage format.");
             }
 
-            StorageDeletionImpact current = StorageDeletion.DescribeKeyboardImpact(
+            StorageDeletionImpact current = StorageDeletion.DescribeImpact(
                 _database.Connection, preview.DeviceId, preview.UtcRange);
             StorageDurableWatermark watermark = new(
                 _ordinals.CommitOrdinal,
@@ -322,27 +321,34 @@ public sealed class StorageService : IDisposable
                 preview.DeviceId, preview.UtcRange, current, watermark);
             if (!StorageDeletion.FixedTimeTokenEquals(currentFingerprint, preview.StateFingerprint)
                 || current.HasPartialDayOverlap
-                || current.Rows.Count != preview.KeyboardAggregateCount
-                || current.PressCount != preview.KeyboardPressCount
-                || current.HoldDurationMicroseconds != preview.KeyboardHoldDurationMicroseconds)
+                || current.KeyboardRows.Count != preview.KeyboardAggregateCount
+                || (current.Kind == StorageDeviceKind.Keyboard ? current.PressCount : 0) != preview.KeyboardPressCount
+                || current.HoldDurationMicroseconds != preview.KeyboardHoldDurationMicroseconds
+                || current.MouseButtonRows.Count != preview.MouseButtonAggregateCount
+                || (current.Kind == StorageDeviceKind.Mouse ? current.PressCount : 0) != preview.MouseButtonPressCount
+                || (current.Kind == StorageDeviceKind.Keyboard
+                    && preview.Capability != StorageDeletionCapability.ExactKeyboardDailyAggregates)
+                || (current.Kind == StorageDeviceKind.Mouse
+                    && preview.Capability != StorageDeletionCapability.ExactMouseButtonDailyAggregates))
             {
                 throw new InvalidOperationException(
                     "Stored data changed after the deletion preview; review the range again before deleting.");
             }
-            if (current.Rows.Count == 0)
+            if (current.AggregateCount == 0)
             {
-                throw new InvalidOperationException("The selected range has no keyboard records to delete.");
+                throw new InvalidOperationException("The selected range has no records to delete.");
             }
 
             StorageBackupArtifact backup = StorageBackup.Create(_database, preDeletionBackupRelativePath);
-            long deleted = StorageDeletion.DeleteKeyboardRows(
-                _database.Connection, preview.DeviceId, current.Rows);
+            long deleted = StorageDeletion.DeleteRows(_database.Connection, preview.DeviceId, current);
             return new StorageDeletionResult(
                 preview.DeviceId,
                 preview.UtcRange,
-                deleted,
-                current.PressCount,
-                current.HoldDurationMicroseconds,
+                current.Kind == StorageDeviceKind.Keyboard ? deleted : 0,
+                current.Kind == StorageDeviceKind.Keyboard ? current.PressCount : 0,
+                current.Kind == StorageDeviceKind.Keyboard ? current.HoldDurationMicroseconds : 0,
+                current.Kind == StorageDeviceKind.Mouse ? deleted : 0,
+                current.Kind == StorageDeviceKind.Mouse ? current.PressCount : 0,
                 backup);
         }
     }

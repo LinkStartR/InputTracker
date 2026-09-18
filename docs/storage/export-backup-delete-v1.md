@@ -16,11 +16,11 @@
 - The restore commit point is deletion of the operation journal after the installed store reopens successfully. Resolved staging and rollback directories are then removed only after every traversed object has passed reparse checks.
 - Unknown live files are not claimed as committed backup data and are not silently deleted by restore.
 
-## Keyboard range deletion
+## Daily aggregate range deletion
 
-- Mouse trajectory collection and playback have been removed. This operation applies only to one explicitly selected keyboard.
+- Mouse trajectory collection and playback remain removed. The user explicitly chooses either one keyboard's daily key statistics or one mouse's daily button statistics; mouse movement, coordinates, wheel data, and trajectory files are not restored or created.
 - `PreviewDeletionAsync` accepts a UTC half-open range `[start,end)`. It resolves every overlapping `capture_local_date` with that row's stored Windows time-zone identifier. Execution is available only when every overlapping local-day bucket lies wholly inside the selected range; a partial day or mixed-zone boundary fails closed instead of estimating counts.
-- The preview fingerprint covers the device, range, durable ordinals, every targeted physical-key row, its local date/time zone, press count, and hold duration. The 64-character confirmation token is tied to that fingerprint. Any data change after preview makes execution fail and requires a new preview.
+- The preview fingerprint covers the device, range, durable ordinals, every targeted physical-key or mouse-button row, its local date/time zone, press count, and keyboard hold duration when applicable. The 64-character confirmation token is tied to that fingerprint. Any data change after preview makes execution fail and requires a new preview.
 - Execution requires Created, user-paused, or Stopped Storage with no accepted writes, open holds, or pending aggregates. The App narrows this to an explicit user pause and a final `Yes/No` warning.
 - Before deletion, InputTracker creates a complete `.itbackup` inside the program directory. It then deletes only the confirmed device's fully contained daily buckets in one SQLite transaction and verifies the exact row count before commit. A process failure before commit leaves the database unchanged; after commit the pre-delete backup remains available for offline restore.
 - An empty range, partial local day, unsupported device, stale preview, wrong token, unsafe lifecycle state, backup failure, or changed row count performs no deletion. Proportional subtraction is forbidden.

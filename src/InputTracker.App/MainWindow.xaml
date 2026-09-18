@@ -835,7 +835,17 @@
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="删除与恢复" />
                                         <TextBlock Margin="0,8,0,0" Text="动手前先看清会改动哪些记录" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="先暂停采集，再删除当前所选键盘和时间范围内的统计。程序会先说明数量、创建完整备份，并在最终确认后执行。"
+                                                   Text="先暂停采集，再选择删除键盘统计或鼠标按键统计。程序会先说明数量、创建完整备份，并在最终确认后执行。"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="删除内容" FontWeight="SemiBold" />
+                                        <ComboBox x:Name="DeletionKindSelector" Width="170" HorizontalAlignment="Left"
+                                                  Margin="0,6,0,0">
+                                            <ComboBoxItem Content="键盘统计" Tag="Keyboard" IsSelected="True" />
+                                            <ComboBoxItem Content="鼠标按键统计" Tag="Mouse" />
+                                        </ComboBox>
+                                        <TextBlock Margin="0,6,0,12"
+                                                   Text="设备沿用键盘热力图或鼠标按键页中当前选择的设备。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"

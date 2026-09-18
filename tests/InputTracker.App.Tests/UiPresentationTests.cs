@@ -186,6 +186,17 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
+    public void DataToolsLetsUserChooseKeyboardOrMouseButtonDeletion()
+    {
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("x:Name=\"DeletionKindSelector\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"键盘统计\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"鼠标按键统计\"", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("鼠标轨迹", windowXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DefaultKeyboardLayoutCoversMainModifiersNavigationArrowsAndNumpad()
     {
         KeyboardLayoutModel layout = KeyboardLayoutModel.CreateDefault();

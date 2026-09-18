@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         ExportKeyboardButton.IsEnabled = dataToolsAvailable;
         CreateBackupButton.IsEnabled = dataToolsAvailable;
         PreviewKeyboardDeletionButton.IsEnabled = dataToolsAvailable;
+        DeletionKindSelector.IsEnabled = dataToolsAvailable;
         ValidateRestoreButton.IsEnabled = dataToolsAvailable;
         if (!dataToolsAvailable)
         {
@@ -82,6 +83,7 @@ public partial class MainWindow : Window
         SetDataToolsEnabled(false);
         RefreshDashboardButton.IsEnabled = false;
         PeriodSelector.IsEnabled = false;
+        DeletionKindSelector.IsEnabled = false;
         KeyboardDeviceSelector.IsEnabled = false;
         MouseDeviceSelector.IsEnabled = false;
         KeyboardAliasInput.IsEnabled = false;
@@ -234,18 +236,28 @@ public partial class MainWindow : Window
         });
 
     private async void PreviewKeyboardDeletionButton_Click(object sender, RoutedEventArgs e) =>
-        await DeleteKeyboardRangeAsync(_dashboard?.SelectedKeyboardDeviceId);
+        await DeleteSelectedRangeAsync();
 
-    private async Task DeleteKeyboardRangeAsync(Guid? deviceId) =>
+    private async Task DeleteSelectedRangeAsync() =>
         await RunDataToolAsync(async () =>
         {
+            StorageDeviceKind kind = DeletionKindSelector.SelectedItem is ComboBoxItem item
+                && Enum.TryParse(item.Tag?.ToString(), out StorageDeviceKind selectedKind)
+                    ? selectedKind
+                    : throw new InvalidOperationException("请选择要删除键盘统计还是鼠标按键统计。");
+            Guid? deviceId = kind == StorageDeviceKind.Keyboard
+                ? _dashboard?.SelectedKeyboardDeviceId
+                : _dashboard?.SelectedMouseDeviceId;
             if (_dataTools is null || _dashboard?.ResolvedPeriod is not { } period || deviceId is not Guid selected)
             {
-                throw new InvalidOperationException("请先选择一个键盘并完成当前周期读取。");
+                throw new InvalidOperationException(
+                    kind == StorageDeviceKind.Keyboard
+                        ? "请先在键盘热力图中选择一个键盘。"
+                        : "请先在鼠标按键页选择一只鼠标。");
             }
 
             StorageDeletionDisplay preview = await _dataTools.PreviewDeletionAsync(
-                selected, StorageDeviceKind.Keyboard, period.UtcRange);
+                selected, kind, period.UtcRange);
             if (!preview.CanExecute)
             {
                 if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = preview.Status;
@@ -255,10 +267,11 @@ public partial class MainWindow : Window
             string localRange = period.LocalEndDate == period.LocalStartDate.AddDays(1)
                 ? period.LocalStartDate.ToString("yyyy-MM-dd")
                 : $"{period.LocalStartDate:yyyy-MM-dd} 至 {period.LocalEndDate.AddDays(-1):yyyy-MM-dd}";
+            string target = kind == StorageDeviceKind.Keyboard ? "键盘统计" : "鼠标按键统计";
             MessageBoxResult confirmation = System.Windows.MessageBox.Show(
-                $"将永久删除所选键盘在 {localRange} 的 {preview.KeyboardPressCount:N0} 次按键统计。\n\n"
+                $"将永久删除所选设备在 {localRange} 的 {preview.PressCount:N0} 次{target}。\n\n"
                 + "删除前会自动创建完整备份；其他设备和其他日期不受影响。是否继续？",
-                "最终确认 · 删除键盘统计",
+                $"最终确认 · 删除{target}",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);
@@ -272,7 +285,8 @@ public partial class MainWindow : Window
                 preview, finalConfirmed: true);
             if (CanUpdateDataToolsUi())
                 DataToolsStatusText.Text =
-                    $"已删除 {result.DeletedKeyboardPressCount:N0} 次按键统计。删除前备份：{result.PreDeletionBackup.Path}";
+                    $"已删除 {(kind == StorageDeviceKind.Keyboard ? result.DeletedKeyboardPressCount : result.DeletedMouseButtonPressCount):N0} 次{target}。"
+                    + $"删除前备份：{result.PreDeletionBackup.Path}";
         });
 
     private void ValidateRestoreButton_Click(object sender, RoutedEventArgs e)
@@ -354,6 +368,7 @@ public partial class MainWindow : Window
         ExportKeyboardButton.IsEnabled = enabled;
         CreateBackupButton.IsEnabled = enabled;
         PreviewKeyboardDeletionButton.IsEnabled = enabled;
+        DeletionKindSelector.IsEnabled = enabled;
         ValidateRestoreButton.IsEnabled = enabled;
     }
 
