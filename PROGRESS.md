@@ -1495,3 +1495,11 @@
 - 红证据：产品实现前定向 Storage test exit `1`，精确出现 16 个编译错误，缺少 `ResolveRange`、Custom kind、batch preview/result、batch execute 和 range query，证明旧版本没有这两项能力。首次 solution build 又以 4 个错误指出测试替身未覆盖新增接口；只补兼容的默认 fail-closed seam 后继续。
 - 绿证据：Storage 定向 `19 passed / 0 failed / 0 skipped`；App 定向 `4/0/0`。solution Release build exit `0`，7 个项目、0 warnings / 0 errors、1.17s；Storage non-Spike `215/0/0`、5s；App 全量 `146/0/0`、268ms。XAML XML parse 成功，`git diff --check` 无空白错误（仅 LF→CRLF 提示），产品界面继续无“鼠标轨迹”文本。
 - 未验证/下一步：未启动 GUI、未操作任何既有测试包或用户数据；原生日历弹层、深浅主题观感、查看范围实际刷新、删除日期独立性和“全部”删除后的备份/重启结果留给下一份全新绿色测试目录人工验证。通过前不推进 SQLite 升级或最终统一验收。
+
+## 2026-09-18 日期范围与全部删除人工测试包
+
+- 产品提交：`30c14c3 feat: add date ranges and combined deletion`；21 个文件，只涉及 Storage 日期查询/删除、App 日期/删除 UI、普通测试和相应文档。未修改 `tests/Acceptance/**`、`scripts/verify.ps1`、依赖、权限或 GitHub。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/date-range-all-delete-test-20260918`，exit `0`；Input、Storage、App 成功，目录为全新发布且没有 `data`。
+- 交付物：`.tools/publish/date-range-all-delete-test-20260918/InputTracker.exe`；484 files，SHA-256 `4F5D3DA7583EC6926C4B5A4E61610668DAFD8759D3AA72984E9C163AEF3C4ECE`。
+- 自检：PowerShell 首次直接调用 GUI 子系统 exe 未同步返回，因而 `$LASTEXITCODE` 为空且瞬时观察到 1 个进程；该进程在精确路径终止检查前已自行退出，未操作数据。随后用 `Start-Process -WindowStyle Hidden -PassThru -Wait --self-check` 权威复跑，exit `0`、该包残留进程 `0`、`HAS_DATA=False`。
+- 人工停点：执行者未启动 GUI。用户一次检查查看日期、删除日期和“全部”删除；收到结果前停止推进后续 SQLite 升级或最终验收。
