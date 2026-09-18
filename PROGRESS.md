@@ -1529,3 +1529,11 @@
 - 红证据：先新增未命名设备与删除菜单断言，定向 test exit `1`，2 个编译错误精确指出 `FormatDeviceDisplayName` 尚无 ordinal 参数；实现后首次 build 又以 2 个 CS0136 精确指出局部变量名冲突，只改名后继续，未改变行为。
 - 绿证据：定向 `3 passed / 0 failed / 0 skipped`；App 全量 `149/0/0`、254ms；solution Release build exit `0`，7 项目、0 warnings / 0 errors、2.62s。XAML XML parse 成功；产品 App 无 GUID 截断显示代码，`git diff --check` 无空白错误（仅 LF→CRLF 提示）。
 - 未验证/下一步：执行者不启动 GUI。删除类型切换时菜单显隐、默认编号、别名同步、具体设备删除不串线及日期 UI 观感留给新绿色测试包人工检查，收到结果前停止推进。
+
+## 2026-09-18 设备名称与删除目标人工测试包
+
+- 产品提交：`8eccfa6 fix: add friendly device names to deletion`；5 个文件，只涉及 App 设备显示/删除目标 UI、普通测试和 `PROGRESS.md`。未修改 Storage schema、`tests/Acceptance/**`、`scripts/verify.ps1`、依赖、权限或 GitHub。
+- 发布：`.tools/dotnet/dotnet.exe publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\device-delete-selector-test-20260918`。沙箱内首次因无权读取 `C:\Users\Administrator\AppData\Local\Microsoft SDKs` 而在 SDK 探测阶段 exit `1`，未进入源码发布；按用户已授权的仓库本地 .NET build/test 范围在主机权限下原命令复跑 exit `0`，Input、Storage、App 均成功。
+- 交付物：`.tools/publish/device-delete-selector-test-20260918/InputTracker.exe`；484 files，SHA-256 `119787ADDAE258C9B555BCD63862CDB973789068C5FEBADC06F069E3BD53C815`。全新目录，没有复制历史数据，数据目录项数量 `0`。
+- 自检：隐藏运行 `InputTracker.exe --self-check`，exit `0`；该精确路径残留进程 `0`。执行者未启动 GUI。
+- 人工停点：只检查默认设备名、别名一致性、删除类型对应的设备菜单、确认对话框目标和按设备删除隔离；收到结果前不推进下一项。
