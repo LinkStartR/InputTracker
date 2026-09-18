@@ -1544,3 +1544,10 @@
 - 实现：设备菜单现在只显示用户别名，未命名时只显示“键盘N / 鼠标N”。同型号且无序列号设备可能混淆的说明移到键盘和鼠标改名区域下方，继续明确风险但不污染名称。
 - 红证据：先把两个名称测试收紧为精确文本，旧实现 `2 failed / 0 passed / 0 skipped`，实际值分别多出“· 已记住，同型号设备可能混淆”和“· 重连后可能显示为新设备”。
 - 绿证据：修改后 App 全量测试 `149 passed / 0 failed / 0 skipped`、272ms。未启动 GUI、未操作用户数据；下一步只提交并发布新的绿色测试目录，然后停止等待人工确认。
+
+## 2026-09-18 精简设备名称人工测试包
+
+- 产品提交：`ab3d958 fix: keep device menu names concise`；5 个文件，只调整设备名称显示、改名区域风险提示、普通测试和进度记录。
+- 发布：`.tools/dotnet/dotnet.exe publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\concise-device-name-test-20260918`，exit `0`；Input、Storage、App 均成功。
+- 交付物：`.tools/publish/concise-device-name-test-20260918/InputTracker.exe`；484 files，SHA-256 `35B78AD00882C36FB0447B76B163353F14D531D667F51E2979BECE0BC1835798`。全新目录，数据目录项数量 `0`。
+- 隐藏 `--self-check` exit `0`，该精确路径残留进程 `0`。执行者未启动 GUI；人工只需确认各设备菜单仅显示名称，收到结果前停止推进。
