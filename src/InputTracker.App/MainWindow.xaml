@@ -1,6 +1,7 @@
 <Window x:Class="InputTracker.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:InputTracker"
         Title="InputTracker"
         Width="1280" Height="800" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterScreen"
@@ -520,19 +521,8 @@
                         <TextBlock VerticalAlignment="Center" Margin="0,0,10,0" Text="查看范围"
                                    FontSize="12" FontWeight="SemiBold"
                                    Foreground="{DynamicResource SecondaryTextBrush}" />
-                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
-                                Tag="1" Click="ViewPresetButton_Click" Content="今天" />
-                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
-                                Tag="7" Click="ViewPresetButton_Click" Content="7 天" />
-                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
-                                Tag="14" Click="ViewPresetButton_Click" Content="14 天" />
-                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,10,0"
-                                Tag="30" Click="ViewPresetButton_Click" Content="30 天" />
-                        <DatePicker x:Name="ViewStartDatePicker" Width="128" Height="36" Margin="0,0,6,0"
-                                    SelectedDateChanged="ViewDatePicker_SelectedDateChanged" />
-                        <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="至" />
-                        <DatePicker x:Name="ViewEndDatePicker" Width="128" Height="36" Margin="0,0,10,0"
-                                    SelectedDateChanged="ViewDatePicker_SelectedDateChanged" />
+                        <local:DateRangePicker x:Name="ViewDateRangePicker" Width="280" Margin="0,0,10,0"
+                                               RangeChanged="ViewDateRangePicker_RangeChanged" />
                         <Button x:Name="RefreshDashboardButton" Style="{StaticResource SoftButtonStyle}"
                                 Margin="0" Click="RefreshDashboardButton_Click" Content="立即刷新" />
                     </WrapPanel>
@@ -842,21 +832,11 @@
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <TextBlock Text="删除日期" FontWeight="SemiBold" />
-                                        <WrapPanel x:Name="DeletionPresetControls" Margin="0,6,0,6">
-                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
-                                                    Tag="1" Click="DeletionPresetButton_Click" Content="今天" />
-                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
-                                                    Tag="7" Click="DeletionPresetButton_Click" Content="7 天" />
-                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
-                                                    Tag="14" Click="DeletionPresetButton_Click" Content="14 天" />
-                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0"
-                                                    Tag="30" Click="DeletionPresetButton_Click" Content="30 天" />
-                                        </WrapPanel>
-                                        <WrapPanel x:Name="DeletionDateControls" Margin="0,0,0,12">
-                                            <DatePicker x:Name="DeletionStartDatePicker" Width="128" Height="36" Margin="0,0,6,0" />
-                                            <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="至" />
-                                            <DatePicker x:Name="DeletionEndDatePicker" Width="128" Height="36" />
-                                        </WrapPanel>
+                                        <StackPanel x:Name="DeletionDateControls" Margin="0,6,0,12">
+                                            <local:DateRangePicker x:Name="DeletionDateRangePicker" Width="280"
+                                                                   HorizontalAlignment="Left"
+                                                                   PopupHorizontalOffset="-220" />
+                                        </StackPanel>
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
                                                 Click="PreviewKeyboardDeletionButton_Click" Content="查看并删除所选记录" />
                                         <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"

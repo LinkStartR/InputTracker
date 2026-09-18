@@ -21,7 +21,6 @@ public partial class MainWindow : Window
     private bool _dashboardRefreshPending;
     private bool _updatingDeviceSelectors;
     private bool _deviceAliasChangeInProgress;
-    private bool _updatingViewDates;
 
     internal MainWindow(
         CollectionController collection,
@@ -36,15 +35,9 @@ public partial class MainWindow : Window
         _dashboard = dashboard;
         _startup = startup;
         _dataTools = dataTools;
-        DateTime today = DateTime.Today;
-        ViewStartDatePicker.SelectedDate = today;
-        ViewEndDatePicker.SelectedDate = today;
-        ViewStartDatePicker.DisplayDateEnd = today;
-        ViewEndDatePicker.DisplayDateEnd = today;
-        DeletionStartDatePicker.SelectedDate = today;
-        DeletionEndDatePicker.SelectedDate = today;
-        DeletionStartDatePicker.DisplayDateEnd = today;
-        DeletionEndDatePicker.DisplayDateEnd = today;
+        DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+        ViewDateRangePicker.SetRange(today, today, today);
+        DeletionDateRangePicker.SetRange(today, today, today);
         _collection.Changed += Collection_Changed;
         _dashboardRefreshTimer.Tick += DashboardRefreshTimer_Tick;
         IsVisibleChanged += MainWindow_IsVisibleChanged;
@@ -248,42 +241,9 @@ public partial class MainWindow : Window
     private async void PreviewKeyboardDeletionButton_Click(object sender, RoutedEventArgs e) =>
         await DeleteSelectedRangeAsync();
 
-    private async void ViewPresetButton_Click(object sender, RoutedEventArgs e)
+    private async void ViewDateRangePicker_RangeChanged(object? sender, EventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: string raw }
-            || !int.TryParse(raw, out int days)) return;
-        ApplyDatePreset(ViewStartDatePicker, ViewEndDatePicker, days, suppressViewRefresh: true);
-        await RefreshDashboardAsync();
-    }
-
-    private async void ViewDatePicker_SelectedDateChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_updatingViewDates || !IsLoaded) return;
-        if (ViewStartDatePicker.SelectedDate is not null && ViewEndDatePicker.SelectedDate is not null)
-            await RefreshDashboardAsync();
-    }
-
-    private void DeletionPresetButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement { Tag: string raw }
-            || !int.TryParse(raw, out int days)) return;
-        ApplyDatePreset(DeletionStartDatePicker, DeletionEndDatePicker, days, suppressViewRefresh: false);
-    }
-
-    private void ApplyDatePreset(DatePicker startPicker, DatePicker endPicker, int days, bool suppressViewRefresh)
-    {
-        AppDateRangeSelection range = AppDateRangeSelection.EndingToday(
-            days, DateOnly.FromDateTime(DateTime.Today));
-        if (suppressViewRefresh) _updatingViewDates = true;
-        try
-        {
-            startPicker.SelectedDate = range.InclusiveStartDate.ToDateTime(TimeOnly.MinValue);
-            endPicker.SelectedDate = range.InclusiveEndDate.ToDateTime(TimeOnly.MinValue);
-        }
-        finally
-        {
-            if (suppressViewRefresh) _updatingViewDates = false;
-        }
+        if (IsLoaded) await RefreshDashboardAsync();
     }
 
     private async Task DeleteSelectedRangeAsync() =>
@@ -295,8 +255,9 @@ public partial class MainWindow : Window
                 && Enum.TryParse(item.Tag?.ToString(), out DeletionTargetKind selectedKind)
                     ? selectedKind
                     : throw new InvalidOperationException("请选择键盘、鼠标按键或全部。");
-            AppDateRangeSelection dates = AppDateRangeSelection.Create(
-                DeletionStartDatePicker.SelectedDate, DeletionEndDatePicker.SelectedDate);
+            AppDateRangeSelection dates = new(
+                DeletionDateRangePicker.InclusiveStartDate,
+                DeletionDateRangePicker.InclusiveEndDate);
             StorageResolvedPeriod period = StoragePeriodResolver.ResolveRange(
                 dates.InclusiveStartDate, dates.InclusiveEndDate, TimeZoneInfo.Local.Id);
             string localRange = dates.InclusiveStartDate == dates.InclusiveEndDate
@@ -452,7 +413,6 @@ public partial class MainWindow : Window
         CreateBackupButton.IsEnabled = enabled;
         PreviewKeyboardDeletionButton.IsEnabled = enabled;
         DeletionKindSelector.IsEnabled = enabled;
-        DeletionPresetControls.IsEnabled = enabled;
         DeletionDateControls.IsEnabled = enabled;
         ValidateRestoreButton.IsEnabled = enabled;
     }
@@ -589,10 +549,8 @@ public partial class MainWindow : Window
 
                 _dashboard.AnchorDate = DateOnly.FromDateTime(DateTime.Today);
                 _dashboard.TimeZoneId = TimeZoneInfo.Local.Id;
-                AppDateRangeSelection viewDates = AppDateRangeSelection.Create(
-                    ViewStartDatePicker.SelectedDate, ViewEndDatePicker.SelectedDate);
-                _dashboard.CustomStartDate = viewDates.InclusiveStartDate;
-                _dashboard.CustomEndDate = viewDates.InclusiveEndDate;
+                _dashboard.CustomStartDate = ViewDateRangePicker.InclusiveStartDate;
+                _dashboard.CustomEndDate = ViewDateRangePicker.InclusiveEndDate;
                 _dashboard.SelectedKeyboardDeviceId = KeyboardDeviceSelector.SelectedValue is Guid keyboardId
                     ? keyboardId : null;
                 _dashboard.SelectedMouseDeviceId = MouseDeviceSelector.SelectedValue is Guid mouseId

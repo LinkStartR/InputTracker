@@ -1503,3 +1503,12 @@
 - 交付物：`.tools/publish/date-range-all-delete-test-20260918/InputTracker.exe`；484 files，SHA-256 `4F5D3DA7583EC6926C4B5A4E61610668DAFD8759D3AA72984E9C163AEF3C4ECE`。
 - 自检：PowerShell 首次直接调用 GUI 子系统 exe 未同步返回，因而 `$LASTEXITCODE` 为空且瞬时观察到 1 个进程；该进程在精确路径终止检查前已自行退出，未操作数据。随后用 `Start-Process -WindowStyle Hidden -PassThru -Wait --self-check` 权威复跑，exit `0`、该包残留进程 `0`、`HAS_DATA=False`。
 - 人工停点：执行者未启动 GUI。用户一次检查查看日期、删除日期和“全部”删除；收到结果前停止推进后续 SQLite 升级或最终验收。
+
+## 2026-09-18 自定义日期范围界面
+
+- 人工反馈：上一测试包功能可用，但原生 WPF `DatePicker` 外观与 InputTracker 卡片、圆角和强调色体系严重不一致，视觉不通过。本轮只重做日期交互外观，保持查看/删除范围独立、日期语义、Storage 查询及删除事务不变。
+- 最小方案：移除全部系统 `DatePicker`，新增一个复用的本地 `DateRangePicker`。常态只显示日期范围按钮；弹层使用现有浅/深动态画刷、Microsoft YaHei UI、圆角卡片和单一紫色强调色，内含今天/7/14/30 天、开始/结束摘要、月份切换、六周日历、范围高亮、取消/确定。只允许选择今天及以前，不增加第三方 UI 库或时间选择。
+- 布局：查看区弹层向右展开，删除卡片内的弹层向左展开，避免两处共用固定偏移而越出窗口。两个控件继续各自保存选择；只有查看区确定后会立即刷新统计，删除区确定后只改变待删除日期。
+- 红证据：先把 UI 回归改为要求自定义 picker 并增加纯状态测试，定向 test exit `1`，4 个编译错误精确缺少 `DateRangeCalendarState` / `DateRangeDayCell`，旧 XAML 仍含系统日期框。
+- 绿证据：定向日期测试 `5 passed / 0 failed / 0 skipped`；solution Release build exit `0`，7 项目、0 warnings / 0 errors、2.64s；App 全量 `148/0/0`、257ms。两个 XAML 均通过 XML parse，产品 XAML 无 `<DatePicker` 或系统 `Calendar`，`git diff --check` 无空白错误（仅 LF→CRLF 提示）。
+- 未验证/下一步：执行者不启动 GUI；弹层实际位置、浅深色、月份切换、两次点选范围、快捷项、取消/确定及删除回归交给新的绿色测试包人工检查，收到结果前停止推进。
