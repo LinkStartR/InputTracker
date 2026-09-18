@@ -1512,3 +1512,11 @@
 - 红证据：先把 UI 回归改为要求自定义 picker 并增加纯状态测试，定向 test exit `1`，4 个编译错误精确缺少 `DateRangeCalendarState` / `DateRangeDayCell`，旧 XAML 仍含系统日期框。
 - 绿证据：定向日期测试 `5 passed / 0 failed / 0 skipped`；solution Release build exit `0`，7 项目、0 warnings / 0 errors、2.64s；App 全量 `148/0/0`、257ms。两个 XAML 均通过 XML parse，产品 XAML 无 `<DatePicker` 或系统 `Calendar`，`git diff --check` 无空白错误（仅 LF→CRLF 提示）。
 - 未验证/下一步：执行者不启动 GUI；弹层实际位置、浅深色、月份切换、两次点选范围、快捷项、取消/确定及删除回归交给新的绿色测试包人工检查，收到结果前停止推进。
+
+## 2026-09-18 自定义日期范围界面人工测试包
+
+- 产品提交：`0bbdbc0 fix: replace native date pickers`；7 个文件，只替换日期 UI、增加纯日期选择状态和普通 App 回归，Storage 查询、删除协议、依赖与权限不变。
+- 发布：`.tools/dotnet/dotnet.exe publish src/InputTracker.App/InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools/publish/styled-date-range-test-20260918`，exit `0`；新目录无 `data`。
+- 交付物：`.tools/publish/styled-date-range-test-20260918/InputTracker.exe`；484 files，SHA-256 `D6AF48DFA74C70E56CCAD272B93DCF2909AA85047C10C33DF2A787F10EEA7E52`。
+- 隐藏 `--self-check` exit `0`；该包残留进程 `0`，`HAS_DATA=False`。执行者未启动 GUI。
+- 人工停点：只检查日期范围按钮与弹层的视觉、浅深色、快捷项、月份切换、两次点选、取消/确定，以及查看/删除两处范围仍彼此独立。收到结果前不推进其他事项。
