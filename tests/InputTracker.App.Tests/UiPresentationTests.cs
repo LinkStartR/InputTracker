@@ -194,6 +194,9 @@ public sealed class UiPresentationTests
         Assert.Contains("Content=\"键盘统计\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"鼠标按键统计\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"全部（键盘 + 鼠标）\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DeletionKeyboardDeviceSelector\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DeletionMouseDeviceSelector\"", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("设备沿用键盘热力图或鼠标按键页中当前选择的设备", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ViewDateRangePicker\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"DeletionDateRangePicker\"", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<DatePicker", windowXaml, StringComparison.Ordinal);
@@ -205,6 +208,11 @@ public sealed class UiPresentationTests
         Assert.DoesNotContain("<DatePicker", pickerXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Calendar ", pickerXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("鼠标轨迹", windowXaml, StringComparison.Ordinal);
+
+        string windowCode = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(), "src", "InputTracker.App", "MainWindow.xaml.cs"));
+        Assert.Contains("DeletionKeyboardDeviceSelector.SelectedValue", windowCode, StringComparison.Ordinal);
+        Assert.Contains("DeletionMouseDeviceSelector.SelectedValue", windowCode, StringComparison.Ordinal);
     }
 
     [Fact]

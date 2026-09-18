@@ -159,6 +159,30 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
+    public void UnnamedDevicesUseKindAndStableOrdinalInsteadOfGuidText()
+    {
+        var keyboard = new StorageDeviceInfo(
+            Guid.Parse("11111111-2222-3333-4444-555555555555"),
+            StorageDeviceKind.Keyboard,
+            StorageDeviceIdentityConfidence.TransientInterface,
+            StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier,
+            null, 1, 2);
+        var mouse = keyboard with
+        {
+            DeviceId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            Kind = StorageDeviceKind.Mouse
+        };
+
+        string keyboardLabel = MainWindow.FormatDeviceDisplayName(keyboard, 2);
+        string mouseLabel = MainWindow.FormatDeviceDisplayName(mouse, 3);
+
+        Assert.StartsWith("键盘2 · ", keyboardLabel, StringComparison.Ordinal);
+        Assert.StartsWith("鼠标3 · ", mouseLabel, StringComparison.Ordinal);
+        Assert.DoesNotContain("11111111", keyboardLabel, StringComparison.Ordinal);
+        Assert.DoesNotContain("aaaaaaaa", mouseLabel, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RenameDeviceUpdatesDisplayWithoutChangingDeviceId()
     {
         Guid keyboard = Guid.NewGuid();

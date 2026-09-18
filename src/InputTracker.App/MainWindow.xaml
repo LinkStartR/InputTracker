@@ -817,7 +817,7 @@
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="删除与恢复" />
                                         <TextBlock Margin="0,8,0,0" Text="动手前先看清会改动哪些记录" FontSize="17" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,16"
-                                                   Text="先暂停采集，再选择删除键盘统计或鼠标按键统计。程序会先说明数量、创建完整备份，并在最终确认后执行。"
+                                                   Text="先暂停采集，再选择删除内容、具体设备和日期。程序会先说明数量、创建完整备份，并在最终确认后执行。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                         <TextBlock Text="删除内容" FontWeight="SemiBold" />
@@ -828,9 +828,22 @@
                                             <ComboBoxItem Content="全部（键盘 + 鼠标）" Tag="All" />
                                         </ComboBox>
                                         <TextBlock Margin="0,6,0,10"
-                                                   Text="设备沿用键盘热力图或鼠标按键页中当前选择的设备。"
+                                                   Text="在下面明确选择要删除记录的设备。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
+                                        <StackPanel x:Name="DeletionKeyboardDevicePanel" Margin="0,0,0,10">
+                                            <TextBlock Text="键盘设备" FontWeight="SemiBold" />
+                                            <ComboBox x:Name="DeletionKeyboardDeviceSelector" Width="280"
+                                                      Margin="0,6,0,0" HorizontalAlignment="Left"
+                                                      DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" />
+                                        </StackPanel>
+                                        <StackPanel x:Name="DeletionMouseDevicePanel" Margin="0,0,0,10"
+                                                    Visibility="Collapsed">
+                                            <TextBlock Text="鼠标设备" FontWeight="SemiBold" />
+                                            <ComboBox x:Name="DeletionMouseDeviceSelector" Width="280"
+                                                      Margin="0,6,0,0" HorizontalAlignment="Left"
+                                                      DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId" />
+                                        </StackPanel>
                                         <TextBlock Text="删除日期" FontWeight="SemiBold" />
                                         <StackPanel x:Name="DeletionDateControls" Margin="0,6,0,12">
                                             <local:DateRangePicker x:Name="DeletionDateRangePicker" Width="280"

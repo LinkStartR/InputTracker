@@ -35,6 +35,8 @@ public partial class MainWindow : Window
         _dashboard = dashboard;
         _startup = startup;
         _dataTools = dataTools;
+        DeletionKindSelector.SelectionChanged += DeletionKindSelector_SelectionChanged;
+        UpdateDeletionDeviceSelectorVisibility();
         DateOnly today = DateOnly.FromDateTime(DateTime.Today);
         ViewDateRangePicker.SetRange(today, today, today);
         DeletionDateRangePicker.SetRange(today, today, today);
@@ -51,6 +53,8 @@ public partial class MainWindow : Window
         CreateBackupButton.IsEnabled = dataToolsAvailable;
         PreviewKeyboardDeletionButton.IsEnabled = dataToolsAvailable;
         DeletionKindSelector.IsEnabled = dataToolsAvailable;
+        DeletionKeyboardDeviceSelector.IsEnabled = dataToolsAvailable;
+        DeletionMouseDeviceSelector.IsEnabled = dataToolsAvailable;
         ValidateRestoreButton.IsEnabled = dataToolsAvailable;
         if (!dataToolsAvailable)
         {
@@ -87,6 +91,8 @@ public partial class MainWindow : Window
         RefreshDashboardButton.IsEnabled = false;
         ViewRangeControls.IsEnabled = false;
         DeletionKindSelector.IsEnabled = false;
+        DeletionKeyboardDeviceSelector.IsEnabled = false;
+        DeletionMouseDeviceSelector.IsEnabled = false;
         KeyboardDeviceSelector.IsEnabled = false;
         MouseDeviceSelector.IsEnabled = false;
         KeyboardAliasInput.IsEnabled = false;
@@ -241,6 +247,21 @@ public partial class MainWindow : Window
     private async void PreviewKeyboardDeletionButton_Click(object sender, RoutedEventArgs e) =>
         await DeleteSelectedRangeAsync();
 
+    private void DeletionKindSelector_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateDeletionDeviceSelectorVisibility();
+
+    private void UpdateDeletionDeviceSelectorVisibility()
+    {
+        DeletionTargetKind target = DeletionKindSelector.SelectedItem is ComboBoxItem item
+            && Enum.TryParse(item.Tag?.ToString(), out DeletionTargetKind selected)
+                ? selected
+                : DeletionTargetKind.Keyboard;
+        DeletionKeyboardDevicePanel.Visibility = target is DeletionTargetKind.Keyboard or DeletionTargetKind.All
+            ? Visibility.Visible : Visibility.Collapsed;
+        DeletionMouseDevicePanel.Visibility = target is DeletionTargetKind.Mouse or DeletionTargetKind.All
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private async void ViewDateRangePicker_RangeChanged(object? sender, EventArgs e)
     {
         if (IsLoaded) await RefreshDashboardAsync();
@@ -266,19 +287,21 @@ public partial class MainWindow : Window
 
             if (targetKind == DeletionTargetKind.All)
             {
-                if (_dashboard.SelectedKeyboardDeviceId is not Guid keyboard
-                    || _dashboard.SelectedMouseDeviceId is not Guid mouse)
-                    throw new InvalidOperationException("选择“全部”前，请分别在键盘热力图和鼠标按键页选择设备。");
+                if (DeletionKeyboardDeviceSelector.SelectedValue is not Guid batchKeyboardId
+                    || DeletionMouseDeviceSelector.SelectedValue is not Guid batchMouseId)
+                    throw new InvalidOperationException("选择“全部”前，请分别选择一个键盘和一只鼠标。");
                 StorageDeletionBatchDisplay preview = await _dataTools.PreviewDeletionBatchAsync(
-                    keyboard, mouse, period.UtcRange);
+                    batchKeyboardId, batchMouseId, period.UtcRange);
                 if (!preview.CanExecute)
                 {
                     if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = preview.Status;
                     return;
                 }
+                string keyboardName = (DeletionKeyboardDeviceSelector.SelectedItem as DeviceChoice)?.Name ?? "所选键盘";
+                string mouseName = (DeletionMouseDeviceSelector.SelectedItem as DeviceChoice)?.Name ?? "所选鼠标";
                 MessageBoxResult confirmation = System.Windows.MessageBox.Show(
-                    $"将永久删除 {localRange} 内的 {preview.KeyboardPressCount:N0} 次键盘按键和 "
-                    + $"{preview.MouseButtonPressCount:N0} 次鼠标按键。\n\n"
+                    $"将永久删除 {localRange} 内“{keyboardName}”的 {preview.KeyboardPressCount:N0} 次键盘按键，"
+                    + $"以及“{mouseName}”的 {preview.MouseButtonPressCount:N0} 次鼠标按键。\n\n"
                     + "删除前只创建一份完整备份，并一次提交两类删除；其他设备和其他日期不受影响。是否继续？",
                     "最终确认 · 全部删除",
                     MessageBoxButton.YesNo,
@@ -301,7 +324,8 @@ public partial class MainWindow : Window
             StorageDeviceKind deviceKind = targetKind == DeletionTargetKind.Keyboard
                 ? StorageDeviceKind.Keyboard : StorageDeviceKind.Mouse;
             Guid? deviceId = deviceKind == StorageDeviceKind.Keyboard
-                ? _dashboard.SelectedKeyboardDeviceId : _dashboard.SelectedMouseDeviceId;
+                ? DeletionKeyboardDeviceSelector.SelectedValue is Guid keyboard ? keyboard : null
+                : DeletionMouseDeviceSelector.SelectedValue is Guid mouse ? mouse : null;
             if (deviceId is not Guid selected)
                 throw new InvalidOperationException(deviceKind == StorageDeviceKind.Keyboard
                     ? "请先在键盘热力图中选择一个键盘。"
@@ -314,8 +338,11 @@ public partial class MainWindow : Window
                 return;
             }
             string target = deviceKind == StorageDeviceKind.Keyboard ? "键盘统计" : "鼠标按键统计";
+            string deviceName = ((deviceKind == StorageDeviceKind.Keyboard
+                ? DeletionKeyboardDeviceSelector.SelectedItem
+                : DeletionMouseDeviceSelector.SelectedItem) as DeviceChoice)?.Name ?? "所选设备";
             MessageBoxResult singleConfirmation = System.Windows.MessageBox.Show(
-                $"将永久删除所选设备在 {localRange} 的 {single.PressCount:N0} 次{target}。\n\n"
+                $"将永久删除“{deviceName}”在 {localRange} 的 {single.PressCount:N0} 次{target}。\n\n"
                 + "删除前会自动创建完整备份；其他设备和其他日期不受影响。是否继续？",
                 $"最终确认 · 删除{target}",
                 MessageBoxButton.YesNo,
@@ -413,6 +440,8 @@ public partial class MainWindow : Window
         CreateBackupButton.IsEnabled = enabled;
         PreviewKeyboardDeletionButton.IsEnabled = enabled;
         DeletionKindSelector.IsEnabled = enabled;
+        DeletionKeyboardDeviceSelector.IsEnabled = enabled;
+        DeletionMouseDeviceSelector.IsEnabled = enabled;
         DeletionDateControls.IsEnabled = enabled;
         ValidateRestoreButton.IsEnabled = enabled;
     }
@@ -556,15 +585,19 @@ public partial class MainWindow : Window
                 _dashboard.SelectedMouseDeviceId = MouseDeviceSelector.SelectedValue is Guid mouseId
                     ? mouseId : null;
                 await _dashboard.RefreshAsync();
-                var keyboards = _dashboard.Devices.Where(device => device.Kind == StorageDeviceKind.Keyboard)
-                    .Select(DeviceChoice.From).ToArray();
-                var mice = _dashboard.Devices.Where(device => device.Kind == StorageDeviceKind.Mouse)
-                    .Select(DeviceChoice.From).ToArray();
+                DeviceChoice[] keyboards = CreateDeviceChoices(_dashboard.Devices, StorageDeviceKind.Keyboard);
+                DeviceChoice[] mice = CreateDeviceChoices(_dashboard.Devices, StorageDeviceKind.Mouse);
                 _updatingDeviceSelectors = true;
                 try
                 {
+                    Guid? deletionKeyboardId = DeletionKeyboardDeviceSelector.SelectedValue is Guid value
+                        ? value : _dashboard.SelectedKeyboardDeviceId;
+                    Guid? deletionMouseId = DeletionMouseDeviceSelector.SelectedValue is Guid mouseValue
+                        ? mouseValue : _dashboard.SelectedMouseDeviceId;
                     UpdateDeviceSelector(KeyboardDeviceSelector, keyboards, _dashboard.SelectedKeyboardDeviceId);
                     UpdateDeviceSelector(MouseDeviceSelector, mice, _dashboard.SelectedMouseDeviceId);
+                    UpdateDeviceSelector(DeletionKeyboardDeviceSelector, keyboards, deletionKeyboardId, selectFirst: true);
+                    UpdateDeviceSelector(DeletionMouseDeviceSelector, mice, deletionMouseId, selectFirst: true);
                     UpdateDeviceAliasEditors();
                 }
                 finally
@@ -603,11 +636,19 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void UpdateDeviceSelector(System.Windows.Controls.ComboBox selector, DeviceChoice[] choices, Guid? selectedDeviceId)
+    private static void UpdateDeviceSelector(
+        System.Windows.Controls.ComboBox selector,
+        DeviceChoice[] choices,
+        Guid? selectedDeviceId,
+        bool selectFirst = false)
     {
         DeviceChoice[] current = selector.Items.Cast<DeviceChoice>().ToArray();
         if (!current.SequenceEqual(choices)) selector.ItemsSource = choices;
-        selector.SelectedValue = selectedDeviceId;
+        Guid? target = selectedDeviceId is Guid requested
+            && choices.Any(choice => choice.DeviceId == requested)
+                ? requested
+                : selectFirst ? choices.FirstOrDefault()?.DeviceId : null;
+        selector.SelectedValue = target;
     }
 
     private void UpdateDeviceAliasEditors()
@@ -650,8 +691,9 @@ public partial class MainWindow : Window
             + $"侧键一 {buttons.X1:N0} 次 · 侧键二 {buttons.X2:N0} 次";
     }
 
-    internal static string FormatDeviceDisplayName(StorageDeviceInfo value)
+    internal static string FormatDeviceDisplayName(StorageDeviceInfo value, int ordinal = 1)
     {
+        if (ordinal <= 0) throw new ArgumentOutOfRangeException(nameof(ordinal));
         string confidence = value.IdentityConfidence switch
         {
             StorageDeviceIdentityConfidence.PersistentHardware => "重连后仍可识别",
@@ -660,14 +702,28 @@ public partial class MainWindow : Window
                 "有相似设备，请按名称辨认",
             _ => "重连后可能显示为新设备"
         };
-        return $"{value.Alias ?? value.DeviceId.ToString("N")[..8]} · {confidence}";
+        return $"{FormatDeviceName(value, ordinal)} · {confidence}";
     }
 
-    private sealed record DeviceChoice(Guid DeviceId, string DisplayName)
+    private static string FormatDeviceName(StorageDeviceInfo value, int ordinal) =>
+        value.Alias ?? $"{(value.Kind == StorageDeviceKind.Keyboard ? "键盘" : "鼠标")}{ordinal}";
+
+    private static DeviceChoice[] CreateDeviceChoices(
+        IReadOnlyList<StorageDeviceInfo> devices,
+        StorageDeviceKind kind)
     {
-        public static DeviceChoice From(StorageDeviceInfo value) =>
-            new(value.DeviceId, FormatDeviceDisplayName(value));
+        int ordinal = 0;
+        return devices.Where(device => device.Kind == kind)
+            .Select(device =>
+            {
+                ordinal++;
+                string name = FormatDeviceName(device, ordinal);
+                return new DeviceChoice(device.DeviceId, name, FormatDeviceDisplayName(device, ordinal));
+            })
+            .ToArray();
     }
+
+    private sealed record DeviceChoice(Guid DeviceId, string Name, string DisplayName);
 
     private enum DeletionTargetKind
     {
