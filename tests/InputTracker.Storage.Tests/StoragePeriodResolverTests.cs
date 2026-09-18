@@ -53,6 +53,25 @@ public sealed class StoragePeriodResolverTests
             utc.UtcRange.StartUtcMicroseconds - china.UtcRange.StartUtcMicroseconds);
     }
 
+    [Fact]
+    public void CustomRangeUsesInclusiveUiDatesAndActualDstBoundaries()
+    {
+        StorageResolvedPeriod period = StoragePeriodResolver.ResolveRange(
+            new DateOnly(2026, 3, 7),
+            new DateOnly(2026, 3, 9),
+            "Pacific Standard Time");
+
+        Assert.Equal(StoragePeriodKind.Custom, period.Kind);
+        Assert.Equal(new DateOnly(2026, 3, 7), period.LocalStartDate);
+        Assert.Equal(new DateOnly(2026, 3, 10), period.LocalEndDate);
+        Assert.Equal(71L * 60L * 60L * 1_000_000L,
+            period.UtcRange.EndUtcMicroseconds - period.UtcRange.StartUtcMicroseconds);
+        Assert.Throws<ArgumentOutOfRangeException>(() => StoragePeriodResolver.ResolveRange(
+            new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 9), "UTC"));
+        Assert.Throws<InvalidDataException>(() => StoragePeriodResolver.Resolve(
+            StoragePeriodKind.Custom, new DateOnly(2026, 3, 9), "UTC"));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("America/Los_Angeles")]

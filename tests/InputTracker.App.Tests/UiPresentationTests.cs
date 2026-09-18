@@ -186,13 +186,18 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
-    public void DataToolsLetsUserChooseKeyboardOrMouseButtonDeletion()
+    public void DateRangesAreIndependentAndDeletionCanIncludeKeyboardAndMouse()
     {
         string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
 
         Assert.Contains("x:Name=\"DeletionKindSelector\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"键盘统计\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"鼠标按键统计\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"全部（键盘 + 鼠标）\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ViewStartDatePicker\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ViewEndDatePicker\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DeletionStartDatePicker\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DeletionEndDatePicker\"", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("鼠标轨迹", windowXaml, StringComparison.Ordinal);
     }
 

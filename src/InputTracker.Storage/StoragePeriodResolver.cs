@@ -26,6 +26,49 @@ public static class StoragePeriodResolver
         return new StorageResolvedPeriod(kind, start, end, zone.Id, range);
     }
 
+    public static StorageResolvedPeriod ResolveRange(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId)
+    {
+        if (inclusiveEndDate < inclusiveStartDate)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(inclusiveEndDate),
+                "The inclusive end date must not be earlier than the start date.");
+        }
+
+        DateOnly exclusiveEndDate;
+        try
+        {
+            exclusiveEndDate = inclusiveEndDate.AddDays(1);
+        }
+        catch (ArgumentOutOfRangeException error)
+        {
+            throw new InvalidDataException("The custom range end is outside the supported date range.", error);
+        }
+
+        TimeZoneInfo zone = ResolveWindowsTimeZone(timeZoneId);
+        var range = new StorageUtcRange(
+            GetBoundaryUtcMicroseconds(inclusiveStartDate, zone),
+            GetBoundaryUtcMicroseconds(exclusiveEndDate, zone));
+        try
+        {
+            range.Validate();
+        }
+        catch (ArgumentOutOfRangeException error)
+        {
+            throw new InvalidDataException("The custom dates do not form a non-empty UTC range.", error);
+        }
+
+        return new StorageResolvedPeriod(
+            StoragePeriodKind.Custom,
+            inclusiveStartDate,
+            exclusiveEndDate,
+            zone.Id,
+            range);
+    }
+
     private static TimeZoneInfo ResolveWindowsTimeZone(string timeZoneId)
     {
         if (string.IsNullOrWhiteSpace(timeZoneId)

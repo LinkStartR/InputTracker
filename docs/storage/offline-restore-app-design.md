@@ -8,7 +8,7 @@ Status: design only. The current application validates a backup selection but mu
 - The selected `.itbackup` must be a regular contained file under the program directory with no reparse point in its path.
 - The active Raw Input and Storage owners must be fully released before the offline restore acquires `storage-service.writer.lock`.
 - Success and failure are terminal for the current process. InputTracker must not reconstruct capture or automatically resume after a restore attempt.
-- Range deletion is outside this protocol and remains blocked by B-011.
+- Range deletion uses its own pause, preview, backup, confirmation and SQLite transaction protocol; it does not reuse or weaken this offline-restore lifecycle.
 
 ## State machine
 

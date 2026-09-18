@@ -511,40 +511,32 @@
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0" Style="{StaticResource CompactCardStyle}" Padding="14,9">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" Text="查看范围" FontSize="12" FontWeight="SemiBold"
-                               Foreground="{DynamicResource SecondaryTextBrush}" />
-                    <ComboBox x:Name="PeriodSelector" Grid.Column="2" Width="104"
-                              SelectionChanged="QuerySelection_Changed">
-                        <ComboBoxItem Content="日" Tag="Day" IsSelected="True" />
-                        <ComboBoxItem Content="周" Tag="Week" />
-                        <ComboBoxItem Content="月" Tag="Month" />
-                        <ComboBoxItem Content="年" Tag="Year" />
-                    </ComboBox>
-                    <Button x:Name="RefreshDashboardButton"
-                            Grid.Column="4"
-                            Style="{StaticResource SoftButtonStyle}"
-                            Margin="0"
-                            Click="RefreshDashboardButton_Click"
-                            Content="立即刷新" />
-                    <TextBlock x:Name="DashboardRefreshStatusText"
-                               Grid.Column="6"
-                               HorizontalAlignment="Right"
-                               VerticalAlignment="Center"
-                               FontSize="12"
+                <DockPanel LastChildFill="True">
+                    <TextBlock x:Name="DashboardRefreshStatusText" DockPanel.Dock="Right"
+                               Margin="16,0,0,0" VerticalAlignment="Center" FontSize="12"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               Text="数据每 2 秒自动更新"
-                               TextWrapping="Wrap" />
-                </Grid>
+                               Text="数据每 2 秒自动更新" TextWrapping="Wrap" />
+                    <WrapPanel x:Name="ViewRangeControls" VerticalAlignment="Center">
+                        <TextBlock VerticalAlignment="Center" Margin="0,0,10,0" Text="查看范围"
+                                   FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
+                                Tag="1" Click="ViewPresetButton_Click" Content="今天" />
+                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
+                                Tag="7" Click="ViewPresetButton_Click" Content="7 天" />
+                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
+                                Tag="14" Click="ViewPresetButton_Click" Content="14 天" />
+                        <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,10,0"
+                                Tag="30" Click="ViewPresetButton_Click" Content="30 天" />
+                        <DatePicker x:Name="ViewStartDatePicker" Width="128" Height="36" Margin="0,0,6,0"
+                                    SelectedDateChanged="ViewDatePicker_SelectedDateChanged" />
+                        <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="至" />
+                        <DatePicker x:Name="ViewEndDatePicker" Width="128" Height="36" Margin="0,0,10,0"
+                                    SelectedDateChanged="ViewDatePicker_SelectedDateChanged" />
+                        <Button x:Name="RefreshDashboardButton" Style="{StaticResource SoftButtonStyle}"
+                                Margin="0" Click="RefreshDashboardButton_Click" Content="立即刷新" />
+                    </WrapPanel>
+                </DockPanel>
             </Border>
 
             <TabControl x:Name="NavigationList"
@@ -843,13 +835,30 @@
                                                   Margin="0,6,0,0">
                                             <ComboBoxItem Content="键盘统计" Tag="Keyboard" IsSelected="True" />
                                             <ComboBoxItem Content="鼠标按键统计" Tag="Mouse" />
+                                            <ComboBoxItem Content="全部（键盘 + 鼠标）" Tag="All" />
                                         </ComboBox>
-                                        <TextBlock Margin="0,6,0,12"
+                                        <TextBlock Margin="0,6,0,10"
                                                    Text="设备沿用键盘热力图或鼠标按键页中当前选择的设备。"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
+                                        <TextBlock Text="删除日期" FontWeight="SemiBold" />
+                                        <WrapPanel x:Name="DeletionPresetControls" Margin="0,6,0,6">
+                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
+                                                    Tag="1" Click="DeletionPresetButton_Click" Content="今天" />
+                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
+                                                    Tag="7" Click="DeletionPresetButton_Click" Content="7 天" />
+                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0,0,6,0"
+                                                    Tag="14" Click="DeletionPresetButton_Click" Content="14 天" />
+                                            <Button Style="{StaticResource SoftButtonStyle}" Margin="0"
+                                                    Tag="30" Click="DeletionPresetButton_Click" Content="30 天" />
+                                        </WrapPanel>
+                                        <WrapPanel x:Name="DeletionDateControls" Margin="0,0,0,12">
+                                            <DatePicker x:Name="DeletionStartDatePicker" Width="128" Height="36" Margin="0,0,6,0" />
+                                            <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" Text="至" />
+                                            <DatePicker x:Name="DeletionEndDatePicker" Width="128" Height="36" />
+                                        </WrapPanel>
                                         <Button x:Name="PreviewKeyboardDeletionButton" HorizontalAlignment="Left"
-                                                Click="PreviewKeyboardDeletionButton_Click" Content="删除当前范围记录" />
+                                                Click="PreviewKeyboardDeletionButton_Click" Content="查看并删除所选记录" />
                                         <Button x:Name="ValidateRestoreButton" HorizontalAlignment="Left"
                                                 Click="ValidateRestoreButton_Click" Content="恢复本地备份" />
                                     </StackPanel>

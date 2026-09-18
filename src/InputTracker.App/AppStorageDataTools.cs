@@ -15,6 +15,12 @@ internal interface IAppStorageDataTools
         Guid deviceId, StorageUtcRange range, CancellationToken token);
     StorageDeletionResult ExecuteDeletion(
         StorageDeletionPreview preview, string confirmationToken, string preDeletionBackupRelativePath);
+    Task<StorageDeletionBatchPreview> PreviewDeletionBatchAsync(
+        Guid keyboardDeviceId, Guid mouseDeviceId, StorageUtcRange range, CancellationToken token) =>
+        throw new NotSupportedException("Combined deletion is not implemented by this storage adapter.");
+    StorageDeletionBatchResult ExecuteDeletionBatch(
+        StorageDeletionBatchPreview preview, string confirmationToken, string preDeletionBackupRelativePath) =>
+        throw new NotSupportedException("Combined deletion is not implemented by this storage adapter.");
     IReadOnlyList<StorageDeviceInfo> ListDevices();
 }
 
@@ -33,6 +39,12 @@ internal sealed class StorageServiceDataTools(StorageService service) : IAppStor
     public StorageDeletionResult ExecuteDeletion(
         StorageDeletionPreview preview, string confirmationToken, string preDeletionBackupRelativePath) =>
         service.ExecuteDeletion(preview, confirmationToken, preDeletionBackupRelativePath);
+    public Task<StorageDeletionBatchPreview> PreviewDeletionBatchAsync(
+        Guid keyboardDeviceId, Guid mouseDeviceId, StorageUtcRange range, CancellationToken token) =>
+        service.PreviewDeletionBatchAsync(keyboardDeviceId, mouseDeviceId, range, token);
+    public StorageDeletionBatchResult ExecuteDeletionBatch(
+        StorageDeletionBatchPreview preview, string confirmationToken, string preDeletionBackupRelativePath) =>
+        service.ExecuteDeletionBatch(preview, confirmationToken, preDeletionBackupRelativePath);
     public IReadOnlyList<StorageDeviceInfo> ListDevices() => service.ListDevices();
 }
 
@@ -75,6 +87,23 @@ internal sealed class StorageDeletionDisplay
         $"StorageDeletionDisplay {{ DeviceId = {DeviceId}, DeviceKind = {DeviceKind}, UtcRange = {UtcRange}, KeyboardAggregateCount = {KeyboardAggregateCount}, CanExecute = {CanExecute}, Status = {Status} }}";
 }
 
+internal sealed class StorageDeletionBatchDisplay
+{
+    internal StorageDeletionBatchDisplay(StorageDeletionBatchPreview preview, string status)
+    {
+        Preview = preview;
+        Status = status;
+    }
+
+    internal StorageDeletionBatchPreview Preview { get; }
+    public long KeyboardPressCount => Preview.KeyboardPressCount;
+    public long MouseButtonPressCount => Preview.MouseButtonPressCount;
+    public bool CanExecute =>
+        Preview.Capability == StorageDeletionCapability.ExactKeyboardAndMouseDailyAggregates
+        && Preview.KeyboardAggregateCount + Preview.MouseButtonAggregateCount > 0;
+    public string Status { get; }
+}
+
 internal sealed record RestoreSelection(
     string RelativePath,
     bool Confirmed,
@@ -93,7 +122,7 @@ internal sealed class AppStorageDataToolsController
     private readonly Func<DateTimeOffset> _clock;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly object _lifecycleGate = new();
-    private StorageDeletionDisplay? _preparedDeletion;
+    private object? _preparedDeletion;
     private bool _closing;
 
     public AppStorageDataToolsController(
@@ -206,6 +235,64 @@ internal sealed class AppStorageDataToolsController
                 throw new InvalidOperationException(display.Status);
 
             return _storage.ExecuteDeletion(
+                display.Preview,
+                display.Preview.Token,
+                Path.Combine("backups", $"before-delete-{Timestamp()}.itbackup"));
+        }, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StorageDeletionBatchDisplay> PreviewDeletionBatchAsync(
+        Guid keyboardDeviceId,
+        Guid mouseDeviceId,
+        StorageUtcRange range,
+        CancellationToken cancellationToken = default)
+    {
+        return await RunExclusiveAsync(async () =>
+        {
+            EnsureUserPausedAtSafeStorageBoundary("删除预览");
+            IReadOnlyList<StorageDeviceInfo> devices = _storage.ListDevices();
+            if (!devices.Any(value => value.DeviceId == keyboardDeviceId && value.Kind == StorageDeviceKind.Keyboard)
+                || !devices.Any(value => value.DeviceId == mouseDeviceId && value.Kind == StorageDeviceKind.Mouse))
+            {
+                throw new InvalidDataException("全部删除需要各选择一个有效的键盘和鼠标。");
+            }
+
+            StorageDeletionBatchPreview preview = await _storage.PreviewDeletionBatchAsync(
+                keyboardDeviceId, mouseDeviceId, range, cancellationToken).ConfigureAwait(false);
+            if (preview.KeyboardDeviceId != keyboardDeviceId
+                || preview.MouseDeviceId != mouseDeviceId
+                || preview.UtcRange != range)
+            {
+                throw new InvalidDataException("Storage returned a combined deletion preview for different targets.");
+            }
+            string status = preview.Capability == StorageDeletionCapability.ExactKeyboardAndMouseDailyAggregates
+                ? $"将删除 {preview.KeyboardPressCount:N0} 次键盘按键和 {preview.MouseButtonPressCount:N0} 次鼠标按键，执行前会自动备份。"
+                : preview.KeyboardAggregateCount + preview.MouseButtonAggregateCount == 0
+                    ? "当前日期范围内没有可删除的键盘或鼠标按键记录。"
+                    : $"这个范围切到了某个统计日的中间，无法准确删除，因此没有改动数据。{preview.BlockedReason}";
+            var display = new StorageDeletionBatchDisplay(preview, status);
+            _preparedDeletion = display;
+            return display;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StorageDeletionBatchResult> ExecutePreparedDeletionBatchAsync(
+        StorageDeletionBatchDisplay display,
+        bool finalConfirmed,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(display);
+        return await RunExclusiveAsync(() => Task.Run(() =>
+        {
+            if (!finalConfirmed)
+                throw new InvalidOperationException("删除需要明确的最终确认。");
+            EnsureUserPausedAtSafeStorageBoundary("删除");
+            if (!ReferenceEquals(Interlocked.Exchange(ref _preparedDeletion, null), display))
+                throw new InvalidOperationException("删除预览已失效，请重新查看范围后再确认。");
+            if (!display.CanExecute)
+                throw new InvalidOperationException(display.Status);
+
+            return _storage.ExecuteDeletionBatch(
                 display.Preview,
                 display.Preview.Token,
                 Path.Combine("backups", $"before-delete-{Timestamp()}.itbackup"));

@@ -1485,3 +1485,13 @@
 - 交付物：`.tools/publish/deletion-kind-test-20260918/InputTracker.exe`，484 files，SHA-256 `67D567FA44B3E5C5B16FE738B13940F1FC65AFD9BF9E36C7DE22AB75335B16E9`。全新目录，未复制历史数据，`DATA_EXISTS=False`。
 - 自检：隐藏进程执行 `InputTracker.exe --self-check`，exit `0`；执行者未启动 GUI。
 - 人工停点：用户在新目录产生少量键盘与鼠标按键数据，暂停后分别选择“键盘统计”和“鼠标按键统计”执行取消/确认删除，检查相互不串删、自动备份、重启保持；通过前不开始日期表实现。
+
+## 2026-09-18 独立日期范围与全部删除
+
+- 用户澄清：删除内容是“键盘统计 / 鼠标按键统计 / 全部（键盘 + 鼠标）”三选一；日期是另一组独立筛选条件。查看范围与删除范围各自保存日期，互不联动。本轮把两项一起交付后停在一次人工审核点。
+- 最小 UI：不新增依赖，使用 WPF 原生 `DatePicker` 日历。查看范围和删除日期均提供今天、7 天、14 天、30 天快捷项，以及包含首尾两天的开始/结束日期。数据库只保存每日聚合，因此不伪造小时或分钟选择。
+- 查询语义：新增 `StoragePeriodKind.Custom` 与显式 `ResolveRange(start,end,zone)`；UI 闭区间日期转换为 Storage 半开区间 `[start,end+1 day)`，继续按 Windows 时区处理 DST。键盘与鼠标按键使用同一范围，但删除日期不借用查看范围。
+- 全部删除安全边界：必须同时选择当前键盘和当前鼠标；预览绑定两个设备、日期范围、各自行数/次数和 durable ordinals。确认后只创建一份程序目录内备份，键盘与鼠标日桶在同一个 SQLite 事务中删除并核对总行数；任一预览过期、部分日、目标类型错误或空总范围均 fail closed，不能只成功一半。
+- 红证据：产品实现前定向 Storage test exit `1`，精确出现 16 个编译错误，缺少 `ResolveRange`、Custom kind、batch preview/result、batch execute 和 range query，证明旧版本没有这两项能力。首次 solution build 又以 4 个错误指出测试替身未覆盖新增接口；只补兼容的默认 fail-closed seam 后继续。
+- 绿证据：Storage 定向 `19 passed / 0 failed / 0 skipped`；App 定向 `4/0/0`。solution Release build exit `0`，7 个项目、0 warnings / 0 errors、1.17s；Storage non-Spike `215/0/0`、5s；App 全量 `146/0/0`、268ms。XAML XML parse 成功，`git diff --check` 无空白错误（仅 LF→CRLF 提示），产品界面继续无“鼠标轨迹”文本。
+- 未验证/下一步：未启动 GUI、未操作任何既有测试包或用户数据；原生日历弹层、深浅主题观感、查看范围实际刷新、删除日期独立性和“全部”删除后的备份/重启结果留给下一份全新绿色测试目录人工验证。通过前不推进 SQLite 升级或最终统一验收。

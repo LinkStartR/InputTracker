@@ -3,6 +3,29 @@ namespace InputTracker.Storage.Tests;
 public sealed class StorageKeyboardQueryTests
 {
     [Fact]
+    public void CustomRangeIncludesBothUiEndpointDatesAndExcludesAdjacentDates()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid keyboard = Guid.NewGuid();
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock()))
+        {
+            database.RegisterDevice(keyboard, (int)StorageDeviceKind.Keyboard, 0, 1);
+            database.UpsertKeyboardDaily(keyboard, 30, false, false, new DateOnly(2026, 9, 9), "UTC", 1, 10);
+            database.UpsertKeyboardDaily(keyboard, 30, false, false, new DateOnly(2026, 9, 10), "UTC", 2, 20);
+            database.UpsertKeyboardDaily(keyboard, 30, false, false, new DateOnly(2026, 9, 12), "UTC", 4, 40);
+            database.UpsertKeyboardDaily(keyboard, 30, false, false, new DateOnly(2026, 9, 13), "UTC", 8, 80);
+        }
+
+        using StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock());
+        StorageKeyboardPeriodResult result = service.QueryKeyboardRange(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), "UTC", keyboard);
+
+        Assert.Equal(StoragePeriodKind.Custom, result.Period.Kind);
+        Assert.Equal(6, Assert.Single(result.Aggregates).PressCount);
+    }
+
+    [Fact]
     public void QueryAggregatesOnlyRequestedCaptureZoneAndKeepsDevicesAndPhysicalKeysSeparate()
     {
         using var directory = new TemporaryDirectory();

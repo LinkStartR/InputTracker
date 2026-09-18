@@ -9,6 +9,34 @@ public sealed class StorageMouseButtonQueryTests
     private const ushort X2Down = 1 << 8;
 
     [Fact]
+    public void CustomRangeIncludesBothUiEndpointDatesAndExcludesAdjacentDates()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid mouse = RegisterMouse(layout);
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock()))
+        {
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 9), "UTC",
+                [StorageMouseButton.Left], NoStorageServiceFaultInjector.Instance);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 10), "UTC",
+                [StorageMouseButton.Left], NoStorageServiceFaultInjector.Instance);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 12), "UTC",
+                [StorageMouseButton.Right], NoStorageServiceFaultInjector.Instance);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 13), "UTC",
+                [StorageMouseButton.Middle], NoStorageServiceFaultInjector.Instance);
+        }
+
+        using StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock());
+        StorageMouseButtonPeriodResult result = service.QueryMouseButtonsRange(
+            new DateOnly(2026, 9, 10), new DateOnly(2026, 9, 12), "UTC", mouse);
+
+        Assert.Equal(StoragePeriodKind.Custom, result.Period.Kind);
+        Assert.Equal(2, result.Aggregates.Sum(row => row.PressCount));
+        Assert.Equal([StorageMouseButton.Left, StorageMouseButton.Right],
+            result.Aggregates.Select(row => row.Button));
+    }
+
+    [Fact]
     public void QueryCountsButtonDownOnceByDeviceAndCaptureDate()
     {
         using var directory = new TemporaryDirectory();

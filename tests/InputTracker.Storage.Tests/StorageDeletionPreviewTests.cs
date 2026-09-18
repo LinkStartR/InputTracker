@@ -3,6 +3,60 @@ namespace InputTracker.Storage.Tests;
 public sealed class StorageDeletionPreviewTests
 {
     [Fact]
+    public async Task CombinedDeletionUsesOneBackupAndOneAtomicKeyboardMouseCommit()
+    {
+        using var directory = new TemporaryDirectory();
+        StorageLayout layout = StorageLayout.Create(directory.Path);
+        Guid keyboard = Guid.NewGuid();
+        Guid mouse = Guid.NewGuid();
+        Guid otherKeyboard = Guid.NewGuid();
+        using (StorageDatabase database = StorageDatabase.Open(layout, new FakeClock()))
+        {
+            database.RegisterDevice(keyboard, (int)StorageDeviceKind.Keyboard, 0, 1);
+            database.RegisterDevice(mouse, (int)StorageDeviceKind.Mouse, 0, 1);
+            database.RegisterDevice(otherKeyboard, (int)StorageDeviceKind.Keyboard, 0, 1);
+            database.UpsertKeyboardDaily(keyboard, 30, false, false,
+                new DateOnly(2026, 9, 18), "UTC", 4, 400);
+            database.UpsertKeyboardDaily(otherKeyboard, 31, false, false,
+                new DateOnly(2026, 9, 18), "UTC", 7, 700);
+            database.CommitMouseButtonPresses(mouse, new DateOnly(2026, 9, 18), "UTC",
+                [StorageMouseButton.Left, StorageMouseButton.Right], NoStorageServiceFaultInjector.Instance);
+        }
+        StorageUtcRange day = StoragePeriodResolver.ResolveRange(
+            new DateOnly(2026, 9, 18), new DateOnly(2026, 9, 18), "UTC").UtcRange;
+        StorageDeletionBatchResult deleted;
+        using (StorageService service = StorageService.OpenForTests(layout, new ControllableStorageClock()))
+        {
+            StorageDeletionBatchPreview preview = await service.PreviewDeletionBatchAsync(keyboard, mouse, day);
+            Assert.Equal(StorageDeletionCapability.ExactKeyboardAndMouseDailyAggregates, preview.Capability);
+            Assert.Equal(4, preview.KeyboardPressCount);
+            Assert.Equal(2, preview.MouseButtonPressCount);
+
+            deleted = service.ExecuteDeletionBatch(
+                preview, preview.Token, "backups/before-delete-all.itbackup");
+
+            Assert.Equal(4, deleted.DeletedKeyboardPressCount);
+            Assert.Equal(2, deleted.DeletedMouseButtonPressCount);
+            Assert.Empty(service.QueryKeyboardRange(
+                new DateOnly(2026, 9, 18), new DateOnly(2026, 9, 18), "UTC", keyboard).Aggregates);
+            Assert.Empty(service.QueryMouseButtonsRange(
+                new DateOnly(2026, 9, 18), new DateOnly(2026, 9, 18), "UTC", mouse).Aggregates);
+            Assert.Equal(7, Assert.Single(service.QueryKeyboardRange(
+                new DateOnly(2026, 9, 18), new DateOnly(2026, 9, 18), "UTC", otherKeyboard).Aggregates).PressCount);
+            Assert.True(File.Exists(deleted.PreDeletionBackup.Path));
+            Assert.Throws<InvalidOperationException>(() => service.ExecuteDeletionBatch(
+                preview, preview.Token, "backups/stale-all.itbackup"));
+        }
+
+        StorageBackup.Restore(layout, Path.GetRelativePath(layout.ProgramDirectory, deleted.PreDeletionBackup.Path));
+        using StorageService restored = StorageService.OpenForTests(layout, new ControllableStorageClock());
+        Assert.Equal(4, restored.QueryKeyboardRange(
+            new DateOnly(2026, 9, 18), new DateOnly(2026, 9, 18), "UTC", keyboard).Aggregates.Sum(x => x.PressCount));
+        Assert.Equal(2, restored.QueryMouseButtonsRange(
+            new DateOnly(2026, 9, 18), new DateOnly(2026, 9, 18), "UTC", mouse).Aggregates.Sum(x => x.PressCount));
+    }
+
+    [Fact]
     public async Task MouseButtonDeletionNeverCreatesTrajectoryArtifacts()
     {
         using var directory = new TemporaryDirectory();

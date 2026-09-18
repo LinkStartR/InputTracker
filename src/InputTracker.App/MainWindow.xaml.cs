@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private bool _dashboardRefreshPending;
     private bool _updatingDeviceSelectors;
     private bool _deviceAliasChangeInProgress;
+    private bool _updatingViewDates;
 
     internal MainWindow(
         CollectionController collection,
@@ -35,6 +36,15 @@ public partial class MainWindow : Window
         _dashboard = dashboard;
         _startup = startup;
         _dataTools = dataTools;
+        DateTime today = DateTime.Today;
+        ViewStartDatePicker.SelectedDate = today;
+        ViewEndDatePicker.SelectedDate = today;
+        ViewStartDatePicker.DisplayDateEnd = today;
+        ViewEndDatePicker.DisplayDateEnd = today;
+        DeletionStartDatePicker.SelectedDate = today;
+        DeletionEndDatePicker.SelectedDate = today;
+        DeletionStartDatePicker.DisplayDateEnd = today;
+        DeletionEndDatePicker.DisplayDateEnd = today;
         _collection.Changed += Collection_Changed;
         _dashboardRefreshTimer.Tick += DashboardRefreshTimer_Tick;
         IsVisibleChanged += MainWindow_IsVisibleChanged;
@@ -82,7 +92,7 @@ public partial class MainWindow : Window
         _dashboardRefreshPending = false;
         SetDataToolsEnabled(false);
         RefreshDashboardButton.IsEnabled = false;
-        PeriodSelector.IsEnabled = false;
+        ViewRangeControls.IsEnabled = false;
         DeletionKindSelector.IsEnabled = false;
         KeyboardDeviceSelector.IsEnabled = false;
         MouseDeviceSelector.IsEnabled = false;
@@ -238,55 +248,128 @@ public partial class MainWindow : Window
     private async void PreviewKeyboardDeletionButton_Click(object sender, RoutedEventArgs e) =>
         await DeleteSelectedRangeAsync();
 
+    private async void ViewPresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string raw }
+            || !int.TryParse(raw, out int days)) return;
+        ApplyDatePreset(ViewStartDatePicker, ViewEndDatePicker, days, suppressViewRefresh: true);
+        await RefreshDashboardAsync();
+    }
+
+    private async void ViewDatePicker_SelectedDateChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingViewDates || !IsLoaded) return;
+        if (ViewStartDatePicker.SelectedDate is not null && ViewEndDatePicker.SelectedDate is not null)
+            await RefreshDashboardAsync();
+    }
+
+    private void DeletionPresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string raw }
+            || !int.TryParse(raw, out int days)) return;
+        ApplyDatePreset(DeletionStartDatePicker, DeletionEndDatePicker, days, suppressViewRefresh: false);
+    }
+
+    private void ApplyDatePreset(DatePicker startPicker, DatePicker endPicker, int days, bool suppressViewRefresh)
+    {
+        AppDateRangeSelection range = AppDateRangeSelection.EndingToday(
+            days, DateOnly.FromDateTime(DateTime.Today));
+        if (suppressViewRefresh) _updatingViewDates = true;
+        try
+        {
+            startPicker.SelectedDate = range.InclusiveStartDate.ToDateTime(TimeOnly.MinValue);
+            endPicker.SelectedDate = range.InclusiveEndDate.ToDateTime(TimeOnly.MinValue);
+        }
+        finally
+        {
+            if (suppressViewRefresh) _updatingViewDates = false;
+        }
+    }
+
     private async Task DeleteSelectedRangeAsync() =>
         await RunDataToolAsync(async () =>
         {
-            StorageDeviceKind kind = DeletionKindSelector.SelectedItem is ComboBoxItem item
-                && Enum.TryParse(item.Tag?.ToString(), out StorageDeviceKind selectedKind)
+            if (_dataTools is null || _dashboard is null)
+                throw new InvalidOperationException("本地数据工具暂时不可用。");
+            DeletionTargetKind targetKind = DeletionKindSelector.SelectedItem is ComboBoxItem item
+                && Enum.TryParse(item.Tag?.ToString(), out DeletionTargetKind selectedKind)
                     ? selectedKind
-                    : throw new InvalidOperationException("请选择要删除键盘统计还是鼠标按键统计。");
-            Guid? deviceId = kind == StorageDeviceKind.Keyboard
-                ? _dashboard?.SelectedKeyboardDeviceId
-                : _dashboard?.SelectedMouseDeviceId;
-            if (_dataTools is null || _dashboard?.ResolvedPeriod is not { } period || deviceId is not Guid selected)
-            {
-                throw new InvalidOperationException(
-                    kind == StorageDeviceKind.Keyboard
-                        ? "请先在键盘热力图中选择一个键盘。"
-                        : "请先在鼠标按键页选择一只鼠标。");
-            }
+                    : throw new InvalidOperationException("请选择键盘、鼠标按键或全部。");
+            AppDateRangeSelection dates = AppDateRangeSelection.Create(
+                DeletionStartDatePicker.SelectedDate, DeletionEndDatePicker.SelectedDate);
+            StorageResolvedPeriod period = StoragePeriodResolver.ResolveRange(
+                dates.InclusiveStartDate, dates.InclusiveEndDate, TimeZoneInfo.Local.Id);
+            string localRange = dates.InclusiveStartDate == dates.InclusiveEndDate
+                ? dates.InclusiveStartDate.ToString("yyyy-MM-dd")
+                : $"{dates.InclusiveStartDate:yyyy-MM-dd} 至 {dates.InclusiveEndDate:yyyy-MM-dd}";
 
-            StorageDeletionDisplay preview = await _dataTools.PreviewDeletionAsync(
-                selected, kind, period.UtcRange);
-            if (!preview.CanExecute)
+            if (targetKind == DeletionTargetKind.All)
             {
-                if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = preview.Status;
+                if (_dashboard.SelectedKeyboardDeviceId is not Guid keyboard
+                    || _dashboard.SelectedMouseDeviceId is not Guid mouse)
+                    throw new InvalidOperationException("选择“全部”前，请分别在键盘热力图和鼠标按键页选择设备。");
+                StorageDeletionBatchDisplay preview = await _dataTools.PreviewDeletionBatchAsync(
+                    keyboard, mouse, period.UtcRange);
+                if (!preview.CanExecute)
+                {
+                    if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = preview.Status;
+                    return;
+                }
+                MessageBoxResult confirmation = System.Windows.MessageBox.Show(
+                    $"将永久删除 {localRange} 内的 {preview.KeyboardPressCount:N0} 次键盘按键和 "
+                    + $"{preview.MouseButtonPressCount:N0} 次鼠标按键。\n\n"
+                    + "删除前只创建一份完整备份，并一次提交两类删除；其他设备和其他日期不受影响。是否继续？",
+                    "最终确认 · 全部删除",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                if (confirmation != MessageBoxResult.Yes)
+                {
+                    if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = "已取消删除，没有改动数据。";
+                    return;
+                }
+                StorageDeletionBatchResult result = await _dataTools.ExecutePreparedDeletionBatchAsync(
+                    preview, finalConfirmed: true);
+                if (CanUpdateDataToolsUi())
+                    DataToolsStatusText.Text =
+                        $"已删除 {result.DeletedKeyboardPressCount:N0} 次键盘按键和 "
+                        + $"{result.DeletedMouseButtonPressCount:N0} 次鼠标按键。删除前备份：{result.PreDeletionBackup.Path}";
                 return;
             }
 
-            string localRange = period.LocalEndDate == period.LocalStartDate.AddDays(1)
-                ? period.LocalStartDate.ToString("yyyy-MM-dd")
-                : $"{period.LocalStartDate:yyyy-MM-dd} 至 {period.LocalEndDate.AddDays(-1):yyyy-MM-dd}";
-            string target = kind == StorageDeviceKind.Keyboard ? "键盘统计" : "鼠标按键统计";
-            MessageBoxResult confirmation = System.Windows.MessageBox.Show(
-                $"将永久删除所选设备在 {localRange} 的 {preview.PressCount:N0} 次{target}。\n\n"
+            StorageDeviceKind deviceKind = targetKind == DeletionTargetKind.Keyboard
+                ? StorageDeviceKind.Keyboard : StorageDeviceKind.Mouse;
+            Guid? deviceId = deviceKind == StorageDeviceKind.Keyboard
+                ? _dashboard.SelectedKeyboardDeviceId : _dashboard.SelectedMouseDeviceId;
+            if (deviceId is not Guid selected)
+                throw new InvalidOperationException(deviceKind == StorageDeviceKind.Keyboard
+                    ? "请先在键盘热力图中选择一个键盘。"
+                    : "请先在鼠标按键页选择一只鼠标。");
+            StorageDeletionDisplay single = await _dataTools.PreviewDeletionAsync(
+                selected, deviceKind, period.UtcRange);
+            if (!single.CanExecute)
+            {
+                if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = single.Status;
+                return;
+            }
+            string target = deviceKind == StorageDeviceKind.Keyboard ? "键盘统计" : "鼠标按键统计";
+            MessageBoxResult singleConfirmation = System.Windows.MessageBox.Show(
+                $"将永久删除所选设备在 {localRange} 的 {single.PressCount:N0} 次{target}。\n\n"
                 + "删除前会自动创建完整备份；其他设备和其他日期不受影响。是否继续？",
                 $"最终确认 · 删除{target}",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);
-            if (confirmation != MessageBoxResult.Yes)
+            if (singleConfirmation != MessageBoxResult.Yes)
             {
                 if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = "已取消删除，没有改动数据。";
                 return;
             }
-
-            StorageDeletionResult result = await _dataTools.ExecutePreparedDeletionAsync(
-                preview, finalConfirmed: true);
-            if (CanUpdateDataToolsUi())
-                DataToolsStatusText.Text =
-                    $"已删除 {(kind == StorageDeviceKind.Keyboard ? result.DeletedKeyboardPressCount : result.DeletedMouseButtonPressCount):N0} 次{target}。"
-                    + $"删除前备份：{result.PreDeletionBackup.Path}";
+            StorageDeletionResult singleResult = await _dataTools.ExecutePreparedDeletionAsync(
+                single, finalConfirmed: true);
+            if (CanUpdateDataToolsUi()) DataToolsStatusText.Text =
+                $"已删除 {(deviceKind == StorageDeviceKind.Keyboard ? singleResult.DeletedKeyboardPressCount : singleResult.DeletedMouseButtonPressCount):N0} 次{target}。"
+                + $"删除前备份：{singleResult.PreDeletionBackup.Path}";
         });
 
     private void ValidateRestoreButton_Click(object sender, RoutedEventArgs e)
@@ -369,6 +452,8 @@ public partial class MainWindow : Window
         CreateBackupButton.IsEnabled = enabled;
         PreviewKeyboardDeletionButton.IsEnabled = enabled;
         DeletionKindSelector.IsEnabled = enabled;
+        DeletionPresetControls.IsEnabled = enabled;
+        DeletionDateControls.IsEnabled = enabled;
         ValidateRestoreButton.IsEnabled = enabled;
     }
 
@@ -502,14 +587,12 @@ public partial class MainWindow : Window
             {
                 _dashboardRefreshPending = false;
 
-                if (PeriodSelector.SelectedItem is ComboBoxItem period
-                    && Enum.TryParse(period.Tag?.ToString(), out StoragePeriodKind value))
-                {
-                    _dashboard.Period = value;
-                }
-
                 _dashboard.AnchorDate = DateOnly.FromDateTime(DateTime.Today);
                 _dashboard.TimeZoneId = TimeZoneInfo.Local.Id;
+                AppDateRangeSelection viewDates = AppDateRangeSelection.Create(
+                    ViewStartDatePicker.SelectedDate, ViewEndDatePicker.SelectedDate);
+                _dashboard.CustomStartDate = viewDates.InclusiveStartDate;
+                _dashboard.CustomEndDate = viewDates.InclusiveEndDate;
                 _dashboard.SelectedKeyboardDeviceId = KeyboardDeviceSelector.SelectedValue is Guid keyboardId
                     ? keyboardId : null;
                 _dashboard.SelectedMouseDeviceId = MouseDeviceSelector.SelectedValue is Guid mouseId
@@ -626,6 +709,13 @@ public partial class MainWindow : Window
     {
         public static DeviceChoice From(StorageDeviceInfo value) =>
             new(value.DeviceId, FormatDeviceDisplayName(value));
+    }
+
+    private enum DeletionTargetKind
+    {
+        Keyboard,
+        Mouse,
+        All
     }
 }
 

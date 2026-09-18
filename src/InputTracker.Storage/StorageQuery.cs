@@ -12,13 +12,33 @@ internal static class StorageQuery
         string timeZoneId,
         Guid? deviceId)
     {
+        StorageResolvedPeriod period = StoragePeriodResolver.Resolve(kind, containingDate, timeZoneId);
+        return QueryKeyboardResolved(connection, period, deviceId);
+    }
+
+    public static StorageKeyboardPeriodResult QueryKeyboardRange(
+        SqliteConnection connection,
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId)
+    {
+        StorageResolvedPeriod period = StoragePeriodResolver.ResolveRange(
+            inclusiveStartDate, inclusiveEndDate, timeZoneId);
+        return QueryKeyboardResolved(connection, period, deviceId);
+    }
+
+    private static StorageKeyboardPeriodResult QueryKeyboardResolved(
+        SqliteConnection connection,
+        StorageResolvedPeriod period,
+        Guid? deviceId)
+    {
         ArgumentNullException.ThrowIfNull(connection);
         if (deviceId == Guid.Empty)
         {
             throw new ArgumentException("A device filter must be non-empty when supplied.", nameof(deviceId));
         }
 
-        StorageResolvedPeriod period = StoragePeriodResolver.Resolve(kind, containingDate, timeZoneId);
         if (deviceId is Guid requested)
         {
             EnsureDeviceKind(connection, requested, StorageDeviceKind.Keyboard);
@@ -90,13 +110,33 @@ internal static class StorageQuery
         string timeZoneId,
         Guid? deviceId)
     {
+        StorageResolvedPeriod period = StoragePeriodResolver.Resolve(kind, containingDate, timeZoneId);
+        return QueryMouseButtonsResolved(connection, period, deviceId);
+    }
+
+    public static StorageMouseButtonPeriodResult QueryMouseButtonsRange(
+        SqliteConnection connection,
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId)
+    {
+        StorageResolvedPeriod period = StoragePeriodResolver.ResolveRange(
+            inclusiveStartDate, inclusiveEndDate, timeZoneId);
+        return QueryMouseButtonsResolved(connection, period, deviceId);
+    }
+
+    private static StorageMouseButtonPeriodResult QueryMouseButtonsResolved(
+        SqliteConnection connection,
+        StorageResolvedPeriod period,
+        Guid? deviceId)
+    {
         ArgumentNullException.ThrowIfNull(connection);
         if (deviceId == Guid.Empty)
         {
             throw new ArgumentException("A device filter must be non-empty when supplied.", nameof(deviceId));
         }
 
-        StorageResolvedPeriod period = StoragePeriodResolver.Resolve(kind, containingDate, timeZoneId);
         if (deviceId is Guid requested)
         {
             EnsureDeviceKind(connection, requested, StorageDeviceKind.Mouse);

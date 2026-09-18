@@ -321,6 +321,31 @@ public sealed class AppStorageDataToolsTests
             device, StorageDeviceKind.Keyboard, new StorageUtcRange(10, 20)));
     }
 
+    [Fact]
+    public async Task CombinedDeletionUsesPreparedKeyboardAndMousePreviewAndOneBackup()
+    {
+        Guid keyboard = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        Guid mouse = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var storage = new FakeStorageTools();
+        var controller = new AppStorageDataToolsController(
+            storage, new FakeCaptureControl(PauseReason.User), @"C:\portable", Clock);
+
+        StorageDeletionBatchDisplay preview = await controller.PreviewDeletionBatchAsync(
+            keyboard, mouse, new StorageUtcRange(10, 20));
+
+        Assert.True(preview.CanExecute);
+        Assert.Equal(6, preview.KeyboardPressCount);
+        Assert.Equal(8, preview.MouseButtonPressCount);
+        StorageDeletionBatchResult result = await controller.ExecutePreparedDeletionBatchAsync(
+            preview, finalConfirmed: true);
+        Assert.Equal(6, result.DeletedKeyboardPressCount);
+        Assert.Equal(8, result.DeletedMouseButtonPressCount);
+        Assert.Equal(["delete-all"], storage.Operations);
+        Assert.StartsWith(Path.Combine("backups", "before-delete-20260813-123456-000"), storage.DeletionBackupPath);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            controller.ExecutePreparedDeletionBatchAsync(preview, finalConfirmed: true));
+    }
+
     private static DateTimeOffset Clock() => new(2026, 8, 13, 12, 34, 56, TimeSpan.Zero);
 
     private static string CreateBackupFixture(string root)
@@ -411,6 +436,45 @@ public sealed class AppStorageDataToolsTests
                     Path.Combine(@"C:\portable", preDeletionBackupRelativePath), "BACKUP", 1, 1));
         }
 
+        public Task<StorageDeletionBatchPreview> PreviewDeletionBatchAsync(
+            Guid keyboardDeviceId,
+            Guid mouseDeviceId,
+            StorageUtcRange range,
+            CancellationToken token) => Task.FromResult(new StorageDeletionBatchPreview(
+                keyboardDeviceId,
+                mouseDeviceId,
+                range,
+                3,
+                6,
+                600,
+                4,
+                8,
+                StorageDeletionCapability.ExactKeyboardAndMouseDailyAggregates,
+                null,
+                "SECRET-BATCH-TOKEN",
+                "SECRET-BATCH-FINGERPRINT"));
+
+        public StorageDeletionBatchResult ExecuteDeletionBatch(
+            StorageDeletionBatchPreview preview,
+            string confirmationToken,
+            string preDeletionBackupRelativePath)
+        {
+            Assert.Equal("SECRET-BATCH-TOKEN", confirmationToken);
+            Operations.Add("delete-all");
+            DeletionBackupPath = preDeletionBackupRelativePath;
+            return new StorageDeletionBatchResult(
+                preview.KeyboardDeviceId,
+                preview.MouseDeviceId,
+                preview.UtcRange,
+                preview.KeyboardAggregateCount,
+                preview.KeyboardPressCount,
+                preview.KeyboardHoldDurationMicroseconds,
+                preview.MouseButtonAggregateCount,
+                preview.MouseButtonPressCount,
+                new StorageBackupArtifact(
+                    Path.Combine(@"C:\portable", preDeletionBackupRelativePath), "BACKUP", 1, 1));
+        }
+
         public IReadOnlyList<StorageDeviceInfo> ListDevices() =>
         [
             new StorageDeviceInfo(
@@ -420,7 +484,19 @@ public sealed class AppStorageDataToolsTests
                 StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier,
                 null,
                 0,
-                0)
+                0),
+            new StorageDeviceInfo(
+                Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                StorageDeviceKind.Keyboard,
+                StorageDeviceIdentityConfidence.TransientInterface,
+                StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier,
+                null, 0, 0),
+            new StorageDeviceInfo(
+                Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                StorageDeviceKind.Mouse,
+                StorageDeviceIdentityConfidence.TransientInterface,
+                StorageDeviceIdentityAmbiguity.MissingPermanentIdentifier,
+                null, 0, 0)
         ];
 
         public StorageServiceHealth Health => new(

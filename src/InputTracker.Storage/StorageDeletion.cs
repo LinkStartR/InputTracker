@@ -9,7 +9,8 @@ public enum StorageDeletionCapability
 {
     BlockedByCurrentFormat = 0,
     ExactKeyboardDailyAggregates = 1,
-    ExactMouseButtonDailyAggregates = 2
+    ExactMouseButtonDailyAggregates = 2,
+    ExactKeyboardAndMouseDailyAggregates = 3
 }
 
 public sealed record StorageDeletionPreview(
@@ -27,6 +28,31 @@ public sealed record StorageDeletionPreview(
 
 public sealed record StorageDeletionResult(
     Guid DeviceId,
+    StorageUtcRange UtcRange,
+    long DeletedKeyboardAggregateCount,
+    long DeletedKeyboardPressCount,
+    long DeletedKeyboardHoldDurationMicroseconds,
+    long DeletedMouseButtonAggregateCount,
+    long DeletedMouseButtonPressCount,
+    StorageBackupArtifact PreDeletionBackup);
+
+public sealed record StorageDeletionBatchPreview(
+    Guid KeyboardDeviceId,
+    Guid MouseDeviceId,
+    StorageUtcRange UtcRange,
+    long KeyboardAggregateCount,
+    long KeyboardPressCount,
+    long KeyboardHoldDurationMicroseconds,
+    long MouseButtonAggregateCount,
+    long MouseButtonPressCount,
+    StorageDeletionCapability Capability,
+    string? BlockedReason,
+    string Token,
+    string StateFingerprint);
+
+public sealed record StorageDeletionBatchResult(
+    Guid KeyboardDeviceId,
+    Guid MouseDeviceId,
     StorageUtcRange UtcRange,
     long DeletedKeyboardAggregateCount,
     long DeletedKeyboardPressCount,
@@ -147,32 +173,45 @@ internal static class StorageDeletion
         Guid deviceId,
         StorageDeletionImpact impact)
     {
-        if (impact.AggregateCount == 0)
+        return DeleteRowsBatch(connection, [(deviceId, impact)]);
+    }
+
+    public static long DeleteRowsBatch(
+        SqliteConnection connection,
+        IReadOnlyList<(Guid DeviceId, StorageDeletionImpact Impact)> targets)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(targets);
+        long expected = targets.Sum(target => target.Impact.AggregateCount);
+        if (expected == 0)
             throw new InvalidOperationException("Deletion preview contains no matching records.");
-        string table = impact.Kind == StorageDeviceKind.Keyboard ? "keyboard_daily" : "mouse_button_daily";
-        IEnumerable<(DateOnly CaptureLocalDate, string TimeZoneId)> buckets = impact.Kind == StorageDeviceKind.Keyboard
-            ? impact.KeyboardRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId))
-            : impact.MouseButtonRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId));
 
         using SqliteTransaction transaction = connection.BeginTransaction();
         long deleted = 0;
-        foreach ((DateOnly date, string timeZoneId) in buckets.Distinct())
+        foreach ((Guid deviceId, StorageDeletionImpact impact) in targets)
         {
-            using SqliteCommand command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = $"""
-                DELETE FROM {table}
-                WHERE device_id = $device
-                  AND capture_local_date = $date
-                  AND time_zone_id = $zone;
-                """;
-            command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
-            command.Parameters.AddWithValue("$date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-            command.Parameters.AddWithValue("$zone", timeZoneId);
-            deleted = checked(deleted + command.ExecuteNonQuery());
+            string table = impact.Kind == StorageDeviceKind.Keyboard ? "keyboard_daily" : "mouse_button_daily";
+            IEnumerable<(DateOnly CaptureLocalDate, string TimeZoneId)> buckets = impact.Kind == StorageDeviceKind.Keyboard
+                ? impact.KeyboardRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId))
+                : impact.MouseButtonRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId));
+            foreach ((DateOnly date, string timeZoneId) in buckets.Distinct())
+            {
+                using SqliteCommand command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = $"""
+                    DELETE FROM {table}
+                    WHERE device_id = $device
+                      AND capture_local_date = $date
+                      AND time_zone_id = $zone;
+                    """;
+                command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+                command.Parameters.AddWithValue("$date", date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                command.Parameters.AddWithValue("$zone", timeZoneId);
+                deleted = checked(deleted + command.ExecuteNonQuery());
+            }
         }
 
-        if (deleted != impact.AggregateCount)
+        if (deleted != expected)
             throw new InvalidDataException("Deletion changed a different number of rows than the confirmed preview.");
         transaction.Commit();
         return deleted;
@@ -218,6 +257,20 @@ internal static class StorageDeletion
                 .Append('|').Append(row.PressCount);
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
+    }
+
+    public static string CreateBatchStateFingerprint(
+        Guid keyboardDeviceId,
+        StorageDeletionImpact keyboardImpact,
+        Guid mouseDeviceId,
+        StorageDeletionImpact mouseImpact,
+        StorageUtcRange range,
+        StorageDurableWatermark watermark)
+    {
+        string keyboard = CreateStateFingerprint(keyboardDeviceId, range, keyboardImpact, watermark);
+        string mouse = CreateStateFingerprint(mouseDeviceId, range, mouseImpact, watermark);
+        string state = $"InputTracker.delete-batch.v1|{keyboardDeviceId:N}|{keyboard}|{mouseDeviceId:N}|{mouse}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(state)));
     }
 
     public static string CreateToken(string stateFingerprint) =>

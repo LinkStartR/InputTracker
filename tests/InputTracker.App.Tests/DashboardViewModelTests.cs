@@ -32,6 +32,39 @@ public sealed class DashboardViewModelTests
     }
 
     [Fact]
+    public async Task CustomDateRangeQueriesKeyboardAndMouseWithTheSameInclusiveDates()
+    {
+        Guid keyboard = Guid.NewGuid();
+        Guid mouse = Guid.NewGuid();
+        var source = new FakeDashboardDataSource(keyboard, mouse);
+        var model = new DashboardViewModel(source)
+        {
+            CustomStartDate = new DateOnly(2026, 9, 5),
+            CustomEndDate = new DateOnly(2026, 9, 18),
+            TimeZoneId = "UTC",
+            SelectedKeyboardDeviceId = keyboard,
+            SelectedMouseDeviceId = mouse
+        };
+
+        await model.RefreshAsync();
+
+        Assert.Equal((new DateOnly(2026, 9, 5), new DateOnly(2026, 9, 18), keyboard), source.KeyboardRangeRequest);
+        Assert.Equal((new DateOnly(2026, 9, 5), new DateOnly(2026, 9, 18), mouse), source.MouseRangeRequest);
+        Assert.Equal(StoragePeriodKind.Custom, model.ResolvedPeriod?.Kind);
+    }
+
+    [Fact]
+    public void DateRangePresetAndValidationUseInclusiveDates()
+    {
+        AppDateRangeSelection preset = AppDateRangeSelection.EndingToday(7, new DateOnly(2026, 9, 18));
+
+        Assert.Equal(new DateOnly(2026, 9, 12), preset.InclusiveStartDate);
+        Assert.Equal(new DateOnly(2026, 9, 18), preset.InclusiveEndDate);
+        Assert.Throws<InvalidOperationException>(() => AppDateRangeSelection.Create(
+            new DateTime(2026, 9, 19), new DateTime(2026, 9, 18)));
+    }
+
+    [Fact]
     public async Task LargeButtonCountsAreQueriedOffTheCallingThread()
     {
         Guid mouse = Guid.NewGuid();
@@ -145,6 +178,8 @@ public sealed class DashboardViewModelTests
     {
         public (StoragePeriodKind, Guid?) KeyboardRequest { get; private set; }
         public (StoragePeriodKind, Guid?) MouseButtonsRequest { get; private set; }
+        public (DateOnly Start, DateOnly End, Guid? Device)? KeyboardRangeRequest { get; private set; }
+        public (DateOnly Start, DateOnly End, Guid? Device)? MouseRangeRequest { get; private set; }
         public int MouseButtonQueryCount { get; private set; }
         public (Guid DeviceId, string? Alias)? AliasRequest { get; private set; }
 
@@ -177,6 +212,25 @@ public sealed class DashboardViewModelTests
                     new(mouse, StorageMouseButton.X1, 1)
                 ],
                 [zone]));
+        }
+
+        public Task<StorageKeyboardPeriodResult> QueryKeyboardRangeAsync(
+            DateOnly start, DateOnly end, string zone, Guid? deviceId, CancellationToken cancellationToken)
+        {
+            KeyboardRangeRequest = (start, end, deviceId);
+            return Task.FromResult(new StorageKeyboardPeriodResult(
+                StoragePeriodResolver.ResolveRange(start, end, zone),
+                [new(keyboard, 30, false, false, 4, 10), new(keyboard, 31, true, false, 3, 20)], [zone]));
+        }
+
+        public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsRangeAsync(
+            DateOnly start, DateOnly end, string zone, Guid? deviceId, CancellationToken cancellationToken)
+        {
+            MouseRangeRequest = (start, end, deviceId);
+            MouseButtonQueryCount++;
+            return Task.FromResult(new StorageMouseButtonPeriodResult(
+                StoragePeriodResolver.ResolveRange(start, end, zone),
+                [new(mouse, StorageMouseButton.Left, 2)], [zone]));
         }
 
         public Task<StorageDeviceInfo> SetDeviceAliasAsync(

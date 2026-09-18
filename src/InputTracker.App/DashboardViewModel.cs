@@ -18,6 +18,20 @@ internal interface IDashboardDataSource
         string timeZoneId,
         Guid? deviceId,
         CancellationToken cancellationToken);
+    Task<StorageKeyboardPeriodResult> QueryKeyboardRangeAsync(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Custom keyboard ranges are not implemented by this data source.");
+    Task<StorageMouseButtonPeriodResult> QueryMouseButtonsRangeAsync(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Custom mouse ranges are not implemented by this data source.");
     Task<StorageDeviceInfo> SetDeviceAliasAsync(
         Guid deviceId,
         string? alias,
@@ -52,6 +66,30 @@ internal sealed class StorageDashboardDataSource(StorageService service) : IDash
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(service.QueryMouseButtonsPeriod(kind, date, timeZoneId, deviceId));
+    }
+
+    public Task<StorageKeyboardPeriodResult> QueryKeyboardRangeAsync(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(service.QueryKeyboardRange(
+            inclusiveStartDate, inclusiveEndDate, timeZoneId, deviceId));
+    }
+
+    public Task<StorageMouseButtonPeriodResult> QueryMouseButtonsRangeAsync(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(service.QueryMouseButtonsRange(
+            inclusiveStartDate, inclusiveEndDate, timeZoneId, deviceId));
     }
 
     public Task<StorageDeviceInfo> SetDeviceAliasAsync(
@@ -91,6 +129,8 @@ internal sealed class DashboardViewModel
 
     public StoragePeriodKind Period { get; set; } = StoragePeriodKind.Day;
     public DateOnly AnchorDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+    public DateOnly? CustomStartDate { get; set; }
+    public DateOnly? CustomEndDate { get; set; }
     public string TimeZoneId { get; set; } = TimeZoneInfo.Local.Id;
     public Guid? SelectedKeyboardDeviceId { get; set; }
     public Guid? SelectedMouseDeviceId { get; set; }
@@ -112,6 +152,7 @@ internal sealed class DashboardViewModel
         DashboardLoadResult loaded = await Task.Run(
             () => LoadAsync(
                 Period, AnchorDate, TimeZoneId,
+                CustomStartDate, CustomEndDate,
                 SelectedKeyboardDeviceId, SelectedMouseDeviceId, token), token);
 
         token.ThrowIfCancellationRequested();
@@ -145,13 +186,28 @@ internal sealed class DashboardViewModel
 
     private async Task<DashboardLoadResult> LoadAsync(
         StoragePeriodKind period, DateOnly anchor, string zone,
+        DateOnly? customStartDate, DateOnly? customEndDate,
         Guid? keyboardDevice, Guid? mouseDevice, CancellationToken token)
     {
         IReadOnlyList<StorageDeviceInfo> devices = await _dataSource.ListDevicesAsync(token).ConfigureAwait(false);
-        StorageKeyboardPeriodResult keyboard = await _dataSource.QueryKeyboardAsync(
-            period, anchor, zone, keyboardDevice, token).ConfigureAwait(false);
-        StorageMouseButtonPeriodResult mouseButtons = await _dataSource.QueryMouseButtonsAsync(
-            period, anchor, zone, mouseDevice, token).ConfigureAwait(false);
+        if (customStartDate.HasValue != customEndDate.HasValue)
+            throw new InvalidOperationException("Custom range requires both a start date and an end date.");
+        StorageKeyboardPeriodResult keyboard;
+        StorageMouseButtonPeriodResult mouseButtons;
+        if (customStartDate is DateOnly start && customEndDate is DateOnly end)
+        {
+            keyboard = await _dataSource.QueryKeyboardRangeAsync(
+                start, end, zone, keyboardDevice, token).ConfigureAwait(false);
+            mouseButtons = await _dataSource.QueryMouseButtonsRangeAsync(
+                start, end, zone, mouseDevice, token).ConfigureAwait(false);
+        }
+        else
+        {
+            keyboard = await _dataSource.QueryKeyboardAsync(
+                period, anchor, zone, keyboardDevice, token).ConfigureAwait(false);
+            mouseButtons = await _dataSource.QueryMouseButtonsAsync(
+                period, anchor, zone, mouseDevice, token).ConfigureAwait(false);
+        }
         return new DashboardLoadResult(devices, keyboard, mouseButtons);
     }
 

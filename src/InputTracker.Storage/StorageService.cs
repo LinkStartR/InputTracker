@@ -171,6 +171,24 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public StorageKeyboardPeriodResult QueryKeyboardRange(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId = null)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.QueryKeyboardRange(
+                _database.Connection,
+                inclusiveStartDate,
+                inclusiveEndDate,
+                timeZoneId,
+                deviceId);
+        }
+    }
+
     public StorageMouseButtonPeriodResult QueryMouseButtonsPeriod(
         StoragePeriodKind kind,
         DateOnly containingDate,
@@ -184,6 +202,24 @@ public sealed class StorageService : IDisposable
                 _database.Connection,
                 kind,
                 containingDate,
+                timeZoneId,
+                deviceId);
+        }
+    }
+
+    public StorageMouseButtonPeriodResult QueryMouseButtonsRange(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId = null)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.QueryMouseButtonsRange(
+                _database.Connection,
+                inclusiveStartDate,
+                inclusiveEndDate,
                 timeZoneId,
                 deviceId);
         }
@@ -278,6 +314,54 @@ public sealed class StorageService : IDisposable
         return Task.FromResult(preview);
     }
 
+    public Task<StorageDeletionBatchPreview> PreviewDeletionBatchAsync(
+        Guid keyboardDeviceId,
+        Guid mouseDeviceId,
+        StorageUtcRange utcRange,
+        CancellationToken cancellationToken = default)
+    {
+        utcRange.Validate();
+        if (keyboardDeviceId == Guid.Empty || mouseDeviceId == Guid.Empty || keyboardDeviceId == mouseDeviceId)
+            throw new ArgumentException("Combined deletion requires distinct keyboard and mouse device identifiers.");
+
+        StorageDeletionImpact keyboard;
+        StorageDeletionImpact mouse;
+        StorageDurableWatermark watermark;
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            cancellationToken.ThrowIfCancellationRequested();
+            keyboard = StorageDeletion.DescribeImpact(_database.Connection, keyboardDeviceId, utcRange);
+            mouse = StorageDeletion.DescribeImpact(_database.Connection, mouseDeviceId, utcRange);
+            if (keyboard.Kind != StorageDeviceKind.Keyboard || mouse.Kind != StorageDeviceKind.Mouse)
+                throw new InvalidDataException("Combined deletion targets must be one keyboard and one mouse.");
+            watermark = Health.DurableWatermark;
+        }
+
+        string fingerprint = StorageDeletion.CreateBatchStateFingerprint(
+            keyboardDeviceId, keyboard, mouseDeviceId, mouse, utcRange, watermark);
+        bool partial = keyboard.HasPartialDayOverlap || mouse.HasPartialDayOverlap;
+        bool empty = keyboard.AggregateCount + mouse.AggregateCount == 0;
+        var preview = new StorageDeletionBatchPreview(
+            keyboardDeviceId,
+            mouseDeviceId,
+            utcRange,
+            keyboard.AggregateCount,
+            keyboard.PressCount,
+            keyboard.HoldDurationMicroseconds,
+            mouse.AggregateCount,
+            mouse.PressCount,
+            partial || empty
+                ? StorageDeletionCapability.BlockedByCurrentFormat
+                : StorageDeletionCapability.ExactKeyboardAndMouseDailyAggregates,
+            partial
+                ? "The selected UTC range cuts through a stored local-day aggregate; InputTracker will not estimate a partial deletion."
+                : empty ? "The selected range contains no matching daily aggregate records." : null,
+            StorageDeletion.CreateToken(fingerprint),
+            fingerprint);
+        return Task.FromResult(preview);
+    }
+
     public StorageDeletionResult ExecuteDeletion(
         StorageDeletionPreview preview,
         string confirmationToken,
@@ -349,6 +433,78 @@ public sealed class StorageService : IDisposable
                 current.Kind == StorageDeviceKind.Keyboard ? current.HoldDurationMicroseconds : 0,
                 current.Kind == StorageDeviceKind.Mouse ? deleted : 0,
                 current.Kind == StorageDeviceKind.Mouse ? current.PressCount : 0,
+                backup);
+        }
+    }
+
+    public StorageDeletionBatchResult ExecuteDeletionBatch(
+        StorageDeletionBatchPreview preview,
+        string confirmationToken,
+        string preDeletionBackupRelativePath)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentException.ThrowIfNullOrWhiteSpace(confirmationToken);
+        ArgumentException.ThrowIfNullOrWhiteSpace(preDeletionBackupRelativePath);
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            if (_state is not StorageServiceState.Created
+                and not StorageServiceState.Paused
+                and not StorageServiceState.Stopped
+                || _acceptingWrites
+                || _pending.Count != 0
+                || _openHolds.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    "Deletion requires Created, Paused, or Stopped storage with no buffered input.");
+            }
+            string expected = StorageDeletion.CreateToken(preview.StateFingerprint);
+            if (!StorageDeletion.FixedTimeTokenEquals(confirmationToken, expected))
+                throw new InvalidOperationException("Deletion confirmation token does not match its preview.");
+            if (preview.Capability != StorageDeletionCapability.ExactKeyboardAndMouseDailyAggregates)
+                throw new InvalidOperationException(preview.BlockedReason ?? "Combined deletion is blocked.");
+
+            StorageDeletionImpact keyboard = StorageDeletion.DescribeImpact(
+                _database.Connection, preview.KeyboardDeviceId, preview.UtcRange);
+            StorageDeletionImpact mouse = StorageDeletion.DescribeImpact(
+                _database.Connection, preview.MouseDeviceId, preview.UtcRange);
+            StorageDurableWatermark watermark = new(
+                _ordinals.CommitOrdinal,
+                _ordinals.KeyboardAggregateCommitOrdinal,
+                StorageDurabilityScope.SQLiteCommitted);
+            string currentFingerprint = StorageDeletion.CreateBatchStateFingerprint(
+                preview.KeyboardDeviceId, keyboard,
+                preview.MouseDeviceId, mouse,
+                preview.UtcRange, watermark);
+            if (keyboard.Kind != StorageDeviceKind.Keyboard
+                || mouse.Kind != StorageDeviceKind.Mouse
+                || keyboard.HasPartialDayOverlap
+                || mouse.HasPartialDayOverlap
+                || !StorageDeletion.FixedTimeTokenEquals(currentFingerprint, preview.StateFingerprint)
+                || keyboard.AggregateCount != preview.KeyboardAggregateCount
+                || keyboard.PressCount != preview.KeyboardPressCount
+                || keyboard.HoldDurationMicroseconds != preview.KeyboardHoldDurationMicroseconds
+                || mouse.AggregateCount != preview.MouseButtonAggregateCount
+                || mouse.PressCount != preview.MouseButtonPressCount
+                || keyboard.AggregateCount + mouse.AggregateCount == 0)
+            {
+                throw new InvalidOperationException(
+                    "Stored data changed after the combined deletion preview; review the range again before deleting.");
+            }
+
+            StorageBackupArtifact backup = StorageBackup.Create(_database, preDeletionBackupRelativePath);
+            _ = StorageDeletion.DeleteRowsBatch(
+                _database.Connection,
+                [(preview.KeyboardDeviceId, keyboard), (preview.MouseDeviceId, mouse)]);
+            return new StorageDeletionBatchResult(
+                preview.KeyboardDeviceId,
+                preview.MouseDeviceId,
+                preview.UtcRange,
+                keyboard.AggregateCount,
+                keyboard.PressCount,
+                keyboard.HoldDurationMicroseconds,
+                mouse.AggregateCount,
+                mouse.PressCount,
                 backup);
         }
     }
