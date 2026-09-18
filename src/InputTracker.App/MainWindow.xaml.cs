@@ -694,15 +694,7 @@ public partial class MainWindow : Window
     internal static string FormatDeviceDisplayName(StorageDeviceInfo value, int ordinal = 1)
     {
         if (ordinal <= 0) throw new ArgumentOutOfRangeException(nameof(ordinal));
-        string confidence = value.IdentityConfidence switch
-        {
-            StorageDeviceIdentityConfidence.PersistentHardware => "重连后仍可识别",
-            StorageDeviceIdentityConfidence.ReconnectableHardware => "已记住，同型号设备可能混淆",
-            _ when value.IdentityAmbiguity.HasFlag(StorageDeviceIdentityAmbiguity.MultipleCandidates) =>
-                "有相似设备，请按名称辨认",
-            _ => "重连后可能显示为新设备"
-        };
-        return $"{FormatDeviceName(value, ordinal)} · {confidence}";
+        return FormatDeviceName(value, ordinal);
     }
 
     private static string FormatDeviceName(StorageDeviceInfo value, int ordinal) =>

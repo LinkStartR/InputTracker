@@ -670,7 +670,7 @@
                                                         Click="ClearKeyboardAliasButton_Click" />
                                             </Grid>
                                             <TextBlock x:Name="KeyboardAliasStatusText" Margin="0,6,0,0"
-                                                       Text="改名只方便你辨认，已有记录不会变化。" FontSize="12"
+                                                       Text="改名只方便你辨认，已有记录不会变化。同型号且无序列号的设备重连后可能混淆。" FontSize="12"
                                                        Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
@@ -767,7 +767,7 @@
                                                         Click="ClearMouseAliasButton_Click" />
                                             </Grid>
                                             <TextBlock x:Name="MouseAliasStatusText" Margin="0,6,0,0"
-                                                       Text="改名只方便你辨认，已有记录不会变化。" FontSize="12"
+                                                       Text="改名只方便你辨认，已有记录不会变化。同型号且无序列号的设备重连后可能混淆。" FontSize="12"
                                                        Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Grid>
