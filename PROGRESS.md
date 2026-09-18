@@ -1477,3 +1477,11 @@
 - 实现：Storage 以同一 preview fingerprint、stale-token 检查、程序目录备份和 SQLite 单事务支持两类日聚合；App 数据工具增加“键盘统计 / 鼠标按键统计”下拉框，沿用对应页面当前选中的设备，最终确认和完成状态明确显示目标类型。
 - 绿证据：Storage 删除 focused 首轮 `3/0/0`、710ms；App 类型/控制链 focused `4/0/0`、37ms。solution Release build exit `0`，7 项目成功、0 warnings / 0 errors、1.84s；Storage non-Spike `210/0/0`、8s；App 全量 `143/0/0`、267ms。随后补回“鼠标按键删除不得创建轨迹文件”的独立隐私回归，使测试数只增加不减少；最终 Storage 删除类 `4/0/0`、746ms。
 - 下一步：复核新增隐私用例、提交并发布全新无历史数据测试目录；用户只验证删除类型选择、鼠标按键删除、键盘删除回归、备份和重启持久性。通过后再单独实现“查看范围 + 删除记录”的快捷日期与日历起止日选择。
+
+## 2026-09-18 删除类型选择人工测试包
+
+- 产品提交：`ae8e4c1 feat: allow mouse button range deletion`；11 个文件，仅含 Storage/App 删除选择、普通测试、Storage 文档及进度/阻塞记录。分支 `codex/ui-storage-integration` 比远端 ahead 64，未 push。
+- 发布：`.tools/dotnet/dotnet.exe publish src\InputTracker.App\InputTracker.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o .tools\publish\deletion-kind-test-20260918`，exit `0`；Input、Storage、App 成功。
+- 交付物：`.tools/publish/deletion-kind-test-20260918/InputTracker.exe`，484 files，SHA-256 `67D567FA44B3E5C5B16FE738B13940F1FC65AFD9BF9E36C7DE22AB75335B16E9`。全新目录，未复制历史数据，`DATA_EXISTS=False`。
+- 自检：隐藏进程执行 `InputTracker.exe --self-check`，exit `0`；执行者未启动 GUI。
+- 人工停点：用户在新目录产生少量键盘与鼠标按键数据，暂停后分别选择“键盘统计”和“鼠标按键统计”执行取消/确认删除，检查相互不串删、自动备份、重启保持；通过前不开始日期表实现。
