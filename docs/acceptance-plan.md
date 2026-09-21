@@ -2,13 +2,7 @@
 
 ## 自动化门槛
 
-每个可提交阶段统一执行并保存退出码和摘要：
-
-1. `dotnet restore`
-2. `dotnet build -c Release`
-3. `dotnet test -c Release --no-build`，要求 skipped = 0
-4. `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1`
-5. `dotnet publish -c Release -r win-x64 --self-contained true`
+每个可提交阶段在本地执行 `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1 -Stage <阶段名>` 并保存退出码和摘要。脚本使用仓库本地 `.tools/dotnet`，依次完成 restore、Release build、test（要求 skipped = 0）、win-x64 self-contained publish 和阶段 gate；当前 CI 只运行其独立的 restore/build/test/publish 流程，不代替这份分阶段证据。
 
 验收用例至少覆盖日、周、月、年及时区边界，设备隔离，重插映射，隐私 schema，崩溃恢复，范围删除，版本化迁移，绿色路径和运行时无网络。
 
@@ -51,7 +45,7 @@ InputCore 自动测试仅验证规范化注入和生产管线，不是物理硬�
 
 执行 `scripts/verify.ps1 -Stage Storage`。该阶段必须完整回归 Bootstrap 与 InputCore gate，并通过日/周/月/年半开区间、Pacific 23/25 小时 DST、显式 Windows 时区、CSV 隐私列、PNG、版本化迁移、设备映射、鼠标按键汇总且不产生轨迹文件、备份恢复和恢复日志测试。TRX 使用精确测试名并要求每项为 `Passed`，缺失、改名或非通过均失败。
 
-当前格式不能安全地精确重写任意范围，因此删除 gate 固定为 `deletion-preview-and-execution-blocked`。证据必须报告 `BlockedByCurrentFormat`、`releaseEligible=false`，不得把预览或执行阻断称为删除通过。真实多设备、1000Hz、磁盘增长和物理断电保持 `not-run`，按 Storage 人工清单与 schema 现场验收。
+当前格式只能精确删除完整的本地统计日；切入统计日中间、混合时区或没有匹配记录的范围必须报告 `BlockedByCurrentFormat`，不得估算或修改数据。完整日删除也必须在用户暂停、Storage 已停止接收写入、预览 token 仍有效、最终确认和程序目录内预删除备份均满足后执行。`deletion-preview-and-execution-blocked` 保留为兼容 gate ID，验证完整日删除受保护执行，以及不精确范围的 fail-closed 行为；不得把阻断范围称为删除通过。真实多设备、1000Hz、磁盘增长和物理断电保持 `not-run`，按 Storage 人工清单与 schema 现场验收。
 
 `-InjectStorageChunkCorruption` 只破坏 `.tools` 下验收临时块；`-InjectStorageAggregateMismatch` 只改变 Acceptance 期望。二者互斥且只允许 Storage/Portable，原验证进程必须退出 1 并记录 mutation id。注入环境必须在 `finally` 恢复，不得接触产品或用户数据。
 

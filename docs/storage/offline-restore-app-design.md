@@ -1,6 +1,6 @@
 # Offline Restore App Integration
 
-Status: design only. The current application validates a backup selection but must not execute a restore until every gate below is implemented and verified against disposable temporary stores.
+Status: implemented integration contract. The application validates a backup selection, requires explicit user pause plus final confirmation, tears down capture and Storage, executes the narrow offline restore facade, and requests one terminal shutdown. The gates below remain the verification boundary and use disposable temporary stores.
 
 ## Safety boundary
 
@@ -50,7 +50,7 @@ Any uncertain stop, diagnostics, Storage state or disposal result must prevent t
 
 ## Automated gates
 
-All destructive-path tests use disposable stores under `.tools/verification/<timestamp>/restore-cases/<guid>` and have no skip path.
+All destructive-path automated tests use disposable `TemporaryDirectory` or `AcceptanceTemporaryDirectory` stores and must not target user data.
 
 - Reject missing user pause, accepting Storage, missing confirmation, path escape, reparse paths and non-backup files with zero stop/restore/shutdown calls.
 - Assert the exact teardown and restore order and exactly one shutdown request.
@@ -63,4 +63,4 @@ All destructive-path tests use disposable stores under `.tools/verification/<tim
 
 ## Manual gate
 
-Manual testing is allowed only on a disposable copy of the complete green directory, never the sole user data directory. Create distinct snapshots A and B, restore A after explicit pause and confirmation, restart manually and verify exact statistics and trajectories. Then restore the automatic before-restore backup in another disposable copy and verify B. The execute button remains disabled until the automated, Acceptance and disposable-copy gates are all green.
+Manual testing is allowed only on a disposable copy of the complete green directory, never the sole user data directory. Create distinct snapshots A and B, restore A after explicit pause and confirmation, restart manually and verify exact keyboard and mouse-button statistics. Then restore the automatic before-restore backup in another disposable copy and verify B. Automated and Acceptance checks remain required evidence; the restore action itself does not treat a button state as proof that those checks passed.

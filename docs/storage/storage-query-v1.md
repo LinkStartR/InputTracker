@@ -2,7 +2,7 @@
 
 ## Scope and ownership
 
-The current service exposes read-only period queries for keyboard aggregates and mouse-button counts. Mouse trajectory query and playback APIs were removed; current runtime code does not save or read mouse positions, routes, wheel movement, or event order.
+The current service exposes read-only calendar-period and inclusive local-date-range queries for keyboard aggregates and mouse-button counts. Mouse trajectory query and playback APIs were removed; current runtime code does not save or read mouse positions, routes, wheel movement, or event order.
 
 ## Explicit period semantics
 
@@ -16,4 +16,4 @@ Mouse queries require an optional persistent mouse GUID plus an explicit period 
 
 ## Evidence and limits
 
-Ordinary tests cover four periods, ISO Monday, Pacific 23/25-hour days, China/UTC, capture-zone isolation, keyboard device/key isolation, mouse-button device isolation, absence of trajectory artifacts and invalid inputs. This is software evidence only; it is not the required two-device terminal acceptance.
+Ordinary tests cover four calendar periods and custom ranges, ISO Monday, Pacific 23/25-hour days, China/UTC, capture-zone isolation, keyboard device/key isolation, mouse-button device isolation, absence of trajectory artifacts and invalid inputs. This is software evidence only; it is not the required two-device terminal acceptance.

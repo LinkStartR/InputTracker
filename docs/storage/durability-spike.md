@@ -1,10 +1,12 @@
 # Storage durability spike
 
+> Status: historical spike evidence, not the current product contract. The active service records privacy-preserving keyboard and mouse-button daily aggregates; it neither appends the mouse CRC spool nor publishes a mouse trajectory watermark. Current behavior is specified by `storage-service-v1.md`, `storage-query-v1.md`, and `export-backup-delete-v1.md`.
+
 ## Scope and decision
 
-This milestone fixes the minimum durability contract and reusable storage foundation only. It does not implement production trajectory compression blocks, statistics periods, exports, backup/restore, or scoped deletion.
+This completed milestone measured the minimum durability contract and reusable storage foundation. Its strategy and measurements remain engineering evidence only; they do not imply current trajectory, query, export, backup/restore, or deletion behavior.
 
-The production direction is strategy C: keyboard aggregates are committed in bounded SQLite transactions, while every mouse event is appended without sampling to a fixed-size CRC32C spool. A lifecycle boundary makes the mouse spool durable with `Flush(true)` before a `synchronous=FULL` SQLite transaction records its directory watermark. Strategy A (one FULL SQLite autocommit per event) and strategy B (bounded SQLite transactions) are retained only as measured comparison paths.
+The measured direction was strategy C: keyboard aggregates were committed in bounded SQLite transactions while every mouse event was appended without sampling to a fixed-size CRC32C spool. A lifecycle boundary made that experimental spool durable with `Flush(true)` before a `synchronous=FULL` SQLite transaction recorded its directory watermark. Strategy A (one FULL SQLite autocommit per event) and strategy B (bounded SQLite transactions) were comparison paths.
 
 `SinkAcknowledged` means that the storage sink accepted the event into its current SQLite transaction or appended the complete mouse record to the process-visible spool. It is not an fsync claim. The writer's internal `SpoolFlushResult` reports only that the file flush completed; it is not a final durability watermark and is not exposed to ordinary callers. `PowerDurable` is published only by `StorageDatabase.CommitSpoolBoundary` after both file flush and SQLite directory commit succeed, and remains a storage-layer guarantee rather than evidence from a physical power-cut test.
 
@@ -60,7 +62,7 @@ Each record is exactly 44 little-endian bytes:
 
 Sequence must be contiguous. A complete record with a header, CRC, or sequence failure is corruption and recovery fails closed without truncating it. An incomplete final record is the only automatically repairable case: recovery retains and optionally fsyncs the complete valid prefix, truncates the tail, and reports exactly one lost record. Exceptions are propagated.
 
-This record spool remains the append/durability foundation. The versioned compressed trajectory format, bounded sealer, checksum/hash, v2 catalog, atomic publication, and non-destructive recovery contract are now specified in `docs/storage/mouse-chunk-v1.md`. Transition spool cleanup remains blocked by B-008 until record-for-record equivalence is proven.
+This record spool was the append/durability foundation for the retired trajectory experiment. Its compressed-trajectory follow-on specification was removed with that feature; any prior implementation detail is available only through Git history. The former B-008 transition-cleanup decision is retired with the trajectory feature and is not a current release gate.
 
 ## Atomic ordering and crash seams
 

@@ -42,9 +42,9 @@ Expected device-removal races, access denial, missing properties, malformed prop
 
 ## Privacy
 
-Raw identity is delivered only through the internal `IRawDeviceIdentityObserver`. The default observer discards it. `CapturedInput` and its public `InputDeviceDescriptor` retain the existing API shape but arrivals intentionally carry `InterfacePath = null`; they never expose hardware IDs, serial numbers, or container IDs. UI and logging code must not receive the private observation.
+Raw identity is delivered only through the internal `IRawDeviceIdentityObserver`. The standalone default observer discards it; the production App supplies `AppStorageCoordinator`, which immediately maps the observation to Storage's hash-only device catalog. `CapturedInput` and its public `InputDeviceDescriptor` retain the existing API shape but arrivals intentionally carry `InterfacePath = null`; they never expose hardware IDs, serial numbers, or container IDs. UI and logging code must not receive the private observation.
 
-The future Input-to-Storage adapter may pass this observation directly to Storage for immediate hashing. It must map `Indeterminate` to transient/requires-confirmation behavior and must not persist raw identity values in SQLite, WAL, trajectory chunks, configuration, logs, CSV, PNG, or backups.
+The Input-to-Storage adapter maps `Indeterminate` to transient/requires-confirmation behavior and must not persist raw identity values in SQLite, WAL, configuration, logs, CSV, PNG, or backups.
 
 ## Verification boundary
 

@@ -443,7 +443,7 @@ try {
         'storage-active-owner-rejected', 'storage-restore-budget',
         'storage-restore-journal-recovery', 'storage-migration-versioned',
         'storage-privacy-schema-source-policy', 'storage-device-mapping-confidence',
-        'storage-chunk-integrity-recovery', 'deletion-preview-and-execution-blocked',
+        'storage-no-trajectory-artifacts', 'deletion-preview-and-execution-blocked',
         'storage-manual-terminal-status'
     )
     $portableGateIds = @(
@@ -499,7 +499,7 @@ try {
             injection = $(if ($InjectStorageChunkCorruption) { 'chunk-corruption' } elseif ($InjectStorageAggregateMismatch) { 'aggregate-mismatch' } else { 'none' })
             hardwareTerminalStatus = 'not-run'
             physicalPowerStatus = 'not-run'
-            deletionCapability = 'BlockedByCurrentFormat'
+            deletionCapability = 'not-run'
             releaseEligible = $false
         }
         Write-Evidence
@@ -603,7 +603,7 @@ try {
             injection = $(if ($null -eq $storageInjection) { 'none' } else { $storageInjection })
             hardwareTerminalStatus = 'not-run'
             physicalPowerStatus = 'not-run'
-            deletionCapability = 'BlockedByCurrentFormat'
+            deletionCapability = 'not-run'
             releaseEligible = $false
         }
     }
@@ -786,9 +786,10 @@ try {
 
     if ($Stage -in @('Storage', 'Portable')) {
         [xml]$storageTrx = $trxDocuments['InputTracker.Storage.Tests']
+        [xml]$appTrx = $trxDocuments['InputTracker.App.Tests']
         [xml]$acceptanceTrx = $trxDocuments['InputTracker.AcceptanceTests']
-        if ($null -eq $storageTrx -or $null -eq $acceptanceTrx) {
-            throw 'Storage 阶段缺少 Storage 或 Acceptance TRX。'
+        if ($null -eq $storageTrx -or $null -eq $appTrx -or $null -eq $acceptanceTrx) {
+            throw 'Storage 阶段缺少 Storage、App 或 Acceptance TRX。'
         }
 
         Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.PeriodsAreExplicitHalfOpenWindowsRanges' 4
@@ -804,7 +805,7 @@ try {
         Add-Gate -Id 'storage-export-png' -Details 'PNG deterministic lossless dimensions passed'
 
         Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.BackupAndRestoreRoundTripsCommittedDataAndCreatesPreRestoreBackup'
-        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.BackupAndRestoreRoundTripsCommittedMousePrefix'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.BackupAndRestoreRoundTripsMouseButtonAggregatesWithoutTrajectoryFiles'
         Add-Gate -Id 'storage-backup-restore' -Details 'keyboard and mouse committed data round-trip with pre-restore backup passed'
         Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.CorruptBackupFailsClosedWithoutChangingLiveStore'
         Add-Gate -Id 'storage-backup-corruption-fail-closed' -Details 'corrupt backup leaves live store unchanged'
@@ -836,10 +837,12 @@ try {
         Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.MouseButtonsCreateNoTrajectoryArtifactsOrPublicPlaybackApi'
         Add-Gate -Id 'storage-no-trajectory-artifacts' -Details 'mouse buttons persist without trajectory files or public playback APIs'
 
-        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.DeletionPreviewIsExplicitlyBlockedByCurrentFormat'
-        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.MouseTrajectoryDeletionPreviewIsUnavailableAfterFeatureRemoval'
-        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.ExecuteAlwaysFailsClosedWhileCurrentFormatCannotRewriteExactRange'
-        Add-Gate -Id 'deletion-preview-and-execution-blocked' -Details 'preview capability=BlockedByCurrentFormat; execute remains fail-closed and is not reported as passed deletion'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.FullDayDeletionCreatesBackupAndRemovesOnlyTheSelectedDeviceRange'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.MouseButtonFullDayDeletionCreatesBackupAndKeepsOtherDeviceAndDate'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.CombinedDeletionUsesOneBackupAndOneAtomicKeyboardMouseCommit'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.PartialDayAndMixedTimeZoneOverlapFailClosedWithoutCreatingBackup'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppStorageDataToolsTests.KeyboardDeletionRequiresUserPauseAndExecutesOnlyThePreparedConfirmedPreview'
+        Add-Gate -Id 'deletion-preview-and-execution-blocked' -Details 'complete local-day deletion requires user pause, fresh prepared preview, final confirmation and pre-deletion backup; partial or mixed-time-zone ranges fail closed'
 
         $storageRunbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\storage-checklist.md'
         $storageSchemaPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\storage-evidence.schema.json'
@@ -855,7 +858,7 @@ try {
             injection = 'none'
             hardwareTerminalStatus = 'not-run'
             physicalPowerStatus = 'not-run'
-            deletionCapability = 'BlockedByCurrentFormat'
+            deletionCapability = 'not-run'
             releaseEligible = $false
             runbook = Get-RelativePath -BasePath $repositoryRoot -Path $storageRunbookPath
             evidenceSchema = Get-RelativePath -BasePath $repositoryRoot -Path $storageSchemaPath
