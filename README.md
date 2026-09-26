@@ -27,13 +27,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .tools/dotnet-install.ps1 -C
 
 ## 文档入口
 
-- [绿色版使用、数据位置与卸载](docs/portable/README.md)
-- [设备身份与隐私边界](docs/input/device-identity-v1.md)
-- Storage：[写入与设备身份](docs/storage/storage-service-v1.md)、[查询](docs/storage/storage-query-v1.md)、[导出/备份/删除](docs/storage/export-backup-delete-v1.md)、[App 离线恢复接线](docs/storage/offline-restore-app-design.md)
-- [验收计划](docs/acceptance-plan.md)与[现场验收清单](tests/Acceptance/Manual/)
-
-[Storage 耐久性尖峰记录](docs/storage/durability-spike.md)仅是历史试验证据，不代表当前产品保存鼠标轨迹。
-
-[本地发布测试包更新记录](docs/test-package-history.md)追溯 `.tools/publish/` 的 30 轮交付、对应 Git 提交、人工反馈与清理结果。当前发布目录仅保留最新的 #30。
-
-`.tools/` 是被 Git 忽略的本地工作目录，包含 SDK、构建输出、验证证据和人工测试发布包，不属于源码版本。历史 #1–#29 已于 2026-09-23 移入回收站；以后产生的新测试包仍可能含有 `data/` 或 `backups/`，清理前应先记录对应提交、验收状态和保留决定。`verification/` 中的历史自检快照即使可重新生成新证据，也无法还原当时的二进制。离线恢复验收只使用新建的可丢弃完整副本，不直接操作既有发布包数据。
+[文档导航](docs/README.md)区分使用说明、现行实现契约、验收材料和历史记录，也说明 `.tools/publish/` 手动测试包的保留与清理规则。`.tools/` 是被 Git 忽略的本地工作目录，不属于源码版本。

@@ -131,7 +131,11 @@ public sealed class UiPresentationTests
         Assert.Contains("x:Key=\"SidebarTextBrush\"", appXaml, StringComparison.Ordinal);
         Assert.Contains("x:Key=\"SidebarMutedTextBrush\"", appXaml, StringComparison.Ordinal);
         Assert.Contains("x:Key=\"SidebarSelectionBrush\"", appXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Key=\"CardShadowEffect\"", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("CardShadowEffect", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Effect=\"{x:Null}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("TargetType=\"Expander\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{DynamicResource PrimaryTextBrush}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("RelativeSource TemplatedParent", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"NavigationGlyph\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("ContentSource=\"SelectedContent\" TextElement.Foreground=\"{DynamicResource PrimaryTextBrush}\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Header=\"鼠标按键\"", windowXaml, StringComparison.Ordinal);

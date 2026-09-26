@@ -30,15 +30,15 @@ internal static class UiThemeCatalog
 {
     public static UiThemePalette Light { get; } = new(
         "#FFF4F6FB", "#FFFFFFFF", "#FFF0F3F8", "#FF18212F", "#FF647084",
-        "#FFDDE3EC", "#FF635BFF", "#FFECEBFF", "#FFFFFFFF", "#FF4038A5",
-        "#FF526078", "#FFE9E7FF", "#FFFFFFFF",
+        "#FFDDE3EC", "#FF087C85", "#FFE4F5F3", "#FFFFFFFF", "#FF0C5A64",
+        "#FF526078", "#FFE2F4F2", "#FFFFFFFF",
         ["#FFE2E8F0", "#FFDBEAFE", "#FF93C5FD", "#FF3B82F6", "#FF1D4ED8", "#FF172554"],
         ["#FF0F172A", "#FF0F172A", "#FF0F172A", "#FF0F172A", "#FFFFFFFF", "#FFFFFFFF"]);
 
     public static UiThemePalette Dark { get; } = new(
         "#FF0A0F1C", "#FF111827", "#FF182235", "#FFF8FAFC", "#FFA8B3C7",
-        "#FF26334A", "#FF8B7CFF", "#FF24204D", "#FF070B14", "#FFF8FAFC",
-        "#FF94A3B8", "#FF292451", "#FF0A0F1C",
+        "#FF26334A", "#FF46D5C8", "#FF15373C", "#FF070B14", "#FFF8FAFC",
+        "#FF94A3B8", "#FF173C41", "#FF0A0F1C",
         ["#FF1E293B", "#FF1E3A5F", "#FF1D4ED8", "#FF2563EB", "#FF60A5FA", "#FFBFDBFE"],
         ["#FFF8FAFC", "#FFF8FAFC", "#FFFFFFFF", "#FFFFFFFF", "#FF0F172A", "#FF0F172A"]);
 }

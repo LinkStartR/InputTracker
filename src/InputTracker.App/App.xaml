@@ -16,12 +16,12 @@
         <Color x:Key="PrimaryTextColor">#FF18212F</Color>
         <Color x:Key="SecondaryTextColor">#FF647084</Color>
         <Color x:Key="BorderColor">#FFDDE3EC</Color>
-        <Color x:Key="AccentColor">#FF635BFF</Color>
-        <Color x:Key="AccentSoftColor">#FFECEBFF</Color>
+        <Color x:Key="AccentColor">#FF087C85</Color>
+        <Color x:Key="AccentSoftColor">#FFE4F5F3</Color>
         <Color x:Key="SidebarBackgroundColor">#FFFFFFFF</Color>
-        <Color x:Key="SidebarTextColor">#FF4038A5</Color>
+        <Color x:Key="SidebarTextColor">#FF0C5A64</Color>
         <Color x:Key="SidebarMutedTextColor">#FF526078</Color>
-        <Color x:Key="SidebarSelectionColor">#FFE9E7FF</Color>
+        <Color x:Key="SidebarSelectionColor">#FFE2F4F2</Color>
         <Color x:Key="AccentTextColor">#FFFFFFFF</Color>
 
         <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{DynamicResource WindowBackgroundColor}" />

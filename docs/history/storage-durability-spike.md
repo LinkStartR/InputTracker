@@ -1,6 +1,6 @@
 # Storage durability spike
 
-> Status: historical spike evidence, not the current product contract. The active service records privacy-preserving keyboard and mouse-button daily aggregates; it neither appends the mouse CRC spool nor publishes a mouse trajectory watermark. Current behavior is specified by `storage-service-v1.md`, `storage-query-v1.md`, and `export-backup-delete-v1.md`.
+> Status: historical spike evidence, not the current product contract. The active service records privacy-preserving keyboard and mouse-button daily aggregates; it neither appends the mouse CRC spool nor publishes a mouse trajectory watermark. Current behavior is specified by [Storage service](../storage/storage-service-v1.md), [queries](../storage/storage-query-v1.md), and [data operations](../storage/export-backup-delete-v2.md).
 
 ## Scope and decision
 
@@ -95,7 +95,7 @@ Final semantic-split source snapshot: .NET runtime `10.0.10`, 16 logical process
 | C spool, mixed 100k | 100000 / 100000 / 100000 / 100000 / 100000 | 50000 | 0 / 0 | 114469.09 | 5.2us / 10.6us | 22.369 | 873.60ms | 11ms |
 | C spool, mouse 30k equivalent | 30000 / 30000 / 30000 / 30000 / 30000 | 30000 | 0 / 0 | 185268.10 | 3.3us / 3.5us | 45.229 | 161.93ms | 10ms |
 
-The authoritative ignored JSON for this source snapshot is `.tools/storage-spike/20260805-104501-272-18816/storage-durability-spike.json`. The first full run also records a red seam: after 4m15s, the A path completed but the benchmark incorrectly attempted a batch tail commit through a null transaction. Restricting the tail commit to `batchSize > 1` preserved every workload and durability setting. A 4m25s pre-seam green run was retained as historical performance evidence; the final semantic-split snapshot passed in 4m00s.
+The source snapshot originally used `.tools/storage-spike/20260805-104501-272-18816/storage-durability-spike.json`, which is no longer present in this workspace. The first full run also records a red seam: after 4m15s, the A path completed but the benchmark incorrectly attempted a batch tail commit through a null transaction. Restricting the tail commit to `batchSize > 1` preserved every workload and durability setting. A 4m25s pre-seam green run was retained as historical performance evidence; the final semantic-split snapshot passed in 4m00s.
 
 The historical watermark split had its own ordinary red→green seam. Those trajectory writer results are retained only as prior engineering evidence; the current product no longer initializes that writer or exposes its write/read/playback APIs.
 

@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.IO;
 
 namespace InputTracker;
 
@@ -11,6 +12,7 @@ public sealed class TrayIconController : IDisposable
     private readonly Action _showWindow;
     private readonly Func<bool> _exitApplication;
     private readonly TrayExitSequence _exitSequence = new();
+    private readonly Icon _icon;
     private readonly System.Windows.Forms.NotifyIcon _notifyIcon;
     private readonly System.Windows.Forms.ContextMenuStrip _contextMenu;
     private readonly System.Windows.Forms.ToolStripMenuItem _openItem;
@@ -48,10 +50,14 @@ public sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add("退出", null, (_, _) => BeginExit());
         _contextMenu.Closed += ContextMenu_Closed;
 
+        using Stream iconStream = System.Windows.Application.GetResourceStream(
+            new Uri("pack://application:,,,/InputTracker;component/Assets/InputTracker.ico")).Stream;
+        _icon = new Icon(iconStream);
+
         _notifyIcon = new System.Windows.Forms.NotifyIcon
         {
             ContextMenuStrip = _contextMenu,
-            Icon = SystemIcons.Application,
+            Icon = _icon,
             Visible = true
         };
         _notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
@@ -71,6 +77,7 @@ public sealed class TrayIconController : IDisposable
         _notifyIcon.Visible = false;
         _contextMenu.Dispose();
         _notifyIcon.Dispose();
+        _icon.Dispose();
     }
 
     internal void PrepareForApplicationExit()

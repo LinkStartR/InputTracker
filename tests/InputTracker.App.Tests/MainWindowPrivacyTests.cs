@@ -52,7 +52,7 @@ public sealed class MainWindowPrivacyTests
 
         Assert.Contains("启用开机启动", xaml);
         Assert.Contains("关闭开机启动", xaml);
-        Assert.Contains("所有数据都在上方显示的程序文件夹里", xaml);
+        Assert.Contains("所有数据都保存在这里", xaml);
         Assert.Contains("再删除程序即可", xaml);
         Assert.Contains("_startup.Enable()", code);
         Assert.Contains("_startup.Disable()", code);

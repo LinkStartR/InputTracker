@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using InputTracker.Storage;
 
@@ -124,6 +125,8 @@ public partial class MainWindow : Window
         DirectoryText.Text = $"数据位置：{_directory.DirectoryPath}";
         PauseButton.IsEnabled = snapshot.CanPause;
         ResumeButton.IsEnabled = snapshot.CanResume;
+        PauseButton.Visibility = snapshot.CanPause ? Visibility.Visible : Visibility.Collapsed;
+        ResumeButton.Visibility = snapshot.CanResume ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void PauseButton_Click(object sender, RoutedEventArgs e) =>
@@ -131,7 +134,13 @@ public partial class MainWindow : Window
 
     private async void ResumeButton_Click(object sender, RoutedEventArgs e) =>
         await ExecuteControlAsync("恢复采集", _collection.ResumeAsync);
-    private void HideButton_Click(object sender, RoutedEventArgs e) => MinimizeToTrayRequested?.Invoke(this, EventArgs.Empty);
+    private void TitleMinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void TitleMaximizeButton_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void TitleCloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
     private void ExitButton_Click(object sender, RoutedEventArgs e)
     {
         ExitRequested?.Invoke(this, EventArgs.Empty);
@@ -154,6 +163,12 @@ public partial class MainWindow : Window
         {
             MinimizeToTrayRequested?.Invoke(this, EventArgs.Empty);
         }
+
+        bool maximized = WindowState == WindowState.Maximized;
+        TitleMaximizeIcon.Data = Geometry.Parse(maximized
+            ? "M 2 0 H 10 V 8 H 8 M 0 2 H 8 V 10 H 0 Z"
+            : "M 0 0 H 10 V 10 H 0 Z");
+        TitleMaximizeButton.ToolTip = maximized ? "还原" : "最大化";
     }
 
     private async Task ExecuteControlAsync(string operation, Func<Task> action)
@@ -265,6 +280,16 @@ public partial class MainWindow : Window
     private async void ViewDateRangePicker_RangeChanged(object? sender, EventArgs e)
     {
         if (IsLoaded) await RefreshDashboardAsync();
+    }
+
+    private void NavigationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, NavigationList)) return;
+
+        string? page = (NavigationList.SelectedItem as TabItem)?.Tag?.ToString();
+        bool showViewRange = page is "Overview" or "KeyboardHeatmap" or "MouseButtons" or "DataTools";
+        ViewRangeControls.Visibility = showViewRange ? Visibility.Visible : Visibility.Collapsed;
+        ViewRangeSpacer.Visibility = showViewRange ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task DeleteSelectedRangeAsync() =>
@@ -617,7 +642,7 @@ public partial class MainWindow : Window
                     : FormatMouseSummary(_dashboard.MouseButtons);
                 MouseSummary.Text = mouseSummary;
                 OverviewMouseSummary.Text = mouseSummary;
-                DashboardRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss} · 记录状态见页面顶部";
+                DashboardRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
             }
             while (_dashboardRefreshPending && IsLoaded);
         }

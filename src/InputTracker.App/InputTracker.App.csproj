@@ -4,6 +4,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\InputTracker.ico</ApplicationIcon>
     <AssemblyName>InputTracker</AssemblyName>
     <RootNamespace>InputTracker</RootNamespace>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
@@ -11,6 +12,8 @@
     <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets\InputTracker.ico" />
+    <Resource Include="Assets\InputTracker.png" />
     <ProjectReference Include="..\InputTracker.Input\InputTracker.Input.csproj" />
     <ProjectReference Include="..\InputTracker.Storage\InputTracker.Storage.csproj" />
   </ItemGroup>
