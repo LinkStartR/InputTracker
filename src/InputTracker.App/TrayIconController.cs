@@ -48,6 +48,7 @@ public sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(_resumeItem);
         _contextMenu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         _contextMenu.Items.Add("退出", null, (_, _) => BeginExit());
+        _contextMenu.Opened += ContextMenu_Opened;
         _contextMenu.Closed += ContextMenu_Closed;
 
         using Stream iconStream = System.Windows.Application.GetResourceStream(
@@ -72,6 +73,7 @@ public sealed class TrayIconController : IDisposable
         _exitSequence.Dispose();
         _collection.Changed -= OnCollectionChanged;
         _notifyIcon.DoubleClick -= NotifyIcon_DoubleClick;
+        _contextMenu.Opened -= ContextMenu_Opened;
         _contextMenu.Closed -= ContextMenu_Closed;
         _contextMenu.Close();
         _notifyIcon.Visible = false;
@@ -96,22 +98,24 @@ public sealed class TrayIconController : IDisposable
         if (_exitSequence.CanShowWindow) _showWindow();
     }
 
-    private void BeginExit() => _exitSequence.BeginExit();
+    private void BeginExit() => _exitSequence.BeginExit(
+        hideTray: PrepareForApplicationExit,
+        defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
+            action,
+            ExitDispatchPriority),
+        tryExit: _exitApplication,
+        restoreTray: () =>
+        {
+            if (_disposed) return;
+            _notifyIcon.Visible = true;
+            _openItem.Enabled = true;
+            Render(_collection.Current);
+        });
+
+    private void ContextMenu_Opened(object? sender, EventArgs e) => _exitSequence.MenuOpened();
 
     private void ContextMenu_Closed(object? sender, System.Windows.Forms.ToolStripDropDownClosedEventArgs e) =>
-        _exitSequence.ContinueAfterMenuClosed(
-            hideTray: PrepareForApplicationExit,
-            defer: action => System.Windows.Application.Current.Dispatcher.BeginInvoke(
-                action,
-                ExitDispatchPriority),
-            tryExit: _exitApplication,
-            restoreTray: () =>
-            {
-                if (_disposed) return;
-                _notifyIcon.Visible = true;
-                _openItem.Enabled = true;
-                Render(_collection.Current);
-            });
+        _exitSequence.MenuClosed();
 
     private void OnCollectionChanged(object? sender, CollectionSnapshot snapshot) => Render(snapshot);
 
@@ -150,30 +154,53 @@ internal sealed class TrayExitSequence : IDisposable
     private bool _exitPending;
     private bool _continuationScheduled;
     private bool _disposed;
+    private bool _menuClosed;
+    private Action? _hideTray;
+    private Action<Action>? _defer;
+    private Func<bool>? _tryExit;
+    private Action? _restoreTray;
 
     public bool CanShowWindow => !_exitPending && !_disposed;
 
-    public void BeginExit()
+    public void MenuOpened()
     {
-        if (_exitPending || _disposed) return;
-        _exitPending = true;
+        if (_disposed) return;
+        _menuClosed = false;
     }
 
-    public void ContinueAfterMenuClosed(
+    public void BeginExit(
         Action hideTray,
         Action<Action> defer,
         Func<bool> tryExit,
         Action restoreTray)
     {
-        if (!_exitPending || _continuationScheduled || _disposed) return;
+        if (_exitPending || _disposed) return;
+        _exitPending = true;
+        _hideTray = hideTray;
+        _defer = defer;
+        _tryExit = tryExit;
+        _restoreTray = restoreTray;
+        ContinueIfReady();
+    }
+
+    public void MenuClosed()
+    {
+        if (_disposed) return;
+        _menuClosed = true;
+        ContinueIfReady();
+    }
+
+    private void ContinueIfReady()
+    {
+        if (!_menuClosed || !_exitPending || _continuationScheduled || _disposed) return;
         _continuationScheduled = true;
-        hideTray();
-        defer(() =>
+        _hideTray!();
+        _defer!(() =>
         {
-            if (_disposed || tryExit()) return;
+            if (_disposed || _tryExit!()) return;
             _exitPending = false;
             _continuationScheduled = false;
-            restoreTray();
+            _restoreTray!();
         });
     }
 
