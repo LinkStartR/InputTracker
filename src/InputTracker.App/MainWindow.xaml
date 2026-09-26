@@ -10,10 +10,11 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="{DynamicResource AppTextFontFamily}"
+        FontSize="14"
         Foreground="{DynamicResource PrimaryTextBrush}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextFormattingMode="Ideal"
         StateChanged="Window_StateChanged"
         Closing="Window_Closing">
     <shell:WindowChrome.WindowChrome>
@@ -47,7 +48,7 @@
             <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="16,0" />
             <Setter Property="Margin" Value="0,0,8,8" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
@@ -137,7 +138,7 @@
         <Style TargetType="TextBox">
             <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="10,7" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
@@ -148,7 +149,7 @@
         <Style TargetType="ComboBox">
             <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="10,5" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
@@ -288,13 +289,13 @@
 
         <Style x:Key="PageSubtitleStyle" TargetType="TextBlock">
             <Setter Property="Margin" Value="0,6,0,0" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
         <Style x:Key="CardTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
         </Style>
@@ -390,7 +391,7 @@
             <Setter Property="Height" Value="38" />
             <Setter Property="Margin" Value="0,0,0,2" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="Normal" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Template">
@@ -472,7 +473,7 @@
                                     </Grid.RowDefinitions>
                                     <TextBlock Margin="10,6,0,0"
                                                Text="浏览"
-                                               FontSize="12"
+                                               FontSize="13"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource SidebarMutedTextBrush}" />
                                     <TabPanel Grid.Row="2" IsItemsHost="True" />
@@ -547,8 +548,6 @@
                     <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="InputTracker" FontSize="20" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PrimaryTextBrush}" />
-                        <TextBlock Text="只记使用次数，不记输入内容" FontSize="12"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -604,9 +603,9 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="StatusLabel" FontSize="13" FontWeight="SemiBold" />
+                    <TextBlock x:Name="StatusLabel" FontSize="14" FontWeight="SemiBold" />
                     <TextBlock x:Name="StatusExplanation" Grid.Column="1"
-                               Margin="10,0,12,0" VerticalAlignment="Center" FontSize="12"
+                               Margin="10,0,12,0" VerticalAlignment="Center" FontSize="13"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                TextWrapping="Wrap" />
                 </Grid>
@@ -635,12 +634,12 @@
                     Background="Transparent" BorderThickness="0">
                 <DockPanel LastChildFill="True">
                     <TextBlock x:Name="DashboardRefreshStatusText" DockPanel.Dock="Right"
-                               Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12"
+                               Margin="12,0,0,0" VerticalAlignment="Center" FontSize="13"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                Text="每 2 秒更新" TextWrapping="Wrap" />
                     <WrapPanel VerticalAlignment="Center">
                         <TextBlock VerticalAlignment="Center" Margin="0,0,10,0" Text="查看范围"
-                                   FontSize="12" FontWeight="SemiBold"
+                                   FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource SecondaryTextBrush}" />
                         <local:DateRangePicker x:Name="ViewDateRangePicker" Width="250" Margin="0,0,8,0"
                                                RangeChanged="ViewDateRangePicker_RangeChanged" />
@@ -725,30 +724,6 @@
                                     </Grid>
                                 </Border>
                             </Grid>
-                            <Border Margin="0,16,0,0"
-                                    Style="{StaticResource CompactCardStyle}"
-                                    Background="{DynamicResource SubtleBackgroundBrush}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="12" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="32" Height="32"
-                                            Background="{DynamicResource AccentSoftBrush}"
-                                            CornerRadius="16">
-                                        <TextBlock Text="✓" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                   FontSize="15" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
-                                    </Border>
-                                    <StackPanel Grid.Column="2">
-                                        <TextBlock Text="只统计次数，不查看内容" FontWeight="SemiBold" />
-                                        <TextBlock Margin="0,3,0,0"
-                                                   Text="InputTracker 只记下按了多少次、按住多久，不会保存你输入的文字。"
-                                                   FontSize="12"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
@@ -758,7 +733,7 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="键盘热力图" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="颜色越深，说明这个按键用得越多。不会保存你输入的文字，也不会记下按键顺序。" />
+                                       Text="颜色越深，说明这个按键用得越多。" />
                             <Border Margin="0,16,0,0" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>
@@ -793,7 +768,7 @@
                                                                 Click="ClearKeyboardAliasButton_Click" />
                                                     </Grid>
                                                     <TextBlock x:Name="KeyboardAliasStatusText" Margin="0,6,0,0"
-                                                               Text="改名只方便你辨认，已有记录不会变化。同型号且无序列号的设备重连后可能混淆。" FontSize="12"
+                                                               Text="改名只方便你辨认，已有记录不会变化。同型号且无序列号的设备重连后可能混淆。" FontSize="13"
                                                                Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Expander>
@@ -804,7 +779,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="12"
+                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="13"
                                                    Foreground="{DynamicResource SecondaryTextBrush}" />
                                         <WrapPanel Grid.Column="1" Margin="8,0,0,0">
                                             <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel0Brush}" CornerRadius="3" />
@@ -813,7 +788,7 @@
                                             <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel3Brush}" CornerRadius="3" />
                                             <Border Width="30" Height="10" Margin="0,0,3,0" Background="{DynamicResource HeatmapLevel4Brush}" CornerRadius="3" />
                                             <Border Width="30" Height="10" Margin="0,0,8,0" Background="{DynamicResource HeatmapLevel5Brush}" CornerRadius="3" />
-                                            <TextBlock Margin="0,-3,0,0" Text="高" FontSize="12"
+                                            <TextBlock Margin="0,-3,0,0" Text="高" FontSize="13"
                                                        Foreground="{DynamicResource SecondaryTextBrush}" />
                                         </WrapPanel>
                                     </Grid>
@@ -892,20 +867,12 @@
                                                                 Click="ClearMouseAliasButton_Click" />
                                                     </Grid>
                                                     <TextBlock x:Name="MouseAliasStatusText" Margin="0,6,0,0"
-                                                               Text="改名只方便你辨认，已有记录不会变化。同型号且无序列号的设备重连后可能混淆。" FontSize="12"
+                                                               Text="改名只方便你辨认，已有记录不会变化。同型号且无序列号的设备重连后可能混淆。" FontSize="13"
                                                                Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Expander>
                                         </StackPanel>
                                     </Grid>
-                                    <Border Margin="0,16,0,0"
-                                            Padding="14,12"
-                                            Background="{DynamicResource SubtleBackgroundBrush}"
-                                            CornerRadius="12">
-                                        <TextBlock Text="这里只记录各个按键用了多少次，不会保存鼠标移动位置。"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" />
-                                    </Border>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -977,7 +944,7 @@
                                     Style="{StaticResource CompactCardStyle}"
                                     Background="{DynamicResource SubtleBackgroundBrush}">
                                 <StackPanel>
-                                    <TextBlock Text="操作状态" FontSize="12" FontWeight="SemiBold"
+                                    <TextBlock Text="操作状态" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{DynamicResource SecondaryTextBrush}" />
                                     <TextBlock x:Name="DataToolsStatusText" Margin="0,5,0,0"
                                                Text="尚未执行数据操作。" TextWrapping="Wrap" />
@@ -1039,7 +1006,7 @@
                                                TextWrapping="Wrap" />
                                     <TextBlock Margin="0,5,0,0"
                                                Text="所有数据都保存在这里。卸载前先退出并关闭开机启动；需要保留记录时，先备份整个文件夹，再删除程序即可。"
-                                               FontSize="12"
+                                               FontSize="13"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
@@ -1087,8 +1054,8 @@
                                     <StackPanel>
                                         <TextBlock Text="键盘" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="分别记录每把键盘的按键次数和按住时长，不保存你输入的文字。"
-                                                   FontSize="12"
+                                                   Text="按设备和日期统计各按键的次数与按住时长。"
+                                                   FontSize="13"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
@@ -1097,8 +1064,8 @@
                                     <StackPanel>
                                         <TextBlock Text="鼠标" FontWeight="SemiBold" />
                                         <TextBlock Margin="0,6,0,0"
-                                                   Text="分别记录每只鼠标的按键次数，不保存移动位置或路线。"
-                                                   FontSize="12"
+                                                   Text="按设备统计各按键的次数。"
+                                                   FontSize="13"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>

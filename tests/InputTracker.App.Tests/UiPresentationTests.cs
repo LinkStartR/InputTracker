@@ -158,16 +158,20 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
-    public void ApplicationTypographyPrefersMicrosoftYaHeiUiWithSystemFallbacks()
+    public void ApplicationTypographyPrefersSegoeAndDengXianWithFallbacks()
     {
         string appXaml = LoadXaml("App.xaml").ToString(SaveOptions.DisableFormatting);
         string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
 
         Assert.Contains("x:Key=\"AppTextFontFamily\"", appXaml, StringComparison.Ordinal);
-        Assert.Contains("Microsoft YaHei UI", appXaml, StringComparison.Ordinal);
+        Assert.Contains("Segoe UI Variable Text, DengXian, Microsoft YaHei UI, Microsoft YaHei, Segoe UI", appXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("LXGW WenKai", appXaml, StringComparison.Ordinal);
-        Assert.Contains("Segoe UI Variable Text", appXaml, StringComparison.Ordinal);
         Assert.Contains("FontFamily=\"{DynamicResource AppTextFontFamily}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("FontSize=\"14\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("TextOptions.TextFormattingMode=\"Ideal\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("FontSize=\"14\"", LoadXaml("ConsentWindow.xaml").ToString(SaveOptions.DisableFormatting), StringComparison.Ordinal);
+        Assert.Contains("Property=\"FontSize\" Value=\"14\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"FontSize\" Value=\"13\"", windowXaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -187,6 +191,11 @@ public sealed class UiPresentationTests
         Assert.DoesNotContain("实体按键", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("敏感操作", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("影响范围", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("只统计次数，不查看内容", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("只记使用次数，不记输入内容", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("这里只记录各个按键用了多少次", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("颜色越深，说明这个按键用得越多。", windowXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("颜色越深，说明这个按键用得越多。不会保存", windowXaml, StringComparison.Ordinal);
     }
 
     [Fact]

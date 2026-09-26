@@ -3,7 +3,7 @@ namespace InputTracker.App.Tests;
 public sealed class MainWindowPrivacyTests
 {
     [Theory]
-    [InlineData(CollectionMode.Collecting, "顶部显示“记录中”时，InputTracker 会在后台统计")]
+    [InlineData(CollectionMode.Collecting, "顶部显示“记录中”时，InputTracker 正在统计")]
     [InlineData(CollectionMode.StartFailed, "记录启动失败，目前没有记录键盘或鼠标操作")]
     [InlineData(CollectionMode.RejectedProgramDirectory, "当前程序文件夹不能写入，因此没有开始记录")]
     [InlineData(CollectionMode.Restoring, "正在停止记录")]
@@ -16,10 +16,11 @@ public sealed class MainWindowPrivacyTests
 
         Assert.Contains(expectedState, disclosure);
         Assert.DoesNotContain("Storage 尚未接通", disclosure);
-        Assert.Contains("按设备和日期，记录每个按键的次数和按住时长", disclosure);
-        Assert.Contains("不保存你输入的文字、按键顺序、窗口或程序名称", disclosure);
-        Assert.Contains("鼠标会按设备记录各个按键的次数", disclosure);
-        Assert.Contains("不保存移动位置或路线", disclosure);
+        Assert.Contains("键盘按设备和日期统计各按键的次数与按住时长", disclosure);
+        Assert.Contains("鼠标按设备统计各按键的次数", disclosure);
+        Assert.DoesNotContain("不保存", disclosure);
+        Assert.DoesNotContain("不查看", disclosure);
+        Assert.DoesNotContain("不会记录", disclosure);
         Assert.DoesNotContain("轨迹", disclosure);
     }
 
@@ -58,8 +59,13 @@ public sealed class MainWindowPrivacyTests
         Assert.Contains("_startup.Disable()", code);
 
         string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "ConsentWindow.xaml"));
-        Assert.Contains("每只鼠标的按键次数", consent);
-        Assert.Contains("不保存鼠标移动位置或路线", consent);
+        Assert.Contains("键盘按设备和日期统计各按键的次数与按住时长", consent);
+        Assert.Contains("鼠标按设备统计各按键的次数", consent);
+        Assert.Contains("Content=\"同意并开始记录\"", consent);
+        Assert.Contains("Content=\"暂不开始\"", consent);
+        Assert.Contains("同意后开始统计", consent);
+        Assert.DoesNotContain("不保存", consent);
+        Assert.DoesNotContain("不会记录", consent);
         Assert.DoesNotContain("轨迹", consent);
     }
 

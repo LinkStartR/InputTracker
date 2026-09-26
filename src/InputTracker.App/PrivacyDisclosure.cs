@@ -2,8 +2,8 @@ namespace InputTracker;
 
 internal static class PrivacyDisclosure
 {
-    private const string StorageBoundary =
-        "键盘会按设备和日期，记录每个按键的次数和按住时长，不保存你输入的文字、按键顺序、窗口或程序名称。鼠标会按设备记录各个按键的次数，不保存移动位置或路线。";
+    private const string StatisticsSummary =
+        "键盘按设备和日期统计各按键的次数与按住时长；鼠标按设备统计各按键的次数。";
 
     public static string For(CollectionSnapshot snapshot)
     {
@@ -11,7 +11,7 @@ internal static class PrivacyDisclosure
 
         string liveState = snapshot.Mode switch
         {
-            CollectionMode.Collecting => "顶部显示“记录中”时，InputTracker 会在后台统计键盘和鼠标的使用次数。",
+            CollectionMode.Collecting => "顶部显示“记录中”时，InputTracker 正在统计：",
             CollectionMode.StartFailed => "记录启动失败，目前没有记录键盘或鼠标操作。",
             CollectionMode.RejectedProgramDirectory => "当前程序文件夹不能写入，因此没有开始记录。",
             CollectionMode.StorageStartFailed => "本地数据无法打开，因此没有开始记录。",
@@ -26,6 +26,6 @@ internal static class PrivacyDisclosure
             _ => "目前没有记录键盘或鼠标操作。"
         };
 
-        return $"{liveState}{StorageBoundary}";
+        return $"{liveState}{StatisticsSummary}";
     }
 }

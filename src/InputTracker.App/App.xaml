@@ -8,7 +8,7 @@
         <Color x:Key="LightPrimaryTextColor">#FF18212F</Color>
         <Color x:Key="DarkWindowBackgroundColor">#FF0A0F1C</Color>
         <Color x:Key="DarkPrimaryTextColor">#FFF8FAFC</Color>
-        <FontFamily x:Key="AppTextFontFamily">Microsoft YaHei UI, Microsoft YaHei, Segoe UI Variable Text, Segoe UI</FontFamily>
+        <FontFamily x:Key="AppTextFontFamily">Segoe UI Variable Text, DengXian, Microsoft YaHei UI, Microsoft YaHei, Segoe UI</FontFamily>
 
         <Color x:Key="WindowBackgroundColor">#FFF4F6FB</Color>
         <Color x:Key="CardBackgroundColor">#FFFFFFFF</Color>

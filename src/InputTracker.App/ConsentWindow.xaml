@@ -9,6 +9,7 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="{DynamicResource AppTextFontFamily}"
+        FontSize="14"
         Foreground="{DynamicResource PrimaryTextBrush}"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
     <shell:WindowChrome.WindowChrome>
@@ -20,7 +21,7 @@
         <Style x:Key="ChoiceButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="38" />
             <Setter Property="Padding" Value="18,0" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
@@ -72,7 +73,7 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Source="Assets/InputTracker.png" Width="24" Height="24" />
                     <TextBlock Text="InputTracker" Margin="9,0,0,0"
-                               VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" />
+                               VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" />
                 </StackPanel>
                 <Button HorizontalAlignment="Right" VerticalAlignment="Center"
                         Width="30" Height="30" Padding="0" BorderThickness="0"
@@ -87,7 +88,7 @@
             </Grid>
             <StackPanel Grid.Row="1" Margin="28,18,28,26">
                 <TextBlock Text="开始记录输入统计" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock Margin="0,8,0,0" FontSize="13"
+                <TextBlock Margin="0,8,0,0" FontSize="14"
                            Foreground="{DynamicResource SecondaryTextBrush}"
                            Text="InputTracker 会在后台统计键盘和鼠标的使用次数。" />
 
@@ -96,20 +97,16 @@
                         BorderBrush="{DynamicResource BorderBrush}"
                         Background="{DynamicResource CardBackgroundBrush}">
                     <StackPanel>
-                        <TextBlock Text="会记录" FontSize="12" FontWeight="SemiBold"
+                        <TextBlock Text="统计项目" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource AccentBrush}" />
-                        <TextBlock Margin="0,6,0,0" FontSize="13" TextWrapping="Wrap"
-                                   Text="每把键盘的按键次数和按住时长；每只鼠标的按键次数。" />
-                        <TextBlock Margin="0,14,0,0" Text="不会记录" FontSize="12" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AccentBrush}" />
-                        <TextBlock Margin="0,6,0,0" FontSize="13" TextWrapping="Wrap"
-                                   Text="输入的文字、按键顺序、窗口或程序名称，也不保存鼠标移动位置或路线。" />
+                        <TextBlock Margin="0,6,0,0" FontSize="14" TextWrapping="Wrap"
+                                   Text="键盘按设备和日期统计各按键的次数与按住时长；鼠标按设备统计各按键的次数。" />
                     </StackPanel>
                 </Border>
 
-                <TextBlock Margin="0,16,0,0" FontSize="12" TextWrapping="Wrap"
+                <TextBlock Margin="0,16,0,0" FontSize="13" TextWrapping="Wrap"
                            Foreground="{DynamicResource SecondaryTextBrush}"
-                           Text="确认前不会开始记录。数据保存在程序文件夹，你可以随时暂停或退出。" />
+                           Text="同意后开始统计。数据保存在程序文件夹，可随时暂停或退出。" />
                 <StackPanel Margin="0,24,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="暂不开始" Width="112" Margin="0,0,10,0"
                             IsCancel="True" Style="{StaticResource ChoiceButtonStyle}" />
