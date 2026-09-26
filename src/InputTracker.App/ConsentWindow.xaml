@@ -1,0 +1,123 @@
+<Window x:Class="InputTracker.ConsentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="InputTracker · 开始记录前确认"
+        Icon="Assets/InputTracker.ico"
+        Width="520" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontFamily="{DynamicResource AppTextFontFamily}"
+        Foreground="{DynamicResource PrimaryTextBrush}"
+        UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="0"
+                            GlassFrameThickness="0" CornerRadius="8"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <Style x:Key="ChoiceButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonChrome" CornerRadius="7"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Opacity" Value="0.86" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="ButtonChrome" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ConfirmButtonStyle" TargetType="Button" BasedOn="{StaticResource ChoiceButtonStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="8" BorderThickness="1"
+            BorderBrush="{DynamicResource BorderBrush}"
+            Background="{DynamicResource WindowBackgroundBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="18,0,8,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="Assets/InputTracker.png" Width="24" Height="24" />
+                    <TextBlock Text="InputTracker" Margin="9,0,0,0"
+                               VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Width="30" Height="30" Padding="0" BorderThickness="0"
+                        Style="{StaticResource ChoiceButtonStyle}"
+                        Background="Transparent" ToolTip="暂不开始"
+                        AutomationProperties.Name="暂不开始并关闭提示"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                        Click="LaterButton_Click">
+                    <Path Data="M 0 0 L 10 10 M 10 0 L 0 10"
+                          Stroke="{DynamicResource SecondaryTextBrush}" StrokeThickness="1.4" />
+                </Button>
+            </Grid>
+            <StackPanel Grid.Row="1" Margin="28,18,28,26">
+                <TextBlock Text="开始记录输入统计" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Margin="0,8,0,0" FontSize="13"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           Text="InputTracker 会在后台统计键盘和鼠标的使用次数。" />
+
+                <Border Margin="0,20,0,0" Padding="16,15"
+                        CornerRadius="8" BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        Background="{DynamicResource CardBackgroundBrush}">
+                    <StackPanel>
+                        <TextBlock Text="会记录" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                        <TextBlock Margin="0,6,0,0" FontSize="13" TextWrapping="Wrap"
+                                   Text="每把键盘的按键次数和按住时长；每只鼠标的按键次数。" />
+                        <TextBlock Margin="0,14,0,0" Text="不会记录" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                        <TextBlock Margin="0,6,0,0" FontSize="13" TextWrapping="Wrap"
+                                   Text="输入的文字、按键顺序、窗口或程序名称，也不保存鼠标移动位置或路线。" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Margin="0,16,0,0" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           Text="确认前不会开始记录。数据保存在程序文件夹，你可以随时暂停或退出。" />
+                <StackPanel Margin="0,24,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="暂不开始" Width="112" Margin="0,0,10,0"
+                            IsCancel="True" Style="{StaticResource ChoiceButtonStyle}" />
+                    <Button Content="同意并开始记录" Width="146"
+                            Style="{StaticResource ConfirmButtonStyle}"
+                            Click="ConfirmButton_Click" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

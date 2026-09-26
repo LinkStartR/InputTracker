@@ -1,6 +1,5 @@
 using System.IO;
 using System.Text.Json;
-using System.Windows;
 
 namespace InputTracker;
 
@@ -135,14 +134,5 @@ internal static class FirstRunConsent
 
 internal sealed class WpfPortableConsentPrompt : IPortableConsentPrompt
 {
-    public bool Confirm() => System.Windows.MessageBox.Show(
-        "InputTracker 会在后台统计键盘和鼠标的使用次数。\n\n"
-        + "键盘会分设备记录每个按键的次数和按住时长，不保存你输入的文字、按键顺序、窗口或程序名称。\n"
-        + "鼠标会分设备记录各个按键的次数，不保存移动位置或路线。\n"
-        + "你可以随时暂停或退出，也能在界面中查看数据位置。确认前不会开始记录。\n\n"
-        + "现在开始记录吗？",
-        "InputTracker · 开始记录前确认",
-        System.Windows.MessageBoxButton.YesNo,
-        System.Windows.MessageBoxImage.Information,
-        System.Windows.MessageBoxResult.No) == System.Windows.MessageBoxResult.Yes;
+    public bool Confirm() => new ConsentWindow().ShowDialog() == true;
 }

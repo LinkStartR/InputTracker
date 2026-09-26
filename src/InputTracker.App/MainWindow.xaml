@@ -18,7 +18,7 @@
         Closing="Window_Closing">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="56" ResizeBorderThickness="6"
-                            GlassFrameThickness="0" CornerRadius="0"
+                            GlassFrameThickness="0" CornerRadius="8"
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>

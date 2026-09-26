@@ -57,8 +57,9 @@ public sealed class MainWindowPrivacyTests
         Assert.Contains("_startup.Enable()", code);
         Assert.Contains("_startup.Disable()", code);
 
-        string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "PortableSettings.cs"));
-        Assert.Contains("鼠标会分设备记录各个按键的次数，不保存移动位置或路线", consent);
+        string consent = File.ReadAllText(Path.Combine(repositoryRoot, "src", "InputTracker.App", "ConsentWindow.xaml"));
+        Assert.Contains("每只鼠标的按键次数", consent);
+        Assert.Contains("不保存鼠标移动位置或路线", consent);
         Assert.DoesNotContain("轨迹", consent);
     }
 
