@@ -225,8 +225,8 @@ public partial class MainWindow : Window
         try
         {
             StartupStatusText.Text = _startup.IsEnabled
-                ? "InputTracker 会随 Windows 启动。关闭后会立即删除它创建的启动快捷方式。"
-                : "InputTracker 不会随 Windows 启动，也不会写入注册表。";
+                ? "开机启动已开启。"
+                : "开机启动已关闭。";
         }
         catch (Exception error)
         {

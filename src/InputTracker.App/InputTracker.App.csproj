@@ -12,6 +12,9 @@
     <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
   <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.DoNotScaleForDpiChanges" Value="false" />
+  </ItemGroup>
+  <ItemGroup>
     <Resource Include="Assets\InputTracker.ico" />
     <Resource Include="Assets\InputTracker.png" />
     <ProjectReference Include="..\InputTracker.Input\InputTracker.Input.csproj" />
