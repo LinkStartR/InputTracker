@@ -545,10 +545,8 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
                     <Image Source="Assets/InputTracker.png" Width="32" Height="32" />
-                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="InputTracker" FontSize="20" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PrimaryTextBrush}" />
-                    </StackPanel>
+                    <TextBlock Text="InputTracker" Margin="12,0,0,0" FontSize="20" FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Style="{StaticResource QuietButtonStyle}" Click="ExitButton_Click"
