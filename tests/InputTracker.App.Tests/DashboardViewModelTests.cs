@@ -24,10 +24,10 @@ public sealed class DashboardViewModelTests
         Assert.Equal((StoragePeriodKind.Week, keyboard), source.KeyboardRequest);
         Assert.Equal(7, model.TotalPressCount);
         Assert.Equal(2, model.Heatmap.Count);
-        Assert.Equal(new MouseButtonCounts(2, 1, 0, 1, 0), model.MouseButtons);
+        Assert.Equal(new MouseButtonCounts(2, 1, 0, 4, 1), model.MouseButtons);
         Assert.Equal((StoragePeriodKind.Week, mouse), source.MouseButtonsRequest);
         Assert.Equal(
-            "左键 2 次 · 右键 1 次 · 中键 0 次 · 侧键一 1 次 · 侧键二 0 次",
+            "左键 2 次 · 右键 1 次 · 中键 0 次 · 侧键一 4 次 · 侧键二 1 次",
             MainWindow.FormatMouseSummary(model.MouseButtons));
     }
 
@@ -233,7 +233,8 @@ public sealed class DashboardViewModelTests
                 [
                     new(mouse, StorageMouseButton.Left, 2),
                     new(mouse, StorageMouseButton.Right, 1),
-                    new(mouse, StorageMouseButton.X1, 1)
+                    new(mouse, StorageMouseButton.X1, 1),
+                    new(mouse, StorageMouseButton.X2, 4)
                 ],
                 [zone]));
         }

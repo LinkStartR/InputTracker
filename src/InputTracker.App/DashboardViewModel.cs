@@ -232,8 +232,9 @@ internal sealed class DashboardViewModel
                 case StorageMouseButton.Left: left = checked(left + row.PressCount); break;
                 case StorageMouseButton.Right: right = checked(right + row.PressCount); break;
                 case StorageMouseButton.Middle: middle = checked(middle + row.PressCount); break;
-                case StorageMouseButton.X1: x1 = checked(x1 + row.PressCount); break;
-                case StorageMouseButton.X2: x2 = checked(x2 + row.PressCount); break;
+                // Match the diagram: upper X1 shows raw X2; lower X2 shows raw X1.
+                case StorageMouseButton.X1: x2 = checked(x2 + row.PressCount); break;
+                case StorageMouseButton.X2: x1 = checked(x1 + row.PressCount); break;
                 default: throw new InvalidDataException("Mouse button aggregate contains an unknown button.");
             }
         }
