@@ -517,7 +517,13 @@ public partial class MainWindow : Window
         if (ReferenceEquals(sender, KeyboardDeviceSelector))
             KeyboardAliasStatusText.Text = "改名只方便你辨认，已有记录不会变化。";
         else if (ReferenceEquals(sender, MouseDeviceSelector))
+        {
             MouseAliasStatusText.Text = "改名只方便你辨认，已有记录不会变化。";
+            MousePageStatusText.Text = MouseDeviceSelector.SelectedValue is null
+                ? "选择鼠标后查看各按键次数"
+                : "正在更新所选鼠标的按键统计…";
+            SetMouseButtonCountLabels(null);
+        }
         await RefreshDashboardAsync();
     }
 
@@ -640,7 +646,12 @@ public partial class MainWindow : Window
                 string mouseSummary = _dashboard.SelectedMouseDeviceId is null
                     ? "选择一只鼠标后查看按键次数"
                     : FormatMouseSummary(_dashboard.MouseButtons);
-                MouseSummary.Text = mouseSummary;
+                MousePageStatusText.Text = _dashboard.SelectedMouseDeviceId is null
+                    ? "选择鼠标后查看各按键次数"
+                    : "所选时间范围内的按键统计";
+                SetMouseButtonCountLabels(_dashboard.SelectedMouseDeviceId is null
+                    ? null
+                    : _dashboard.MouseButtons);
                 OverviewMouseSummary.Text = mouseSummary;
                 DashboardRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
             }
@@ -652,7 +663,9 @@ public partial class MainWindow : Window
         catch (Exception error)
         {
             KeyboardSummary.Text = $"读取失败：{error.Message}";
-            MouseSummary.Text = "暂时无法读取；请以页面顶部的记录状态为准。";
+            MousePageStatusText.Text = "暂时无法读取；请以页面顶部的记录状态为准。";
+            OverviewMouseSummary.Text = "暂时无法读取；请以页面顶部的记录状态为准。";
+            SetMouseButtonCountLabels(null);
             DashboardRefreshStatusText.Text = $"更新失败 {DateTime.Now:HH:mm:ss} · {error.Message}";
         }
         finally
@@ -714,6 +727,15 @@ public partial class MainWindow : Window
         ArgumentNullException.ThrowIfNull(buttons);
         return $"左键 {buttons.Left:N0} 次 · 右键 {buttons.Right:N0} 次 · 中键 {buttons.Middle:N0} 次 · "
             + $"侧键一 {buttons.X1:N0} 次 · 侧键二 {buttons.X2:N0} 次";
+    }
+
+    private void SetMouseButtonCountLabels(MouseButtonCounts? buttons)
+    {
+        MouseLeftCountText.Text = buttons is null ? "— 次" : $"{buttons.Left:N0} 次";
+        MouseRightCountText.Text = buttons is null ? "— 次" : $"{buttons.Right:N0} 次";
+        MouseMiddleCountText.Text = buttons is null ? "— 次" : $"{buttons.Middle:N0} 次";
+        MouseX1CountText.Text = buttons is null ? "— 次" : $"{buttons.X1:N0} 次";
+        MouseX2CountText.Text = buttons is null ? "— 次" : $"{buttons.X2:N0} 次";
     }
 
     internal static string FormatDeviceDisplayName(StorageDeviceInfo value, int ordinal = 1)

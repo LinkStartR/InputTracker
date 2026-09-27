@@ -836,15 +836,16 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="300" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource CardTitleStyle}" Text="当前鼠标" />
-                                            <TextBlock x:Name="MouseSummary" Margin="0,8,16,0"
-                                                       Text="选择鼠标后显示按键次数"
-                                                       FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock x:Name="MousePageStatusText" Margin="0,8,16,0"
+                                                       Text="选择鼠标后查看各按键次数"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       TextWrapping="Wrap" />
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" Width="360">
+                                        <StackPanel Grid.Column="1">
                                             <ComboBox x:Name="MouseDeviceSelector"
                                                       DisplayMemberPath="DisplayName" SelectedValuePath="DeviceId"
                                                       SelectionChanged="QuerySelection_Changed" />
@@ -872,6 +873,165 @@
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>
+                            </Border>
+
+                            <Border Margin="0,14,0,0" Padding="16" Style="{StaticResource CardStyle}">
+                                <Grid Height="380">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="116" />
+                                        <ColumnDefinition Width="210" />
+                                        <ColumnDefinition Width="*" MinWidth="116" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="110" />
+                                        <RowDefinition Height="130" />
+                                        <RowDefinition Height="140" />
+                                    </Grid.RowDefinitions>
+
+                                    <Grid Grid.Column="0" Grid.Row="0" Panel.ZIndex="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="2" Height="1" Background="{DynamicResource AccentBrush}"
+                                                VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Width="160" Padding="10,7"
+                                                VerticalAlignment="Center" Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="左键" FontWeight="SemiBold" />
+                                                <TextBlock x:Name="MouseLeftCountText" Margin="0,2,0,0"
+                                                           Text="— 次" FontSize="20" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Grid.Column="0" Grid.Row="1" Panel.ZIndex="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="2" Height="1" Background="{DynamicResource AccentBrush}"
+                                                VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Width="160" Padding="10,7"
+                                                VerticalAlignment="Center" Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="侧键 X1" FontWeight="SemiBold" />
+                                                <TextBlock x:Name="MouseX1CountText" Margin="0,2,0,0"
+                                                           Text="— 次" FontSize="20" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Grid.Column="0" Grid.Row="2" Panel.ZIndex="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="2" Height="1" Background="{DynamicResource AccentBrush}"
+                                                VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Width="160" Padding="10,7"
+                                                VerticalAlignment="Center" Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="侧键 X2" FontWeight="SemiBold" />
+                                                <TextBlock x:Name="MouseX2CountText" Margin="0,2,0,0"
+                                                           Text="— 次" FontSize="20" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+
+                                    <Canvas Grid.Column="1" Grid.RowSpan="3" Panel.ZIndex="1" Width="210" Height="380">
+                                            <Path Data="M 105,8 C 59,8 27,43 27,98 L 27,274 C 27,338 58,372 105,372 C 152,372 183,338 183,274 L 183,98 C 183,43 151,8 105,8 Z"
+                                                  Fill="{DynamicResource CardBackgroundBrush}"
+                                                  Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="3" />
+                                            <Path Data="M 105,10 L 105,160 M 28,98 C 29,44 60,10 105,10 C 150,10 181,44 182,98 M 105,10 L 105,48"
+                                                  Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="2" />
+                                            <Path Data="M 105,8 C 60,8 29,43 28,98 L 105,98 Z"
+                                                  Fill="{DynamicResource AccentSoftBrush}"
+                                                  Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="2" />
+                                            <Path Data="M 105,8 C 150,8 181,43 182,98 L 105,98 Z"
+                                                  Fill="{DynamicResource AccentSoftBrush}"
+                                                  Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="2" />
+                                            <Path Data="M 105,10 L 105,98 M 105,98 L 105,156"
+                                                  Stroke="{DynamicResource PrimaryTextBrush}" StrokeThickness="2" />
+                                            <Path Data="M 0,55 L 27,55 L 65,55 M 210,55 L 182,55 L 145,55 M 210,175 L 174,150 L 105,88 M 0,175 L 26,175 M 0,310 L 16,280 L 26,240"
+                                                  Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                            <Border Canvas.Left="91" Canvas.Top="55" Width="28" Height="66"
+                                                    CornerRadius="14" Background="{DynamicResource CardBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource PrimaryTextBrush}" BorderThickness="2" />
+                                            <Border Canvas.Left="94" Canvas.Top="62" Width="22" Height="34"
+                                                    CornerRadius="10" Background="{DynamicResource AccentSoftBrush}"
+                                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" />
+                                            <Border Canvas.Left="17" Canvas.Top="150" Width="18" Height="50"
+                                                    CornerRadius="9" Background="{DynamicResource AccentSoftBrush}"
+                                                    BorderBrush="{DynamicResource PrimaryTextBrush}" BorderThickness="2" />
+                                            <Border Canvas.Left="17" Canvas.Top="215" Width="18" Height="50"
+                                                    CornerRadius="9" Background="{DynamicResource AccentSoftBrush}"
+                                                    BorderBrush="{DynamicResource PrimaryTextBrush}" BorderThickness="2" />
+                                            <Ellipse Canvas.Left="61" Canvas.Top="51" Width="8" Height="8"
+                                                     Fill="{DynamicResource AccentBrush}"
+                                                     Stroke="{DynamicResource CardBackgroundBrush}" StrokeThickness="1" />
+                                            <Ellipse Canvas.Left="141" Canvas.Top="51" Width="8" Height="8"
+                                                     Fill="{DynamicResource AccentBrush}"
+                                                     Stroke="{DynamicResource CardBackgroundBrush}" StrokeThickness="1" />
+                                            <Ellipse Canvas.Left="101" Canvas.Top="84" Width="8" Height="8"
+                                                     Fill="{DynamicResource AccentBrush}"
+                                                     Stroke="{DynamicResource CardBackgroundBrush}" StrokeThickness="1" />
+                                            <Ellipse Canvas.Left="22" Canvas.Top="171" Width="8" Height="8"
+                                                     Fill="{DynamicResource AccentBrush}"
+                                                     Stroke="{DynamicResource CardBackgroundBrush}" StrokeThickness="1" />
+                                            <Ellipse Canvas.Left="22" Canvas.Top="236" Width="8" Height="8"
+                                                     Fill="{DynamicResource AccentBrush}"
+                                                     Stroke="{DynamicResource CardBackgroundBrush}" StrokeThickness="1" />
+                                    </Canvas>
+
+                                    <Grid Grid.Column="2" Grid.Row="0" Panel.ZIndex="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Height="1" Background="{DynamicResource AccentBrush}"
+                                                VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Width="160" Padding="10,7"
+                                                VerticalAlignment="Center" Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="右键" FontWeight="SemiBold" />
+                                                <TextBlock x:Name="MouseRightCountText" Margin="0,2,0,0"
+                                                           Text="— 次" FontSize="20" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Grid.Column="2" Grid.Row="1" Panel.ZIndex="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Height="1" Background="{DynamicResource AccentBrush}"
+                                                VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Width="160" Padding="10,7"
+                                                VerticalAlignment="Center" Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="中键" FontWeight="SemiBold" />
+                                                <TextBlock x:Name="MouseMiddleCountText" Margin="0,2,0,0"
+                                                           Text="— 次" FontSize="20" FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+
+                                </Grid>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
