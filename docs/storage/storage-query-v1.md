@@ -14,6 +14,8 @@ Keyboard period queries include only durable `keyboard_daily` rows whose `time_z
 
 Mouse queries require an optional persistent mouse GUID plus an explicit period and capture time zone. Results contain only per-device counts for left, right, middle, X1 and X2 button-down events. No position, route, wheel delta, event sequence or per-event timestamp is available through the public Storage surface.
 
+Storage query results retain the Raw Input X1/X2 identifiers. The App dashboard maps raw X2 to the diagram's upper X1 and raw X1 to its lower X2; the overview uses the same display mapping. The Storage query and persisted aggregates keep their original identifiers.
+
 ## Evidence and limits
 
 Ordinary tests cover four calendar periods and custom ranges, ISO Monday, Pacific 23/25-hour days, China/UTC, capture-zone isolation, keyboard device/key isolation, mouse-button device isolation, absence of trajectory artifacts and invalid inputs. This is software evidence only; it is not the required two-device terminal acceptance.
