@@ -532,32 +532,49 @@
         </DataTemplate>
 
         <DataTemplate x:Key="GamepadHeatmapPositionTemplate">
-            <Border Width="76" Height="54" Padding="4" CornerRadius="9"
-                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                    ToolTip="{Binding AccessibleLabel}"
-                    AutomationProperties.Name="{Binding AccessibleLabel}">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="Background" Value="{DynamicResource SubtleBackgroundBrush}" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding Support}" Value="Supported">
-                                <Setter Property="Background" Value="{DynamicResource HeatmapLevel0Brush}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding HeatLevel}" Value="1"><Setter Property="Background" Value="{DynamicResource HeatmapLevel1Brush}" /></DataTrigger>
-                            <DataTrigger Binding="{Binding HeatLevel}" Value="2"><Setter Property="Background" Value="{DynamicResource HeatmapLevel2Brush}" /></DataTrigger>
-                            <DataTrigger Binding="{Binding HeatLevel}" Value="3"><Setter Property="Background" Value="{DynamicResource HeatmapLevel3Brush}" /></DataTrigger>
-                            <DataTrigger Binding="{Binding HeatLevel}" Value="4"><Setter Property="Background" Value="{DynamicResource HeatmapLevel4Brush}" /></DataTrigger>
-                            <DataTrigger Binding="{Binding Support}" Value="Unsupported"><Setter Property="Opacity" Value="0.58" /></DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <Grid>
-                    <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"
-                               HorizontalAlignment="Center" VerticalAlignment="Top" />
-                    <TextBlock Text="{Binding CountText}" FontSize="12"
-                               HorizontalAlignment="Center" VerticalAlignment="Bottom" />
-                </Grid>
-            </Border>
+            <Grid Width="32" Height="32" ToolTip="{Binding AccessibleLabel}"
+                  AutomationProperties.Name="{Binding AccessibleLabel}">
+                <Ellipse x:Name="HeatSpot" Margin="4" StrokeThickness="1.5">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Fill" Value="{DynamicResource SubtleBackgroundBrush}" />
+                            <Setter Property="Stroke" Value="{DynamicResource BorderBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="0"><Setter Property="Fill" Value="{DynamicResource HeatmapLevel0Brush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="1"><Setter Property="Fill" Value="{DynamicResource HeatmapLevel1Brush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="2"><Setter Property="Fill" Value="{DynamicResource HeatmapLevel2Brush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="3"><Setter Property="Fill" Value="{DynamicResource HeatmapLevel3Brush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="4"><Setter Property="Fill" Value="{DynamicResource HeatmapLevel4Brush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding Support}" Value="Supported">
+                                    <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Support}" Value="Unknown">
+                                    <Setter Property="StrokeDashArray" Value="2,2" />
+                                    <Setter Property="Stroke" Value="{DynamicResource SecondaryTextBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Support}" Value="Unsupported">
+                                    <Setter Property="Opacity" Value="0.42" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
+                <TextBlock Text="{Binding DisplayLabel}" FontSize="16" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="0"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel0TextBrush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="1"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel1TextBrush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="2"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel2TextBrush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="3"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel3TextBrush}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding HeatLevel}" Value="4"><Setter Property="Foreground" Value="{DynamicResource HeatmapLevel4TextBrush}" /></DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
         </DataTemplate>
     </Window.Resources>
 
@@ -1072,17 +1089,10 @@
                         <StackPanel Margin="2,2,6,16">
                             <TextBlock Style="{StaticResource PageTitleStyle}" Text="手柄统计" />
                             <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                                       Text="选择手柄并逐键校准后，查看各按键的使用次数。" />
-                            <Border Margin="0,16,0,0" Style="{StaticResource CompactCardStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="16" />
-                                        <ColumnDefinition Width="220" />
-                                        <ColumnDefinition Width="16" />
-                                        <ColumnDefinition Width="220" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
+                                       Text="选择设备与布局，完成校准后查看真实按键次数。" />
+                            <Border Margin="0,14,0,0" Padding="14" Style="{StaticResource CompactCardStyle}">
+                                <WrapPanel VerticalAlignment="Center">
+                                    <StackPanel Width="300" Margin="0,0,12,8">
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="已连接设备" />
                                         <Grid Margin="0,6,0,0">
                                             <Grid.ColumnDefinitions>
@@ -1097,20 +1107,20 @@
                                                     IsEnabled="False" />
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2">
+                                    <StackPanel Width="176" Margin="0,0,12,8">
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="品牌" />
                                         <ComboBox x:Name="GamepadBrandSelector" Margin="0,6,0,0"
                                                   Text="选择品牌" IsEnabled="False" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="4">
+                                    <StackPanel Width="176" Margin="0,0,0,8">
                                         <TextBlock Style="{StaticResource CardTitleStyle}" Text="型号 / 布局" />
                                         <ComboBox x:Name="GamepadLayoutSelector" Margin="0,6,0,0"
                                                   Text="Xbox 布局" IsEnabled="False" />
                                     </StackPanel>
-                                </Grid>
+                                </WrapPanel>
                             </Border>
 
-                            <Border Margin="0,12,0,0" Style="{StaticResource CardStyle}">
+                            <Border Margin="0,12,0,0" Padding="16" Style="{StaticResource CardStyle}">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -1118,32 +1128,26 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="Xbox 布局按键" />
-                                            <TextBlock Margin="0,5,0,0" Text="按物理位置显示；扳机行程和摇杆移动不计入按键次数。"
-                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                            <TextBlock Style="{StaticResource CardTitleStyle}" Text="Xbox 布局热度" />
+                                            <TextBlock Margin="0,4,0,0" Text="圆点颜色表示相对使用频率；摇杆移动与扳机行程不计入。"
+                                                       FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                         <TextBlock x:Name="GamepadEnabledStatusText" Grid.Column="1"
-                                                   VerticalAlignment="Center" Text="尚未开始统计"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                                   Margin="12,0,0,0" VerticalAlignment="Center" Text="尚未开始统计"
+                                                   FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
                                     </Grid>
 
-                                    <Border Margin="0,14,0,0" Padding="12"
+                                    <Border Margin="0,12,0,0" Padding="8"
                                             Background="{DynamicResource SubtleBackgroundBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                                             CornerRadius="12">
                                         <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
-                                            <Canvas Width="760" Height="300">
-                                                <Path Data="M 192,47 C 157,43 140,61 124,101 L 77,219 C 66,249 93,270 119,253 L 210,190 C 228,178 248,171 270,171 L 490,171 C 512,171 532,178 550,190 L 641,253 C 667,270 694,249 683,219 L 636,101 C 620,61 603,43 568,47 Z"
-                                                      Fill="{DynamicResource CardBackgroundBrush}"
-                                                      Stroke="{DynamicResource BorderBrush}" StrokeThickness="3" />
-                                                <Ellipse Canvas.Left="165" Canvas.Top="116" Width="82" Height="82"
-                                                         Fill="{DynamicResource SubtleBackgroundBrush}"
-                                                         Stroke="{DynamicResource BorderBrush}" StrokeThickness="2" />
-                                                <Ellipse Canvas.Left="451" Canvas.Top="166" Width="82" Height="82"
-                                                         Fill="{DynamicResource SubtleBackgroundBrush}"
-                                                         Stroke="{DynamicResource BorderBrush}" StrokeThickness="2" />
+                                            <Canvas Width="680" Height="440">
+                                                <Image Source="Assets/GamepadController.png" Width="680" Height="440"
+                                                       Stretch="Uniform" IsHitTestVisible="False" />
                                                 <ItemsControl x:Name="GamepadHeatmapItems"
-                                                              Width="760" Height="300"
+                                                              Width="680" Height="440"
                                                               ItemTemplate="{StaticResource GamepadHeatmapPositionTemplate}">
                                                     <ItemsControl.ItemsPanel>
                                                         <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
@@ -1159,50 +1163,111 @@
                                         </Viewbox>
                                     </Border>
 
-                                    <Grid Margin="0,12,0,0">
+                                    <Grid Margin="0,10,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="13"
+                                        <TextBlock VerticalAlignment="Center" Text="低" FontSize="12"
                                                    Foreground="{DynamicResource SecondaryTextBrush}" />
-                                        <WrapPanel Grid.Column="1" HorizontalAlignment="Center">
-                                            <Border Width="28" Height="10" Margin="0,0,5,0" Background="{DynamicResource HeatmapLevel0Brush}" CornerRadius="3" />
-                                            <Border Width="28" Height="10" Margin="0,0,5,0" Background="{DynamicResource HeatmapLevel1Brush}" CornerRadius="3" />
-                                            <Border Width="28" Height="10" Margin="0,0,5,0" Background="{DynamicResource HeatmapLevel2Brush}" CornerRadius="3" />
-                                            <Border Width="28" Height="10" Margin="0,0,5,0" Background="{DynamicResource HeatmapLevel3Brush}" CornerRadius="3" />
-                                            <Border Width="28" Height="10" Background="{DynamicResource HeatmapLevel4Brush}" CornerRadius="3" />
-                                        </WrapPanel>
-                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="高" FontSize="13"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        <StackPanel Grid.Column="1" Margin="8,0" Orientation="Horizontal"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Border Width="22" Height="12" Margin="0,0,4,0" Background="{DynamicResource HeatmapLevel0Brush}" CornerRadius="6" />
+                                            <Border Width="22" Height="12" Margin="0,0,4,0" Background="{DynamicResource HeatmapLevel1Brush}" CornerRadius="6" />
+                                            <Border Width="22" Height="12" Margin="0,0,4,0" Background="{DynamicResource HeatmapLevel2Brush}" CornerRadius="6" />
+                                            <Border Width="22" Height="12" Margin="0,0,4,0" Background="{DynamicResource HeatmapLevel3Brush}" CornerRadius="6" />
+                                            <Border Width="22" Height="12" Background="{DynamicResource HeatmapLevel4Brush}" CornerRadius="6" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Margin="4,0" VerticalAlignment="Center"
+                                                   Text="高" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        <TextBlock Grid.Column="3" Margin="12,0,4,0" VerticalAlignment="Center"
+                                                   Text="○ 未校准" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        <TextBlock Grid.Column="4" VerticalAlignment="Center"
+                                                   Text="× 不支持" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
                                     </Grid>
 
-                                    <Grid Margin="0,14,0,0">
+                                    <Border Margin="0,12,0,0" Padding="12"
+                                            Background="{DynamicResource SubtleBackgroundBrush}" CornerRadius="10">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Style="{StaticResource CardTitleStyle}" Text="常用按键" />
+                                                <TextBlock Grid.Column="1" Text="已校准按键 · 次数由高到低"
+                                                           FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+                                            </Grid>
+                                            <ItemsControl x:Name="GamepadHighlightsItems" Margin="0,8,0,0"
+                                                          AutomationProperties.Name="常用手柄按键">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Width="210" MinHeight="52" Margin="0,0,8,8" Padding="10,7"
+                                                                Background="{DynamicResource CardBackgroundBrush}"
+                                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                                BorderThickness="1" CornerRadius="9"
+                                                                ToolTip="{Binding AccessibleLabel}">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="34" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Width="30" Height="30" CornerRadius="15"
+                                                                        Background="{DynamicResource AccentSoftBrush}"
+                                                                        VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="Bold"
+                                                                               Foreground="{DynamicResource AccentBrush}"
+                                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <TextBlock Grid.Column="1" Margin="7,0" Text="{Binding Group}"
+                                                                           FontSize="12" VerticalAlignment="Center"
+                                                                           Foreground="{DynamicResource SecondaryTextBrush}" />
+                                                                <TextBlock Grid.Column="2" Text="{Binding CountText}"
+                                                                           FontSize="14" FontWeight="SemiBold"
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="{DynamicResource AccentBrush}" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock x:Name="GamepadHighlightsEmptyText" Margin="0,10,0,2"
+                                                       Text="完成按键校准后，这里会显示真实按键次数。"
+                                                       FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       TextWrapping="Wrap" Visibility="Visible" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Grid Margin="0,12,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock x:Name="GamepadStatusText" VerticalAlignment="Center"
-                                                   Text="选择第三方手柄和 Xbox 布局，然后逐键校准。当前没有统计数据。"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" />
-                                        <TextBlock x:Name="GamepadCalibrationStatusText" Grid.Column="1"
-                                                   Margin="12,0" VerticalAlignment="Center"
-                                                   Text="尚未校准" Foreground="{DynamicResource SecondaryTextBrush}" />
-                                        <Button x:Name="GamepadCheckButtonsButton" Grid.Column="2"
-                                                Style="{StaticResource PrimaryButtonStyle}"
-                                                MinWidth="120" Margin="0" Content="检查按键"
-                                                IsEnabled="False" />
-                                        <Button x:Name="GamepadEnableStatsButton" Grid.Column="3"
-                                                MinWidth="108" Margin="8,0,0,0" Content="启用统计"
-                                                IsEnabled="False" />
-                                        <Button x:Name="GamepadSkipButton" Grid.Column="4"
-                                                MinWidth="96" Margin="8,0,0,0" Content="此键不支持"
-                                                IsEnabled="False" />
+                                        <StackPanel>
+                                            <TextBlock x:Name="GamepadStatusText" Text="选择手柄与布局后检查按键，完成逐键校准即可开始统计。"
+                                                       FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock x:Name="GamepadCalibrationStatusText" Margin="0,4,0,0"
+                                                       Text="尚未校准" FontSize="12"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        </StackPanel>
+                                        <WrapPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Button x:Name="GamepadCheckButtonsButton"
+                                                    Style="{StaticResource PrimaryButtonStyle}"
+                                                    MinWidth="112" Margin="0,0,8,0" Content="检查按键"
+                                                    IsEnabled="False" />
+                                            <Button x:Name="GamepadEnableStatsButton" MinWidth="100"
+                                                    Margin="0,0,8,0" Content="启用统计" IsEnabled="False" />
+                                            <Button x:Name="GamepadSkipButton" MinWidth="96"
+                                                    Content="此键不支持" IsEnabled="False" />
+                                        </WrapPanel>
                                     </Grid>
                                 </StackPanel>
                             </Border>

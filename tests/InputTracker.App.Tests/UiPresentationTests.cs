@@ -99,6 +99,72 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
+    public void GamepadHeatSpotUsesStyleDrivenDynamicFillForEveryHeatLevel()
+    {
+        XElement root = Assert.IsType<XElement>(LoadXaml("MainWindow.xaml").Root);
+        XElement template = root.Descendants(Presentation + "DataTemplate")
+            .Single(element => (string?)element.Attribute(Xaml + "Key") == "GamepadHeatmapPositionTemplate");
+        XElement ellipse = template.Descendants(Presentation + "Ellipse")
+            .Single(element => HasName(element, "HeatSpot"));
+        XElement style = Assert.IsType<XElement>(ellipse.Element(Presentation + "Ellipse.Style")?
+            .Element(Presentation + "Style"));
+
+        Assert.Null(ellipse.Attribute("Fill"));
+        Assert.Null(ellipse.Attribute("Stroke"));
+        Assert.Contains(style.Elements(Presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Fill"
+            && (string?)setter.Attribute("Value") == "{DynamicResource SubtleBackgroundBrush}");
+        Assert.Contains(style.Elements(Presentation + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Stroke"
+            && (string?)setter.Attribute("Value") == "{DynamicResource BorderBrush}");
+
+        for (int level = 0; level < GamepadLayoutModel.HeatLevelCount; level++)
+        {
+            XElement trigger = style.Elements(Presentation + "Style.Triggers")
+                .Single().Elements(Presentation + "DataTrigger")
+                .Single(element => (string?)element.Attribute("Binding") == "{Binding HeatLevel}"
+                    && (string?)element.Attribute("Value") == level.ToString(CultureInfo.InvariantCulture));
+            XElement fill = trigger.Elements(Presentation + "Setter")
+                .Single(setter => (string?)setter.Attribute("Property") == "Fill");
+
+            Assert.Equal($"{{DynamicResource HeatmapLevel{level}Brush}}", (string?)fill.Attribute("Value"));
+        }
+    }
+
+    [Fact]
+    public void GamepadConfirmationUsesThemeAwareExplicitChoiceAndPreservesDisclosure()
+    {
+        XDocument document = LoadXaml("GamepadConfirmationWindow.xaml");
+        XElement window = Assert.IsType<XElement>(document.Root);
+        string xaml = document.ToString(SaveOptions.DisableFormatting);
+        XElement confirm = FindNamedElement(window, "ConfirmButton");
+        XElement cancel = FindNamedElement(window, "CancelButton");
+        XElement message = FindNamedElement(window, "DialogMessageText");
+        string gamepadActions = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(), "src", "InputTracker.App", "MainWindow.xaml.cs"));
+        gamepadActions = gamepadActions[
+            gamepadActions.IndexOf("private async void GamepadDetectDevicesButton_Click", StringComparison.Ordinal)..
+            gamepadActions.IndexOf("private GamepadDeviceChoice? SelectedGamepad", StringComparison.Ordinal)];
+
+        Assert.Equal("None", (string?)window.Attribute("WindowStyle"));
+        Assert.Contains("WindowChrome.WindowChrome", xaml, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource WindowBackgroundBrush}", xaml, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource PrimaryTextBrush}", xaml, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource SecondaryTextBrush}", xaml, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource AccentBrush}", xaml, StringComparison.Ordinal);
+        Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
+        Assert.Null(confirm.Attribute("IsDefault"));
+        Assert.Equal("Wrap", (string?)message.Attribute("TextWrapping"));
+        Assert.Contains("本机数据文件", gamepadActions, StringComparison.Ordinal);
+        Assert.Contains("不会记录摇杆移动或扳机行程", gamepadActions, StringComparison.Ordinal);
+        Assert.Contains("暂不授权", gamepadActions, StringComparison.Ordinal);
+        Assert.Contains("保存校准", gamepadActions, StringComparison.Ordinal);
+        Assert.Contains("启用统计", gamepadActions, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(gamepadActions, "new GamepadConfirmationWindow("));
+        Assert.DoesNotContain("MessageBox", gamepadActions, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ComboBoxTemplateUsesThemeResourcesForClosedAndPopupSurfaces()
     {
         string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
@@ -354,6 +420,19 @@ public sealed class UiPresentationTests
 
     private static bool HasName(XElement element, string name) =>
         string.Equals((string?)element.Attribute(Xaml + "Name"), name, StringComparison.Ordinal);
+
+    private static int CountOccurrences(string text, string value)
+    {
+        int count = 0;
+        int position = 0;
+        while ((position = text.IndexOf(value, position, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            position += value.Length;
+        }
+
+        return count;
+    }
 
     private static RgbColor ReadColor(XElement root, string key)
     {

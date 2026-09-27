@@ -41,10 +41,42 @@ public sealed class GamepadLayoutModelTests
         Assert.Equal("未校准", unknownSouth.CountText);
         Assert.Equal(GamepadPositionSupport.Supported, zeroSouth.Support);
         Assert.Equal(0, zeroSouth.PressCount);
+        Assert.Equal(0, zeroSouth.HeatLevel);
         Assert.Equal("0 次", zeroSouth.CountText);
         Assert.Equal(GamepadPositionSupport.Unsupported, unsupportedWest.Support);
         Assert.Equal("不支持", unsupportedWest.CountText);
         Assert.Equal(4, Assert.Single(calibrated, position => position.Position == GamepadPhysicalPosition.East).HeatLevel);
+    }
+
+    [Fact]
+    public void CreateXboxLayout_HeatSpotsFitControllerCanvas()
+    {
+        IReadOnlyList<GamepadHeatmapPosition> positions = GamepadLayoutModel.CreateXboxLayout();
+
+        Assert.All(positions, position =>
+        {
+            Assert.InRange(position.X, 0, GamepadLayoutModel.CanvasWidth - GamepadLayoutModel.HotspotSize);
+            Assert.InRange(position.Y, 0, GamepadLayoutModel.CanvasHeight - GamepadLayoutModel.HotspotSize);
+        });
+
+        GamepadHeatmapPosition south = Assert.Single(positions, position => position.Position == GamepadPhysicalPosition.South);
+        Assert.Equal(478, south.X);
+        Assert.Equal(189, south.Y);
+    }
+
+    [Fact]
+    public void CreateXboxLayout_ShortensSystemHotspotLabelsWithoutChangingAccessibleNames()
+    {
+        IReadOnlyList<GamepadHeatmapPosition> positions = GamepadLayoutModel.CreateXboxLayout();
+        GamepadHeatmapPosition view = Assert.Single(positions, position => position.Position == GamepadPhysicalPosition.View);
+        GamepadHeatmapPosition menu = Assert.Single(positions, position => position.Position == GamepadPhysicalPosition.Menu);
+
+        Assert.Equal("V", view.DisplayLabel);
+        Assert.Equal("View", view.Label);
+        Assert.Contains("View", view.AccessibleLabel, StringComparison.Ordinal);
+        Assert.Equal("M", menu.DisplayLabel);
+        Assert.Equal("Menu", menu.Label);
+        Assert.Contains("Menu", menu.AccessibleLabel, StringComparison.Ordinal);
     }
 
     [Fact]

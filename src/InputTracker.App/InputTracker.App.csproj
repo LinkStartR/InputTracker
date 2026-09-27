@@ -17,6 +17,7 @@
   <ItemGroup>
     <Resource Include="Assets\InputTracker.ico" />
     <Resource Include="Assets\InputTracker.png" />
+    <Resource Include="Assets\GamepadController.png" />
     <ProjectReference Include="..\InputTracker.Input\InputTracker.Input.csproj" />
     <ProjectReference Include="..\InputTracker.Storage\InputTracker.Storage.csproj" />
   </ItemGroup>

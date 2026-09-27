@@ -37,6 +37,13 @@ internal sealed record GamepadHeatmapPosition(
     long? PressCount,
     int? HeatLevel)
 {
+    public string DisplayLabel => Position switch
+    {
+        GamepadPhysicalPosition.View => "V",
+        GamepadPhysicalPosition.Menu => "M",
+        _ => Label
+    };
+
     public string CountText => Support == GamepadPositionSupport.Supported
         ? $"{PressCount.GetValueOrDefault():N0} 次"
         : Support == GamepadPositionSupport.Unknown ? "未校准" : "不支持";
@@ -52,6 +59,9 @@ internal sealed record GamepadHeatmapPosition(
 internal static class GamepadLayoutModel
 {
     public const int HeatLevelCount = 5;
+    public const double CanvasWidth = 680;
+    public const double CanvasHeight = 440;
+    public const double HotspotSize = 32;
 
     private sealed record PositionSpec(
         GamepadPhysicalPosition Position,
@@ -62,22 +72,22 @@ internal static class GamepadLayoutModel
 
     private static readonly PositionSpec[] XboxPositions =
     [
-        new(GamepadPhysicalPosition.LeftTrigger, "扳机键", "LT", 172, 2),
-        new(GamepadPhysicalPosition.RightTrigger, "扳机键", "RT", 512, 2),
-        new(GamepadPhysicalPosition.LeftShoulder, "肩键", "LB", 217, 37),
-        new(GamepadPhysicalPosition.RightShoulder, "肩键", "RB", 467, 37),
-        new(GamepadPhysicalPosition.View, "系统键", "View", 323, 73),
-        new(GamepadPhysicalPosition.Menu, "系统键", "Menu", 405, 73),
-        new(GamepadPhysicalPosition.LeftStickPress, "摇杆按下", "L3", 165, 145),
-        new(GamepadPhysicalPosition.DpadUp, "方向键", "↑", 288, 137),
-        new(GamepadPhysicalPosition.DpadLeft, "方向键", "←", 247, 178),
-        new(GamepadPhysicalPosition.DpadRight, "方向键", "→", 329, 178),
-        new(GamepadPhysicalPosition.DpadDown, "方向键", "↓", 288, 219),
-        new(GamepadPhysicalPosition.RightStickPress, "摇杆按下", "R3", 472, 205),
-        new(GamepadPhysicalPosition.West, "面键", "X", 538, 127),
-        new(GamepadPhysicalPosition.North, "面键", "Y", 579, 86),
-        new(GamepadPhysicalPosition.East, "面键", "B", 620, 127),
-        new(GamepadPhysicalPosition.South, "面键", "A", 579, 168)
+        new(GamepadPhysicalPosition.LeftTrigger, "扳机键", "LT", 158, 26),
+        new(GamepadPhysicalPosition.RightTrigger, "扳机键", "RT", 485, 26),
+        new(GamepadPhysicalPosition.LeftShoulder, "肩键", "LB", 158, 52),
+        new(GamepadPhysicalPosition.RightShoulder, "肩键", "RB", 485, 52),
+        new(GamepadPhysicalPosition.View, "系统键", "View", 283, 148),
+        new(GamepadPhysicalPosition.Menu, "系统键", "Menu", 363, 148),
+        new(GamepadPhysicalPosition.LeftStickPress, "摇杆按下", "L3", 167, 141),
+        new(GamepadPhysicalPosition.DpadUp, "方向键", "↑", 235, 205),
+        new(GamepadPhysicalPosition.DpadLeft, "方向键", "←", 206, 233),
+        new(GamepadPhysicalPosition.DpadRight, "方向键", "→", 264, 233),
+        new(GamepadPhysicalPosition.DpadDown, "方向键", "↓", 235, 261),
+        new(GamepadPhysicalPosition.RightStickPress, "摇杆按下", "R3", 398, 233),
+        new(GamepadPhysicalPosition.West, "面键", "X", 439, 149),
+        new(GamepadPhysicalPosition.North, "面键", "Y", 478, 109),
+        new(GamepadPhysicalPosition.East, "面键", "B", 518, 149),
+        new(GamepadPhysicalPosition.South, "面键", "A", 478, 189)
     ];
 
     public static IReadOnlyList<GamepadHeatmapPosition> CreateXboxLayout(

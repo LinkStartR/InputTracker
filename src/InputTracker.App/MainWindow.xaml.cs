@@ -542,13 +542,12 @@ public partial class MainWindow : Window
             PortableSettings settings = _settings.Load();
             if (!settings.GamepadConsentGranted)
             {
-                MessageBoxResult consent = System.Windows.MessageBox.Show(
-                    "启用手柄检测后，InputTracker 会读取所选手柄的按键状态，用于逐键校准和统计按键次数。按键映射、设备标识和统计保存在本机数据文件中；不会记录摇杆移动或扳机行程。检测和启用统计需要单独的手柄授权。是否同意？",
+                bool consent = new GamepadConfirmationWindow(
                     "手柄采集说明",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.No);
-                if (consent != MessageBoxResult.Yes) return;
+                    "开启手柄检测后，InputTracker 会读取所选手柄的按键状态，用于逐键校准和统计按键次数。\n\n按键映射、设备标识和统计保存在本机数据文件中；不会记录摇杆移动或扳机行程。手柄检测和统计需单独授权。",
+                    "同意并继续",
+                    "暂不授权") { Owner = this }.ShowDialog() == true;
+                if (!consent) return;
                 _settings.SetGamepadConsent(true);
             }
 
@@ -593,25 +592,23 @@ public partial class MainWindow : Window
                     GamepadStatusText.Text = "请继续按当前提示逐键操作，或点击“此键不支持”。";
                     return;
                 }
-                MessageBoxResult confirmation = System.Windows.MessageBox.Show(
-                    $"已识别 {_gamepadCoordinator.GamepadCalibrationBindings.Count} 个按键映射。保存后，统计将按这组映射写入本机数据。请确认手柄和 Xbox 布局选择正确。是否保存？",
+                bool confirmation = new GamepadConfirmationWindow(
                     "确认保存手柄校准",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning,
-                    MessageBoxResult.No);
-                if (confirmation != MessageBoxResult.Yes) return;
+                    $"已识别 {_gamepadCoordinator.GamepadCalibrationBindings.Count} 个按键映射。保存后，统计会按这组映射写入本机数据。请确认手柄和 Xbox 布局选择正确。",
+                    "保存校准",
+                    "返回检查") { Owner = this }.ShowDialog() == true;
+                if (!confirmation) return;
                 _gamepadCoordinator.SaveGamepadCalibration(device.RuntimeId);
                 GamepadStatusText.Text = "校准已保存；尚未启用统计。";
             }
             else
             {
-                MessageBoxResult start = System.Windows.MessageBox.Show(
-                    "请按屏幕提示依次操作面键、方向键、肩键、系统键、摇杆按下和扳机。校准扳机时先松开并确认松开值，再完全按下；不支持的按键可以跳过。校准完成并确认保存前不会累计次数。",
+                bool start = new GamepadConfirmationWindow(
                     "开始逐键校准",
-                    MessageBoxButton.OKCancel,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.Cancel);
-                if (start != MessageBoxResult.OK) return;
+                    "请按屏幕提示依次操作面键、方向键、肩键、系统键、摇杆按下和扳机。校准扳机时先松开并确认松开值，再完全按下；不支持的按键可以跳过。校准完成并确认保存前不会累计次数。",
+                    "开始校准",
+                    "稍后再说") { Owner = this }.ShowDialog() == true;
+                if (!start) return;
                 _gamepadCoordinator.BeginGamepadCalibration(device.RuntimeId, StorageGamepadButton.South);
                 GamepadStatusText.Text = "请按提示操作；不支持的按键可跳过。";
             }
@@ -646,13 +643,12 @@ public partial class MainWindow : Window
                     throw new InvalidOperationException("请先完成并保存至少一个按键映射，再启用统计。");
                 if (GamepadBrandSelector.SelectedItem is not string brand)
                     throw new InvalidOperationException("请选择 Xbox 或其他品牌/第三方手柄。");
-                MessageBoxResult final = System.Windows.MessageBox.Show(
-                    $"将开始统计“{device.DisplayName}”（{brand}，Xbox 布局）中已校准按键的按下次数，并保存在本机。再次点击可停用；修改校准会使用新的配置版本。是否启用？",
+                bool final = new GamepadConfirmationWindow(
                     "确认启用手柄统计",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.No);
-                if (final != MessageBoxResult.Yes) return;
+                    $"将开始统计“{device.DisplayName}”（{brand}，Xbox 布局）中已校准按键的按下次数，并保存在本机。再次点击可停用；修改校准会使用新的配置版本。",
+                    "启用统计",
+                    "暂不开启") { Owner = this }.ShowDialog() == true;
+                if (!final) return;
             }
             _gamepadCoordinator.SetGamepadEnabled(device.RuntimeId, enable);
             configurationChanged = true;
@@ -714,6 +710,7 @@ public partial class MainWindow : Window
             GamepadCalibrationStatusText.Text = _gamepadCoordinator.GamepadCalibrationInterrupted
                 ? "连接中断，请重新选择设备并校准" : "尚未校准";
             GamepadHeatmapItems.ItemsSource = GamepadLayoutModel.CreateXboxLayout();
+            SetGamepadHighlights([], "连接手柄并完成按键校准后，这里会显示真实按键次数。");
             if (consented && devices.Length == 0)
                 GamepadStatusText.Text = "请按一下手柄任意键使设备出现在列表中。设备名仅在本次运行中使用匿名序号显示。";
             return;
@@ -740,7 +737,9 @@ public partial class MainWindow : Window
             ? null
             : config.Bindings.Select(binding => ToPhysicalPosition(binding.Button)).ToHashSet();
         Dictionary<GamepadPhysicalPosition, long> counts = [];
-        if (config is not null && _storage is not null && _gamepadCoordinator.GetGamepadStorageId(gamepad.RuntimeId) is Guid deviceId)
+        Guid? storageId = _gamepadCoordinator.GetGamepadStorageId(gamepad.RuntimeId);
+        bool countsRead = false;
+        if (config is not null && _storage is not null && storageId is Guid deviceId)
         {
             try
             {
@@ -749,10 +748,29 @@ public partial class MainWindow : Window
                     TimeZoneInfo.Local.Id, deviceId);
                 foreach (IGrouping<StorageGamepadButton, StorageGamepadButtonPeriodAggregate> group in result.Aggregates.GroupBy(row => row.Button))
                     counts[ToPhysicalPosition(group.Key)] = group.Sum(row => row.PressCount);
+                countsRead = true;
             }
             catch (Exception error) { GamepadStatusText.Text = $"手柄统计读取失败：{error.Message}"; }
         }
-        GamepadHeatmapItems.ItemsSource = GamepadLayoutModel.CreateXboxLayout(counts, support);
+        IReadOnlyList<GamepadHeatmapPosition> heatmap = GamepadLayoutModel.CreateXboxLayout(counts, support);
+        GamepadHeatmapItems.ItemsSource = heatmap;
+        GamepadHeatmapPosition[] highlights = heatmap
+            .Where(position => position.Support == GamepadPositionSupport.Supported && position.PressCount > 0)
+            .OrderByDescending(position => position.PressCount)
+            .Take(4)
+            .ToArray();
+        string emptyMessage = config is null || config.Bindings.Count == 0
+            ? "完成逐键校准后，这里会显示真实按键次数。"
+            : countsRead ? "所选时间范围内暂无按键记录。" : "暂时无法读取当前手柄的真实次数。";
+        SetGamepadHighlights(highlights, emptyMessage);
+    }
+
+    private void SetGamepadHighlights(IReadOnlyCollection<GamepadHeatmapPosition> highlights, string emptyMessage)
+    {
+        GamepadHighlightsItems.ItemsSource = highlights;
+        GamepadHighlightsItems.Visibility = highlights.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        GamepadHighlightsEmptyText.Text = emptyMessage;
+        GamepadHighlightsEmptyText.Visibility = highlights.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static string GetGamepadButtonLabel(StorageGamepadButton button) => button switch
