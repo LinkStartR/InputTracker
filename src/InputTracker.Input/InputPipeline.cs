@@ -7,6 +7,9 @@ internal enum IngressEventKind : byte
 {
     Keyboard,
     Mouse,
+    Gamepad,
+    GamepadStatus,
+    GamepadBarrier,
     DeviceArrived,
     DeviceRemoved,
     Boundary
@@ -26,6 +29,14 @@ internal readonly record struct InputIngressEvent(
     MouseButtonChanges ButtonChanges = MouseButtonChanges.None,
     short VerticalWheelDelta = 0,
     short HorizontalWheelDelta = 0,
+    GamepadControlId GamepadControl = default,
+    int GamepadValue = 0,
+    bool GamepadBaseline = false,
+    bool GamepadCaptureEnabled = false,
+    int? GamepadLogicalMinimum = null,
+    int? GamepadLogicalMaximum = null,
+    GamepadCaptureStatus GamepadStatus = GamepadCaptureStatus.Ready,
+    string? GamepadError = null,
     RawDeviceKind DeviceKind = RawDeviceKind.Unknown,
     AggregationBoundaryKind BoundaryKind = AggregationBoundaryKind.Paused,
     PauseReason PauseReasons = PauseReason.None,
@@ -293,6 +304,46 @@ internal sealed class InputWorker
                     input.Timestamp))).ConfigureAwait(false);
                 break;
             }
+            case IngressEventKind.Gamepad:
+            {
+                InputDeviceDescriptor descriptor = await ResolveAsync(
+                    input.DeviceHandle,
+                    RawDeviceKind.Gamepad,
+                    input.Timestamp).ConfigureAwait(false);
+                await WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+                    descriptor.RuntimeId,
+                    input.GamepadControl,
+                    input.GamepadValue,
+                    input.Timestamp,
+                    input.GamepadBaseline,
+                    input.GamepadLogicalMinimum,
+                    input.GamepadLogicalMaximum))).ConfigureAwait(false);
+                break;
+            }
+            case IngressEventKind.GamepadStatus:
+            {
+                InputDeviceDescriptor descriptor = await ResolveAsync(
+                    input.DeviceHandle,
+                    RawDeviceKind.Gamepad,
+                    input.Timestamp).ConfigureAwait(false);
+                await WriteAsync(CapturedInput.FromGamepadStatus(new GamepadInputStatusEvent(
+                    descriptor.RuntimeId,
+                    input.GamepadStatus,
+                    input.GamepadError,
+                    input.Timestamp))).ConfigureAwait(false);
+                break;
+            }
+            case IngressEventKind.GamepadBarrier:
+            {
+                if (!input.GamepadCaptureEnabled)
+                {
+                    await RemoveGamepadDevicesAsync(input.Timestamp).ConfigureAwait(false);
+                }
+
+                input.Barrier?.TrySetResult(true);
+                _counters.SinkAcknowledged();
+                break;
+            }
             case IngressEventKind.Boundary:
             {
                 _pressedKeys.Clear();
@@ -301,6 +352,11 @@ internal sealed class InputWorker
                     RuntimeDeviceId.Unattributed,
                     input.PauseReasons,
                     input.Timestamp))).ConfigureAwait(false);
+                if (input.BoundaryKind == AggregationBoundaryKind.Paused)
+                {
+                    await RemoveGamepadDevicesAsync(input.Timestamp).ConfigureAwait(false);
+                }
+
                 input.Barrier?.TrySetResult(true);
                 break;
             }
@@ -348,6 +404,21 @@ internal sealed class InputWorker
             deviceId,
             PauseReason.None,
             timestamp))).ConfigureAwait(false);
+    }
+
+    private async ValueTask RemoveGamepadDevicesAsync(long timestamp)
+    {
+        foreach (InputDeviceDescriptor descriptor in _devices.RemoveKind(RawDeviceKind.Gamepad))
+        {
+            await WriteBoundaryForDeviceAsync(
+                descriptor.RuntimeId,
+                AggregationBoundaryKind.DeviceRemoved,
+                timestamp).ConfigureAwait(false);
+            await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+                DeviceChangeKind.Removed,
+                descriptor,
+                timestamp))).ConfigureAwait(false);
+        }
     }
 
     private async ValueTask WriteAsync(CapturedInput input)

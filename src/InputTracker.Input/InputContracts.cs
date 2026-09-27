@@ -60,10 +60,45 @@ public readonly record struct MouseRawEvent(
     short HorizontalWheelDelta,
     long Timestamp);
 
+/// <summary>Identifies one HID control in the gamepad's input descriptor.</summary>
+public readonly record struct GamepadControlId(
+    ushort UsagePage,
+    ushort Usage,
+    ushort LinkCollection,
+    ushort ElementIndex);
+
+/// <summary>
+/// Reports a changed raw gamepad control value. Button controls use 0 for released and 1 for pressed.
+/// Hat Switch controls use the descriptor's logical value; -1 means the descriptor's NULL/neutral state.
+/// Other HID value controls use the descriptor's raw logical value and include logical bounds when available.
+/// </summary>
+public readonly record struct GamepadControlEvent(
+    RuntimeDeviceId DeviceId,
+    GamepadControlId Control,
+    int Value,
+    long Timestamp,
+    bool IsBaseline = false,
+    int? LogicalMinimum = null,
+    int? LogicalMaximum = null);
+
+public enum GamepadCaptureStatus : byte
+{
+    Ready,
+    Unsupported,
+    Faulted
+}
+
+public readonly record struct GamepadInputStatusEvent(
+    RuntimeDeviceId DeviceId,
+    GamepadCaptureStatus Status,
+    string? Error,
+    long Timestamp);
+
 public enum RawDeviceKind : byte
 {
     Mouse,
     Keyboard,
+    Gamepad,
     Other,
     Unknown
 }
@@ -120,6 +155,8 @@ public enum CapturedInputKind : byte
 {
     Keyboard,
     Mouse,
+    Gamepad,
+    GamepadStatus,
     DeviceChange,
     AggregationBoundary
 }
@@ -130,12 +167,16 @@ public readonly record struct CapturedInput
         CapturedInputKind kind,
         KeyboardPhysicalEvent keyboard,
         MouseRawEvent mouse,
+        GamepadControlEvent gamepad,
+        GamepadInputStatusEvent gamepadStatus,
         DeviceChangeEvent deviceChange,
         AggregationBoundaryEvent boundary)
     {
         Kind = kind;
         Keyboard = keyboard;
         Mouse = mouse;
+        Gamepad = gamepad;
+        GamepadStatus = gamepadStatus;
         DeviceChange = deviceChange;
         Boundary = boundary;
     }
@@ -143,20 +184,28 @@ public readonly record struct CapturedInput
     public CapturedInputKind Kind { get; }
     public KeyboardPhysicalEvent Keyboard { get; }
     public MouseRawEvent Mouse { get; }
+    public GamepadControlEvent Gamepad { get; }
+    public GamepadInputStatusEvent GamepadStatus { get; }
     public DeviceChangeEvent DeviceChange { get; }
     public AggregationBoundaryEvent Boundary { get; }
 
     public static CapturedInput FromKeyboard(KeyboardPhysicalEvent value) =>
-        new(CapturedInputKind.Keyboard, value, default, default, default);
+        new(CapturedInputKind.Keyboard, value, default, default, default, default, default);
 
     public static CapturedInput FromMouse(MouseRawEvent value) =>
-        new(CapturedInputKind.Mouse, default, value, default, default);
+        new(CapturedInputKind.Mouse, default, value, default, default, default, default);
+
+    public static CapturedInput FromGamepad(GamepadControlEvent value) =>
+        new(CapturedInputKind.Gamepad, default, default, value, default, default, default);
+
+    public static CapturedInput FromGamepadStatus(GamepadInputStatusEvent value) =>
+        new(CapturedInputKind.GamepadStatus, default, default, default, value, default, default);
 
     public static CapturedInput FromDeviceChange(DeviceChangeEvent value) =>
-        new(CapturedInputKind.DeviceChange, default, default, value, default);
+        new(CapturedInputKind.DeviceChange, default, default, default, default, value, default);
 
     public static CapturedInput FromBoundary(AggregationBoundaryEvent value) =>
-        new(CapturedInputKind.AggregationBoundary, default, default, default, value);
+        new(CapturedInputKind.AggregationBoundary, default, default, default, default, default, value);
 }
 
 public interface IInputEventSink

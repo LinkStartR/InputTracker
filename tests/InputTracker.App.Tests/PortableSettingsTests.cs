@@ -51,8 +51,49 @@ public sealed class PortableSettingsTests
         File.WriteAllText(path, "not-json");
         Assert.Throws<InvalidDataException>(() => new PortableSettingsStore(temporary.Path).Load());
 
-        File.WriteAllText(path, "{\"schemaVersion\":2,\"collectionConsentGranted\":true}");
+        File.WriteAllText(path, "{\"schemaVersion\":3,\"collectionConsentGranted\":true}");
         Assert.Throws<InvalidDataException>(() => new PortableSettingsStore(temporary.Path).Load());
+    }
+
+    [Fact]
+    public void VersionOneSettingsUpgradeInMemoryWithoutGrantingGamepadConsent()
+    {
+        using var temporary = new TemporaryDirectory();
+        string path = Path.Combine(temporary.Path, PortableSettingsStore.FileName);
+        const string original = "{\"schemaVersion\":1,\"collectionConsentGranted\":true}";
+        File.WriteAllText(path, original);
+        var store = new PortableSettingsStore(temporary.Path);
+
+        PortableSettings loaded = store.Load();
+
+        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.True(loaded.CollectionConsentGranted);
+        Assert.False(loaded.GamepadConsentGranted);
+        Assert.False(loaded.GamepadCaptureEnabled);
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void GamepadSettingsRequireSeparateConsentAndPreserveKeyboardConsent()
+    {
+        using var temporary = new TemporaryDirectory();
+        var store = new PortableSettingsStore(temporary.Path);
+        store.GrantCollectionConsent();
+        Guid deviceId = Guid.NewGuid();
+
+        Assert.False(store.Load().GamepadConsentGranted);
+        Assert.Throws<InvalidOperationException>(() => store.SetGamepadConfiguration(true, deviceId));
+
+        store.SetGamepadConsent(true);
+        store.SetGamepadConfiguration(true, deviceId);
+        store.SetGamepadConsent(false);
+
+        PortableSettings loaded = store.Load();
+        Assert.True(loaded.CollectionConsentGranted);
+        Assert.False(loaded.GamepadConsentGranted);
+        Assert.False(loaded.GamepadCaptureEnabled);
+        Assert.Null(loaded.GamepadDeviceId);
+        Assert.DoesNotContain("interfacePath", File.ReadAllText(store.SettingsPath), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

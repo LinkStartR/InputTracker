@@ -5,7 +5,7 @@ namespace InputTracker.Storage;
 
 internal static class StorageSchema
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     public const string Version1Sql = """
         CREATE TABLE schema_migrations (
@@ -202,4 +202,71 @@ internal static class StorageSchema
 
     public static string Version6Checksum { get; } = Convert.ToHexString(
         SHA256.HashData(Encoding.UTF8.GetBytes(Version6Sql)));
+
+    public const string Version7Sql = """
+        CREATE TABLE gamepad_configuration_revisions (
+            device_id TEXT NOT NULL REFERENCES devices(device_id),
+            revision INTEGER NOT NULL CHECK (revision > 0),
+            layout INTEGER NOT NULL CHECK (layout = 0),
+            enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+            created_utc_us INTEGER NOT NULL,
+            PRIMARY KEY (device_id, revision)
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE TABLE gamepad_configuration_current (
+            device_id TEXT PRIMARY KEY REFERENCES devices(device_id),
+            revision INTEGER NOT NULL,
+            FOREIGN KEY (device_id, revision)
+                REFERENCES gamepad_configuration_revisions(device_id, revision)
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE TABLE gamepad_hid_bindings (
+            device_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            button INTEGER NOT NULL CHECK (button BETWEEN 0 AND 15),
+            usage_page INTEGER NOT NULL CHECK (usage_page BETWEEN 0 AND 65535),
+            usage INTEGER NOT NULL CHECK (usage BETWEEN 0 AND 65535),
+            link_collection INTEGER NOT NULL CHECK (link_collection BETWEEN 0 AND 65535),
+            element_index INTEGER NOT NULL CHECK (element_index BETWEEN 0 AND 65535),
+            active_value INTEGER NOT NULL,
+            PRIMARY KEY (device_id, revision, button, usage_page, usage, link_collection, element_index, active_value),
+            FOREIGN KEY (device_id, revision)
+                REFERENCES gamepad_configuration_revisions(device_id, revision) ON DELETE CASCADE
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE TABLE gamepad_hid_axis_bindings (
+            device_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            button INTEGER NOT NULL CHECK (button BETWEEN 0 AND 15),
+            usage_page INTEGER NOT NULL CHECK (usage_page BETWEEN 0 AND 65535),
+            usage INTEGER NOT NULL CHECK (usage BETWEEN 0 AND 65535),
+            link_collection INTEGER NOT NULL CHECK (link_collection BETWEEN 0 AND 65535),
+            element_index INTEGER NOT NULL CHECK (element_index BETWEEN 0 AND 65535),
+            activation_threshold INTEGER NOT NULL,
+            release_threshold INTEGER NOT NULL,
+            axis_direction INTEGER NOT NULL CHECK (axis_direction IN (0, 1)),
+            PRIMARY KEY (device_id, revision, button, usage_page, usage, link_collection, element_index),
+            CHECK ((axis_direction = 0 AND activation_threshold > release_threshold)
+                OR (axis_direction = 1 AND activation_threshold < release_threshold)),
+            FOREIGN KEY (device_id, revision)
+                REFERENCES gamepad_configuration_revisions(device_id, revision) ON DELETE CASCADE
+        ) WITHOUT ROWID, STRICT;
+
+        CREATE TABLE gamepad_daily (
+            device_id TEXT NOT NULL,
+            configuration_revision INTEGER NOT NULL,
+            button INTEGER NOT NULL CHECK (button BETWEEN 0 AND 15),
+            capture_local_date TEXT NOT NULL,
+            time_zone_id TEXT NOT NULL,
+            press_count INTEGER NOT NULL CHECK (press_count > 0),
+            PRIMARY KEY (device_id, configuration_revision, button, capture_local_date, time_zone_id),
+            FOREIGN KEY (device_id, configuration_revision)
+                REFERENCES gamepad_configuration_revisions(device_id, revision)
+        ) WITHOUT ROWID, STRICT;
+
+        PRAGMA user_version = 7;
+        """;
+
+    public static string Version7Checksum { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(Version7Sql)));
 }

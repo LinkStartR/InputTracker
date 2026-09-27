@@ -70,6 +70,32 @@ public sealed class InputCaptureServiceTests
     }
 
     [Fact]
+    public async Task GamepadCaptureIsOptInAndRemainsDisabledAcrossPauseUntilEnabled()
+    {
+        var factory = new FakeHostFactory();
+        await using var service = new InputCaptureService(new CountingSink(), null, factory);
+
+        await service.StartAsync();
+        Assert.False(factory.Host.GamepadCaptureEnabled);
+        Assert.False(factory.Host.GamepadRegistered);
+
+        await service.SetGamepadCaptureEnabledAsync(true);
+        Assert.True(factory.Host.GamepadCaptureEnabled);
+        Assert.True(factory.Host.GamepadRegistered);
+
+        await service.SetPauseReasonAsync(PauseReason.User, true);
+        Assert.False(factory.Host.GamepadRegistered);
+        Assert.True(factory.Host.GamepadCaptureEnabled);
+
+        await service.SetPauseReasonAsync(PauseReason.User, false);
+        Assert.True(factory.Host.GamepadRegistered);
+        await service.SetGamepadCaptureEnabledAsync(false);
+        Assert.False(factory.Host.GamepadCaptureEnabled);
+        Assert.False(factory.Host.GamepadRegistered);
+        await service.StopAsync();
+    }
+
+    [Fact]
     public async Task PauseReasonsStackAndUnlockDoesNotOverrideUserPause()
     {
         var factory = new FakeHostFactory();
@@ -325,6 +351,8 @@ public sealed class InputCaptureServiceTests
         private bool _registered;
 
         public bool IngressOpen { get; private set; }
+        public bool GamepadCaptureEnabled { get; private set; }
+        public bool GamepadRegistered { get; private set; }
         public bool Destroyed { get; private set; }
         public bool StopBarrierCompleted { get; private set; }
         public bool StopAfterFaultCalled { get; private set; }
@@ -357,8 +385,27 @@ public sealed class InputCaptureServiceTests
         public ValueTask ResumeAsync(CancellationToken cancellationToken)
         {
             Register();
+            GamepadRegistered = GamepadCaptureEnabled;
             IngressOpen = true;
             return ValueTask.CompletedTask;
+        }
+
+        public async ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken)
+        {
+            GamepadCaptureEnabled = enabled;
+            GamepadRegistered = _registered && enabled;
+            var barrier = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!queue.TryWrite(new InputIngressEvent(
+                    IngressEventKind.GamepadBarrier,
+                    0,
+                    1,
+                    GamepadCaptureEnabled: enabled,
+                    Barrier: barrier)))
+            {
+                throw new InvalidOperationException("test gamepad barrier overflow");
+            }
+
+            await barrier.Task.WaitAsync(cancellationToken);
         }
 
         public async ValueTask PrepareStopAsync(bool enqueueBarrier, CancellationToken cancellationToken)
@@ -438,6 +485,7 @@ public sealed class InputCaptureServiceTests
             }
 
             _registered = true;
+            GamepadRegistered = GamepadCaptureEnabled;
             onRegistrationChanged(true);
         }
 
@@ -449,6 +497,7 @@ public sealed class InputCaptureServiceTests
             }
 
             _registered = false;
+            GamepadRegistered = false;
             onRegistrationChanged(false);
         }
     }

@@ -126,6 +126,85 @@ internal static class StorageQuery
         return QueryMouseButtonsResolved(connection, period, deviceId);
     }
 
+    public static StorageGamepadButtonPeriodResult QueryGamepadButtonsPeriod(
+        SqliteConnection connection,
+        StoragePeriodKind kind,
+        DateOnly containingDate,
+        string timeZoneId,
+        Guid? deviceId)
+    {
+        StorageResolvedPeriod period = StoragePeriodResolver.Resolve(kind, containingDate, timeZoneId);
+        return QueryGamepadResolved(connection, period, deviceId);
+    }
+
+    public static StorageGamepadButtonPeriodResult QueryGamepadButtonsRange(
+        SqliteConnection connection,
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId)
+    {
+        StorageResolvedPeriod period = StoragePeriodResolver.ResolveRange(
+            inclusiveStartDate, inclusiveEndDate, timeZoneId);
+        return QueryGamepadResolved(connection, period, deviceId);
+    }
+
+    private static StorageGamepadButtonPeriodResult QueryGamepadResolved(
+        SqliteConnection connection,
+        StorageResolvedPeriod period,
+        Guid? deviceId)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (deviceId == Guid.Empty)
+            throw new ArgumentException("A device filter must be non-empty when supplied.", nameof(deviceId));
+        if (deviceId is Guid requested)
+            EnsureDeviceKind(connection, requested, StorageDeviceKind.Gamepad);
+
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT g.device_id, g.configuration_revision, g.button, SUM(g.press_count)
+            FROM gamepad_daily g
+            WHERE g.time_zone_id = $zone
+              AND g.capture_local_date >= $start AND g.capture_local_date < $end
+              AND ($device IS NULL OR g.device_id = $device)
+            GROUP BY g.device_id, g.configuration_revision, g.button
+            ORDER BY g.device_id, g.configuration_revision, g.button;
+            """;
+        command.Parameters.AddWithValue("$zone", period.TimeZoneId);
+        command.Parameters.AddWithValue("$start", FormatDate(period.LocalStartDate));
+        command.Parameters.AddWithValue("$end", FormatDate(period.LocalEndDate));
+        command.Parameters.AddWithValue("$device", deviceId is Guid value ? value.ToString("N") : DBNull.Value);
+        using SqliteDataReader reader = command.ExecuteReader();
+        var rows = new List<StorageGamepadButtonPeriodAggregate>();
+        while (reader.Read())
+        {
+            long rawButton = reader.GetInt64(2);
+            long count = reader.GetInt64(3);
+            if (!Guid.TryParseExact(reader.GetString(0), "N", out Guid rowDevice)
+                || rowDevice == Guid.Empty || reader.GetInt64(1) <= 0
+                || rawButton is < 0 or > 15 || count <= 0)
+                throw new InvalidDataException("A gamepad aggregate is invalid.");
+            rows.Add(new StorageGamepadButtonPeriodAggregate(
+                rowDevice, checked((int)reader.GetInt64(1)), (StorageGamepadButton)rawButton, count));
+        }
+
+        using SqliteCommand zonesCommand = connection.CreateCommand();
+        zonesCommand.CommandText = """
+            SELECT DISTINCT time_zone_id FROM gamepad_daily
+            WHERE ($device IS NULL OR device_id = $device) ORDER BY time_zone_id;
+            """;
+        zonesCommand.Parameters.AddWithValue("$device", deviceId is Guid zoneDevice ? zoneDevice.ToString("N") : DBNull.Value);
+        using SqliteDataReader zonesReader = zonesCommand.ExecuteReader();
+        var zones = new List<string>();
+        while (zonesReader.Read())
+        {
+            string zone = zonesReader.GetString(0);
+            _ = StoragePeriodResolver.Resolve(StoragePeriodKind.Day, new DateOnly(2000, 1, 1), zone);
+            zones.Add(zone);
+        }
+        return new StorageGamepadButtonPeriodResult(period, rows, zones);
+    }
+
     private static StorageMouseButtonPeriodResult QueryMouseButtonsResolved(
         SqliteConnection connection,
         StorageResolvedPeriod period,

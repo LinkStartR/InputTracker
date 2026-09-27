@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using InputTracker.Storage;
+using InputTracker.Input;
 
 namespace InputTracker;
 
@@ -16,6 +17,10 @@ public partial class MainWindow : Window
     private readonly DashboardViewModel? _dashboard;
     private readonly StartupShortcutManager? _startup;
     private readonly AppStorageDataToolsController? _dataTools;
+    private readonly AppStorageCoordinator? _gamepadCoordinator;
+    private readonly IInputCaptureControl? _capture;
+    private readonly StorageService? _storage;
+    private readonly PortableSettingsStore? _settings;
     private readonly KeyboardLayoutModel _keyboardLayout = KeyboardLayoutModel.CreateDefault();
     private readonly DispatcherTimer _dashboardRefreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private bool _dashboardRefreshInProgress;
@@ -28,7 +33,11 @@ public partial class MainWindow : Window
         DirectoryProbeResult directory,
         DashboardViewModel? dashboard = null,
         StartupShortcutManager? startup = null,
-        AppStorageDataToolsController? dataTools = null)
+        AppStorageDataToolsController? dataTools = null,
+        AppStorageCoordinator? gamepadCoordinator = null,
+        IInputCaptureControl? capture = null,
+        StorageService? storage = null,
+        PortableSettingsStore? settings = null)
     {
         InitializeComponent();
         _collection = collection;
@@ -36,6 +45,21 @@ public partial class MainWindow : Window
         _dashboard = dashboard;
         _startup = startup;
         _dataTools = dataTools;
+        _gamepadCoordinator = gamepadCoordinator;
+        _capture = capture;
+        _storage = storage;
+        _settings = settings;
+        GamepadBrandSelector.ItemsSource = new[] { "Xbox", "其他品牌 / 第三方" };
+        GamepadBrandSelector.SelectedIndex = -1;
+        GamepadLayoutSelector.ItemsSource = new[] { "Xbox 布局" };
+        GamepadLayoutSelector.SelectedIndex = -1;
+        GamepadDetectDevicesButton.Click += GamepadDetectDevicesButton_Click;
+        GamepadCheckButtonsButton.Click += GamepadCheckButtonsButton_Click;
+        GamepadSkipButton.Click += GamepadSkipButton_Click;
+        GamepadEnableStatsButton.Click += GamepadEnableStatsButton_Click;
+        GamepadDeviceSelector.SelectionChanged += (_, _) => RefreshGamepadUi();
+        GamepadBrandSelector.SelectionChanged += (_, _) => RefreshGamepadUi();
+        GamepadLayoutSelector.SelectionChanged += (_, _) => RefreshGamepadUi();
         DeletionKindSelector.SelectionChanged += DeletionKindSelector_SelectionChanged;
         UpdateDeletionDeviceSelectorVisibility();
         DateOnly today = DateOnly.FromDateTime(DateTime.Today);
@@ -56,6 +80,7 @@ public partial class MainWindow : Window
         DeletionKindSelector.IsEnabled = dataToolsAvailable;
         DeletionKeyboardDeviceSelector.IsEnabled = dataToolsAvailable;
         DeletionMouseDeviceSelector.IsEnabled = dataToolsAvailable;
+        DeletionGamepadDeviceSelector.IsEnabled = dataToolsAvailable;
         ValidateRestoreButton.IsEnabled = dataToolsAvailable;
         if (!dataToolsAvailable)
         {
@@ -94,6 +119,7 @@ public partial class MainWindow : Window
         DeletionKindSelector.IsEnabled = false;
         DeletionKeyboardDeviceSelector.IsEnabled = false;
         DeletionMouseDeviceSelector.IsEnabled = false;
+        DeletionGamepadDeviceSelector.IsEnabled = false;
         KeyboardDeviceSelector.IsEnabled = false;
         MouseDeviceSelector.IsEnabled = false;
         KeyboardAliasInput.IsEnabled = false;
@@ -275,6 +301,8 @@ public partial class MainWindow : Window
             ? Visibility.Visible : Visibility.Collapsed;
         DeletionMouseDevicePanel.Visibility = target is DeletionTargetKind.Mouse or DeletionTargetKind.All
             ? Visibility.Visible : Visibility.Collapsed;
+        DeletionGamepadDevicePanel.Visibility = target == DeletionTargetKind.Gamepad
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void ViewDateRangePicker_RangeChanged(object? sender, EventArgs e)
@@ -300,7 +328,7 @@ public partial class MainWindow : Window
             DeletionTargetKind targetKind = DeletionKindSelector.SelectedItem is ComboBoxItem item
                 && Enum.TryParse(item.Tag?.ToString(), out DeletionTargetKind selectedKind)
                     ? selectedKind
-                    : throw new InvalidOperationException("请选择键盘、鼠标按键或全部。");
+                    : throw new InvalidOperationException("请选择键盘、鼠标、手柄按键或全部。");
             AppDateRangeSelection dates = new(
                 DeletionDateRangePicker.InclusiveStartDate,
                 DeletionDateRangePicker.InclusiveEndDate);
@@ -346,15 +374,27 @@ public partial class MainWindow : Window
                 return;
             }
 
-            StorageDeviceKind deviceKind = targetKind == DeletionTargetKind.Keyboard
-                ? StorageDeviceKind.Keyboard : StorageDeviceKind.Mouse;
-            Guid? deviceId = deviceKind == StorageDeviceKind.Keyboard
-                ? DeletionKeyboardDeviceSelector.SelectedValue is Guid keyboard ? keyboard : null
-                : DeletionMouseDeviceSelector.SelectedValue is Guid mouse ? mouse : null;
+            StorageDeviceKind deviceKind = targetKind switch
+            {
+                DeletionTargetKind.Keyboard => StorageDeviceKind.Keyboard,
+                DeletionTargetKind.Mouse => StorageDeviceKind.Mouse,
+                DeletionTargetKind.Gamepad => StorageDeviceKind.Gamepad,
+                _ => throw new InvalidOperationException("请选择单个设备类型。")
+            };
+            System.Windows.Controls.ComboBox selector = deviceKind switch
+            {
+                StorageDeviceKind.Keyboard => DeletionKeyboardDeviceSelector,
+                StorageDeviceKind.Mouse => DeletionMouseDeviceSelector,
+                _ => DeletionGamepadDeviceSelector
+            };
+            Guid? deviceId = selector.SelectedValue is Guid selectedDeviceId ? selectedDeviceId : null;
             if (deviceId is not Guid selected)
-                throw new InvalidOperationException(deviceKind == StorageDeviceKind.Keyboard
-                    ? "请先在键盘热力图中选择一个键盘。"
-                    : "请先在鼠标按键页选择一只鼠标。");
+                throw new InvalidOperationException(deviceKind switch
+                {
+                    StorageDeviceKind.Keyboard => "请先选择一个键盘。",
+                    StorageDeviceKind.Mouse => "请先选择一只鼠标。",
+                    _ => "请先选择一个手柄。"
+                });
             StorageDeletionDisplay single = await _dataTools.PreviewDeletionAsync(
                 selected, deviceKind, period.UtcRange);
             if (!single.CanExecute)
@@ -362,10 +402,13 @@ public partial class MainWindow : Window
                 if (CanUpdateDataToolsUi()) DataToolsStatusText.Text = single.Status;
                 return;
             }
-            string target = deviceKind == StorageDeviceKind.Keyboard ? "键盘统计" : "鼠标按键统计";
-            string deviceName = ((deviceKind == StorageDeviceKind.Keyboard
-                ? DeletionKeyboardDeviceSelector.SelectedItem
-                : DeletionMouseDeviceSelector.SelectedItem) as DeviceChoice)?.Name ?? "所选设备";
+            string target = deviceKind switch
+            {
+                StorageDeviceKind.Keyboard => "键盘统计",
+                StorageDeviceKind.Mouse => "鼠标按键统计",
+                _ => "手柄按键统计"
+            };
+            string deviceName = (selector.SelectedItem as DeviceChoice)?.Name ?? "所选设备";
             MessageBoxResult singleConfirmation = System.Windows.MessageBox.Show(
                 $"将永久删除“{deviceName}”在 {localRange} 的 {single.PressCount:N0} 次{target}。\n\n"
                 + "删除前会自动创建完整备份；其他设备和其他日期不受影响。是否继续？",
@@ -381,7 +424,7 @@ public partial class MainWindow : Window
             StorageDeletionResult singleResult = await _dataTools.ExecutePreparedDeletionAsync(
                 single, finalConfirmed: true);
             if (CanUpdateDataToolsUi()) DataToolsStatusText.Text =
-                $"已删除 {(deviceKind == StorageDeviceKind.Keyboard ? singleResult.DeletedKeyboardPressCount : singleResult.DeletedMouseButtonPressCount):N0} 次{target}。"
+                $"已删除 {(deviceKind switch { StorageDeviceKind.Keyboard => singleResult.DeletedKeyboardPressCount, StorageDeviceKind.Mouse => singleResult.DeletedMouseButtonPressCount, _ => singleResult.DeletedGamepadPressCount }):N0} 次{target}。"
                 + $"删除前备份：{singleResult.PreDeletionBackup.Path}";
         });
 
@@ -467,6 +510,7 @@ public partial class MainWindow : Window
         DeletionKindSelector.IsEnabled = enabled;
         DeletionKeyboardDeviceSelector.IsEnabled = enabled;
         DeletionMouseDeviceSelector.IsEnabled = enabled;
+        DeletionGamepadDeviceSelector.IsEnabled = enabled;
         DeletionDateControls.IsEnabled = enabled;
         ValidateRestoreButton.IsEnabled = enabled;
     }
@@ -476,8 +520,286 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshStartupState();
+        bool gamepadReady = _gamepadCoordinator is not null && _capture is not null && _storage is not null && _settings is not null;
+        GamepadDetectDevicesButton.IsEnabled = gamepadReady;
+        GamepadBrandSelector.IsEnabled = gamepadReady;
+        GamepadLayoutSelector.IsEnabled = gamepadReady;
         await RefreshDashboardAsync();
+        RefreshGamepadUi();
         if (_dashboard is not null && IsVisible) _dashboardRefreshTimer.Start();
+    }
+
+    private async void GamepadDetectDevicesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settings is null || _capture is null || _gamepadCoordinator is null) return;
+        if (GamepadBrandSelector.SelectedItem is not string || GamepadLayoutSelector.SelectedItem is null)
+        {
+            GamepadStatusText.Text = "请先选择品牌和 Xbox 布局，再检测设备。";
+            return;
+        }
+        try
+        {
+            PortableSettings settings = _settings.Load();
+            if (!settings.GamepadConsentGranted)
+            {
+                MessageBoxResult consent = System.Windows.MessageBox.Show(
+                    "启用手柄检测后，InputTracker 会读取所选手柄的按键状态，用于逐键校准和统计按键次数。按键映射、设备标识和统计保存在本机数据文件中；不会记录摇杆移动或扳机行程。检测和启用统计需要单独的手柄授权。是否同意？",
+                    "手柄采集说明",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information,
+                    MessageBoxResult.No);
+                if (consent != MessageBoxResult.Yes) return;
+                _settings.SetGamepadConsent(true);
+            }
+
+            _gamepadCoordinator.SetGamepadCaptureEnabled(true);
+            await _capture.SetGamepadCaptureEnabledAsync(true);
+            GamepadStatusText.Text = "正在检测手柄。请按一下手柄任意键使设备出现，再选择设备并逐键校准；未保存校准不会计数。";
+            RefreshGamepadUi();
+        }
+        catch (Exception error)
+        {
+            GamepadStatusText.Text = $"手柄检测失败：{error.Message}";
+        }
+    }
+
+    private void GamepadCheckButtonsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gamepadCoordinator is null || SelectedGamepad is not { } device) return;
+        try
+        {
+            if (_gamepadCoordinator.IsGamepadCalibrating)
+            {
+                if (_gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation)
+                {
+                    if (!_gamepadCoordinator.ConfirmGamepadTriggerRestingPoint())
+                    {
+                        GamepadStatusText.Text = "尚未检测到扳机轴状态。请松开当前扳机并操作一次手柄，再确认松开值。";
+                        return;
+                    }
+                    GamepadStatusText.Text = "松开值已记录；请将当前扳机完全按下，再确认识别结果。";
+                    RefreshGamepadUi();
+                    return;
+                }
+                if (_gamepadCoordinator.HasGamepadCalibrationCandidate)
+                {
+                    _gamepadCoordinator.AcceptGamepadCalibrationCandidate();
+                    GamepadStatusText.Text = "按键映射已确认；请继续下一项。";
+                    RefreshGamepadUi();
+                    return;
+                }
+                if (_gamepadCoordinator.CurrentCalibrationTarget is not null)
+                {
+                    GamepadStatusText.Text = "请继续按当前提示逐键操作，或点击“此键不支持”。";
+                    return;
+                }
+                MessageBoxResult confirmation = System.Windows.MessageBox.Show(
+                    $"已识别 {_gamepadCoordinator.GamepadCalibrationBindings.Count} 个按键映射。保存后，统计将按这组映射写入本机数据。请确认手柄和 Xbox 布局选择正确。是否保存？",
+                    "确认保存手柄校准",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                if (confirmation != MessageBoxResult.Yes) return;
+                _gamepadCoordinator.SaveGamepadCalibration(device.RuntimeId);
+                GamepadStatusText.Text = "校准已保存；尚未启用统计。";
+            }
+            else
+            {
+                MessageBoxResult start = System.Windows.MessageBox.Show(
+                    "请按屏幕提示依次操作面键、方向键、肩键、系统键、摇杆按下和扳机。校准扳机时先松开并确认松开值，再完全按下；不支持的按键可以跳过。校准完成并确认保存前不会累计次数。",
+                    "开始逐键校准",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Information,
+                    MessageBoxResult.Cancel);
+                if (start != MessageBoxResult.OK) return;
+                _gamepadCoordinator.BeginGamepadCalibration(device.RuntimeId, StorageGamepadButton.South);
+                GamepadStatusText.Text = "请按提示操作；不支持的按键可跳过。";
+            }
+            RefreshGamepadUi();
+        }
+        catch (Exception error)
+        {
+            GamepadStatusText.Text = $"校准失败：{error.Message}";
+        }
+    }
+
+    private void GamepadSkipButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gamepadCoordinator?.HasGamepadCalibrationCandidate == true)
+            _gamepadCoordinator.RetryGamepadCalibrationTarget();
+        else
+            _gamepadCoordinator?.SkipGamepadCalibrationTarget();
+        RefreshGamepadUi();
+    }
+
+    private async void GamepadEnableStatsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gamepadCoordinator is null || _capture is null || _settings is null || SelectedGamepad is not { } device) return;
+        bool configurationChanged = false;
+        StorageGamepadConfiguration? previous = _gamepadCoordinator.GetGamepadConfiguration(device.RuntimeId);
+        try
+        {
+            bool enable = !_gamepadCoordinator.IsGamepadEnabled(device.RuntimeId);
+            if (enable)
+            {
+                if (_gamepadCoordinator.IsGamepadCalibrating || previous is null || previous.Bindings.Count == 0)
+                    throw new InvalidOperationException("请先完成并保存至少一个按键映射，再启用统计。");
+                if (GamepadBrandSelector.SelectedItem is not string brand)
+                    throw new InvalidOperationException("请选择 Xbox 或其他品牌/第三方手柄。");
+                MessageBoxResult final = System.Windows.MessageBox.Show(
+                    $"将开始统计“{device.DisplayName}”（{brand}，Xbox 布局）中已校准按键的按下次数，并保存在本机。再次点击可停用；修改校准会使用新的配置版本。是否启用？",
+                    "确认启用手柄统计",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information,
+                    MessageBoxResult.No);
+                if (final != MessageBoxResult.Yes) return;
+            }
+            _gamepadCoordinator.SetGamepadEnabled(device.RuntimeId, enable);
+            configurationChanged = true;
+            bool captureEnabled = _gamepadCoordinator.HasEnabledGamepad;
+            await _capture.SetGamepadCaptureEnabledAsync(captureEnabled);
+            GamepadStatusText.Text = enable ? "手柄统计已启用。" : "手柄统计已停用。";
+            RefreshGamepadUi();
+        }
+        catch (Exception error)
+        {
+            if (configurationChanged)
+            {
+                try
+                {
+                    _gamepadCoordinator.SetGamepadEnabled(device.RuntimeId, previous?.Enabled == true);
+                    await _capture.SetGamepadCaptureEnabledAsync(_gamepadCoordinator.HasEnabledGamepad);
+                }
+                catch { }
+            }
+            GamepadStatusText.Text = $"无法更改手柄统计状态：{error.Message}";
+        }
+    }
+
+    private GamepadDeviceChoice? SelectedGamepad => GamepadDeviceSelector.SelectedItem as GamepadDeviceChoice;
+
+    private void RefreshGamepadUi()
+    {
+        if (_gamepadCoordinator is null || _settings is null) return;
+        bool consented = _settings.Load().GamepadConsentGranted;
+        GamepadBrandSelector.IsEnabled = _capture is not null;
+        GamepadLayoutSelector.IsEnabled = _capture is not null;
+        GamepadDeviceSelector.IsEnabled = consented && !_gamepadCoordinator.IsGamepadCalibrating;
+        GamepadDetectDevicesButton.IsEnabled = _capture is not null
+            && GamepadBrandSelector.SelectedItem is string && GamepadLayoutSelector.SelectedItem is not null;
+        GamepadCheckButtonsButton.IsEnabled = consented && SelectedGamepad is not null;
+        GamepadSkipButton.IsEnabled = consented && _gamepadCoordinator.IsGamepadCalibrating
+            && _gamepadCoordinator.CurrentCalibrationTarget is not null;
+        GamepadSkipButton.Content = _gamepadCoordinator.HasGamepadCalibrationCandidate ? "重新操作" : "此键不支持";
+        StorageGamepadConfiguration? selectedConfiguration = SelectedGamepad is { } selectedChoice
+            ? _gamepadCoordinator.GetGamepadConfiguration(selectedChoice.RuntimeId) : null;
+        GamepadEnableStatsButton.IsEnabled = consented && SelectedGamepad is not null
+            && !_gamepadCoordinator.IsGamepadCalibrating
+            && (selectedConfiguration is { Bindings.Count: > 0 } || selectedConfiguration is { Enabled: true });
+        GamepadDeviceChoice[] devices = _gamepadCoordinator.GamepadDevices
+            .Select((device, index) => new GamepadDeviceChoice(device,
+                $"手柄 {index + 1}",
+                _gamepadCoordinator.GetGamepadStorageId(device.RuntimeId)))
+            .ToArray();
+        Guid? preferredDeviceId = _settings.Load().GamepadDeviceId;
+        string? selectedPath = SelectedGamepad?.InterfacePath
+            ?? devices.FirstOrDefault(device => device.PersistentDeviceId == preferredDeviceId)?.InterfacePath;
+        if (!GamepadDeviceSelector.Items.Cast<GamepadDeviceChoice>().SequenceEqual(devices))
+            GamepadDeviceSelector.ItemsSource = devices;
+        GamepadDeviceSelector.SelectedValue = devices.Any(device => device.InterfacePath == selectedPath)
+            ? selectedPath : devices.FirstOrDefault()?.InterfacePath;
+        if (SelectedGamepad is not { } gamepad)
+        {
+            GamepadEnabledStatusText.Text = consented ? "等待检测设备" : "尚未授权";
+            GamepadCalibrationStatusText.Text = _gamepadCoordinator.GamepadCalibrationInterrupted
+                ? "连接中断，请重新选择设备并校准" : "尚未校准";
+            GamepadHeatmapItems.ItemsSource = GamepadLayoutModel.CreateXboxLayout();
+            if (consented && devices.Length == 0)
+                GamepadStatusText.Text = "请按一下手柄任意键使设备出现在列表中。设备名仅在本次运行中使用匿名序号显示。";
+            return;
+        }
+        StorageGamepadConfiguration? config = _gamepadCoordinator.GetGamepadConfiguration(gamepad.RuntimeId);
+        string deviceStatus = _gamepadCoordinator.GetGamepadStatus(gamepad.RuntimeId) ?? "已连接";
+        GamepadEnabledStatusText.Text = $"{deviceStatus} · {(config?.Enabled == true ? "统计已启用" : "统计已停用")}";
+        bool globallyEnabled = _gamepadCoordinator.IsGamepadEnabled(gamepad.RuntimeId);
+        GamepadEnableStatsButton.Content = globallyEnabled ? "停用统计" : "启用统计";
+        StorageGamepadButton? target = _gamepadCoordinator.CurrentCalibrationTarget;
+        GamepadCalibrationStatusText.Text = _gamepadCoordinator.GamepadCalibrationInterrupted
+            ? "连接中断，请重新校准"
+            : _gamepadCoordinator.IsGamepadCalibrating
+            ? _gamepadCoordinator.HasGamepadCalibrationCandidate
+                ? $"已识别：{GetGamepadButtonLabel(target!.Value)}，请确认或重试"
+                : target is null ? "可保存校准" : _gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation
+                    ? $"请松开并确认：{GetGamepadButtonLabel(target.Value)}" : $"请操作：{GetGamepadButtonLabel(target.Value)}"
+            : config is null ? "尚未校准" : $"已校准 {config.Bindings.Count} 键";
+        GamepadCheckButtonsButton.Content = _gamepadCoordinator.IsGamepadCalibrating && target is null
+            ? "确认并保存" : _gamepadCoordinator.HasGamepadCalibrationCandidate ? "确认此键"
+            : _gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation ? "确认扳机松开值"
+            : _gamepadCoordinator.IsGamepadCalibrating ? "校准中" : "检查按键";
+        IReadOnlySet<GamepadPhysicalPosition>? support = config is null
+            ? null
+            : config.Bindings.Select(binding => ToPhysicalPosition(binding.Button)).ToHashSet();
+        Dictionary<GamepadPhysicalPosition, long> counts = [];
+        if (config is not null && _storage is not null && _gamepadCoordinator.GetGamepadStorageId(gamepad.RuntimeId) is Guid deviceId)
+        {
+            try
+            {
+                StorageGamepadButtonPeriodResult result = _storage.QueryGamepadButtonsRange(
+                    ViewDateRangePicker.InclusiveStartDate, ViewDateRangePicker.InclusiveEndDate,
+                    TimeZoneInfo.Local.Id, deviceId);
+                foreach (IGrouping<StorageGamepadButton, StorageGamepadButtonPeriodAggregate> group in result.Aggregates.GroupBy(row => row.Button))
+                    counts[ToPhysicalPosition(group.Key)] = group.Sum(row => row.PressCount);
+            }
+            catch (Exception error) { GamepadStatusText.Text = $"手柄统计读取失败：{error.Message}"; }
+        }
+        GamepadHeatmapItems.ItemsSource = GamepadLayoutModel.CreateXboxLayout(counts, support);
+    }
+
+    private static string GetGamepadButtonLabel(StorageGamepadButton button) => button switch
+    {
+        StorageGamepadButton.South => "A",
+        StorageGamepadButton.East => "B",
+        StorageGamepadButton.West => "X",
+        StorageGamepadButton.North => "Y",
+        StorageGamepadButton.DpadUp => "方向键上",
+        StorageGamepadButton.DpadRight => "方向键右",
+        StorageGamepadButton.DpadDown => "方向键下",
+        StorageGamepadButton.DpadLeft => "方向键左",
+        StorageGamepadButton.LeftTrigger => "LT",
+        StorageGamepadButton.RightTrigger => "RT",
+        StorageGamepadButton.LeftShoulder => "LB",
+        StorageGamepadButton.RightShoulder => "RB",
+        StorageGamepadButton.LeftThumb => "L3",
+        StorageGamepadButton.RightThumb => "R3",
+        StorageGamepadButton.View => "View",
+        StorageGamepadButton.Menu => "Menu",
+        _ => button.ToString()
+    };
+
+    private static GamepadPhysicalPosition ToPhysicalPosition(StorageGamepadButton button) => button switch
+    {
+        StorageGamepadButton.South => GamepadPhysicalPosition.South,
+        StorageGamepadButton.East => GamepadPhysicalPosition.East,
+        StorageGamepadButton.West => GamepadPhysicalPosition.West,
+        StorageGamepadButton.North => GamepadPhysicalPosition.North,
+        StorageGamepadButton.DpadUp => GamepadPhysicalPosition.DpadUp,
+        StorageGamepadButton.DpadRight => GamepadPhysicalPosition.DpadRight,
+        StorageGamepadButton.DpadDown => GamepadPhysicalPosition.DpadDown,
+        StorageGamepadButton.DpadLeft => GamepadPhysicalPosition.DpadLeft,
+        StorageGamepadButton.LeftTrigger => GamepadPhysicalPosition.LeftTrigger,
+        StorageGamepadButton.RightTrigger => GamepadPhysicalPosition.RightTrigger,
+        StorageGamepadButton.LeftShoulder => GamepadPhysicalPosition.LeftShoulder,
+        StorageGamepadButton.RightShoulder => GamepadPhysicalPosition.RightShoulder,
+        StorageGamepadButton.LeftThumb => GamepadPhysicalPosition.LeftStickPress,
+        StorageGamepadButton.RightThumb => GamepadPhysicalPosition.RightStickPress,
+        StorageGamepadButton.View => GamepadPhysicalPosition.View,
+        _ => GamepadPhysicalPosition.Menu
+    };
+
+    private sealed record GamepadDeviceChoice(InputDeviceDescriptor Descriptor, string DisplayName, Guid? PersistentDeviceId)
+    {
+        public string? InterfacePath => Descriptor.InterfacePath;
+        public RuntimeDeviceId RuntimeId => Descriptor.RuntimeId;
     }
 
     private void MainWindow_Closed(object? sender, EventArgs e)
@@ -618,6 +940,7 @@ public partial class MainWindow : Window
                 await _dashboard.RefreshAsync();
                 DeviceChoice[] keyboards = CreateDeviceChoices(_dashboard.Devices, StorageDeviceKind.Keyboard);
                 DeviceChoice[] mice = CreateDeviceChoices(_dashboard.Devices, StorageDeviceKind.Mouse);
+                DeviceChoice[] gamepads = CreateDeviceChoices(_dashboard.Devices, StorageDeviceKind.Gamepad);
                 _updatingDeviceSelectors = true;
                 try
                 {
@@ -629,6 +952,8 @@ public partial class MainWindow : Window
                     UpdateDeviceSelector(MouseDeviceSelector, mice, _dashboard.SelectedMouseDeviceId);
                     UpdateDeviceSelector(DeletionKeyboardDeviceSelector, keyboards, deletionKeyboardId, selectFirst: true);
                     UpdateDeviceSelector(DeletionMouseDeviceSelector, mice, deletionMouseId, selectFirst: true);
+                    Guid? deletionGamepadId = DeletionGamepadDeviceSelector.SelectedValue is Guid gamepadValue ? gamepadValue : null;
+                    UpdateDeviceSelector(DeletionGamepadDeviceSelector, gamepads, deletionGamepadId, selectFirst: true);
                     UpdateDeviceAliasEditors();
                 }
                 finally
@@ -654,6 +979,7 @@ public partial class MainWindow : Window
                     : _dashboard.MouseButtons);
                 OverviewMouseSummary.Text = mouseSummary;
                 DashboardRefreshStatusText.Text = $"更新于 {DateTime.Now:HH:mm:ss}";
+                RefreshGamepadUi();
             }
             while (_dashboardRefreshPending && IsLoaded);
         }
@@ -745,7 +1071,7 @@ public partial class MainWindow : Window
     }
 
     private static string FormatDeviceName(StorageDeviceInfo value, int ordinal) =>
-        value.Alias ?? $"{(value.Kind == StorageDeviceKind.Keyboard ? "键盘" : "鼠标")}{ordinal}";
+        value.Alias ?? $"{(value.Kind switch { StorageDeviceKind.Keyboard => "键盘", StorageDeviceKind.Mouse => "鼠标", _ => "手柄" })}{ordinal}";
 
     private static DeviceChoice[] CreateDeviceChoices(
         IReadOnlyList<StorageDeviceInfo> devices,
@@ -768,6 +1094,7 @@ public partial class MainWindow : Window
     {
         Keyboard,
         Mouse,
+        Gamepad,
         All
     }
 }

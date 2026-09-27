@@ -295,6 +295,7 @@ public sealed class AppOfflineRestoreCoordinatorTests
         public DiagnosticsSnapshot Diagnostics => throw new NotSupportedException();
         public event EventHandler<InputCaptureStatus>? StatusChanged { add { } remove { } }
         public ValueTask SetPauseReasonAsync(PauseReason reason, bool active, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private static StorageServiceHealth Health(StorageServiceState state, bool acceptingWrites) => new(

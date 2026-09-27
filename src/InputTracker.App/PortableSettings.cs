@@ -3,12 +3,17 @@ using System.Text.Json;
 
 namespace InputTracker;
 
-internal sealed record PortableSettings(int SchemaVersion, bool CollectionConsentGranted);
+internal sealed record PortableSettings(
+    int SchemaVersion,
+    bool CollectionConsentGranted,
+    bool GamepadConsentGranted = false,
+    bool GamepadCaptureEnabled = false,
+    Guid? GamepadDeviceId = null);
 
 internal sealed class PortableSettingsStore
 {
     internal const string FileName = "InputTracker.settings.json";
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private readonly string _programDirectory;
 
     public PortableSettingsStore(string programDirectory)
@@ -29,12 +34,12 @@ internal sealed class PortableSettingsStore
         {
             PortableSettings? settings = JsonSerializer.Deserialize<PortableSettings>(
                 File.ReadAllText(SettingsPath), JsonOptions);
-            if (settings is null || settings.SchemaVersion != CurrentSchemaVersion)
+            if (settings is null || settings.SchemaVersion is not 1 and not CurrentSchemaVersion)
             {
                 throw new InvalidDataException("Portable settings schema is missing or unsupported.");
             }
 
-            return settings;
+            return settings with { SchemaVersion = CurrentSchemaVersion };
         }
         catch (InvalidDataException)
         {
@@ -46,8 +51,35 @@ internal sealed class PortableSettingsStore
         }
     }
 
-    public void GrantCollectionConsent()
+    public void GrantCollectionConsent() => Update(settings => settings with
     {
+        CollectionConsentGranted = true
+    });
+
+    public void SetGamepadConsent(bool granted) => Update(settings => settings with
+    {
+        GamepadConsentGranted = granted,
+        GamepadCaptureEnabled = granted && settings.GamepadCaptureEnabled,
+        GamepadDeviceId = granted ? settings.GamepadDeviceId : null
+    });
+
+    public void SetGamepadConfiguration(bool enabled, Guid? deviceId = null) => Update(settings =>
+    {
+        if (enabled && (!settings.GamepadConsentGranted || deviceId is null || deviceId == Guid.Empty))
+        {
+            throw new InvalidOperationException("Gamepad consent and a selected device are required before enabling capture.");
+        }
+
+        return settings with
+        {
+            GamepadCaptureEnabled = enabled,
+            GamepadDeviceId = enabled ? deviceId : settings.GamepadDeviceId
+        };
+    });
+
+    private void Update(Func<PortableSettings, PortableSettings> update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
         EnsureContainedRegularFileIfPresent();
         string temporaryPath = SettingsPath + ".new";
         EnsureContained(temporaryPath);
@@ -58,8 +90,7 @@ internal sealed class PortableSettingsStore
 
         try
         {
-            string json = JsonSerializer.Serialize(
-                new PortableSettings(CurrentSchemaVersion, true), JsonOptions);
+            string json = JsonSerializer.Serialize(update(Load()), JsonOptions);
             using (var stream = new FileStream(
                 temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
                 bufferSize: 4096, FileOptions.WriteThrough))

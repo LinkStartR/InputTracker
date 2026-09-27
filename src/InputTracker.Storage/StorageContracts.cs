@@ -3,7 +3,8 @@ namespace InputTracker.Storage;
 public enum StorageDeviceKind
 {
     Mouse = 0,
-    Keyboard = 1
+    Keyboard = 1,
+    Gamepad = 2
 }
 
 public enum StorageDeviceIdentityConfidence
@@ -193,6 +194,72 @@ public sealed record StorageMouseButtonPeriodAggregate(
 public sealed record StorageMouseButtonPeriodResult(
     StorageResolvedPeriod Period,
     IReadOnlyList<StorageMouseButtonPeriodAggregate> Aggregates,
+    IReadOnlyList<string> AvailableCaptureTimeZoneIds);
+
+public enum StorageGamepadLayout
+{
+    Xbox = 0
+}
+
+public enum StorageGamepadButton
+{
+    South = 0,
+    East = 1,
+    West = 2,
+    North = 3,
+    DpadUp = 4,
+    DpadDown = 5,
+    DpadLeft = 6,
+    DpadRight = 7,
+    LeftShoulder = 8,
+    RightShoulder = 9,
+    View = 10,
+    Menu = 11,
+    LeftThumb = 12,
+    RightThumb = 13,
+    LeftTrigger = 14,
+    RightTrigger = 15
+}
+
+public enum StorageGamepadAxisDirection
+{
+    Increasing = 0,
+    Decreasing = 1
+}
+
+public sealed record StorageGamepadHidBinding(
+    StorageGamepadButton Button,
+    ushort UsagePage,
+    ushort Usage,
+    ushort LinkCollection,
+    ushort ElementIndex,
+    IReadOnlyList<int> ActiveValues,
+    int? ActivationThreshold = null,
+    int? ReleaseThreshold = null,
+    StorageGamepadAxisDirection? AxisDirection = null);
+
+public sealed record StorageGamepadConfiguration(
+    Guid DeviceId,
+    int Revision,
+    StorageGamepadLayout Layout,
+    bool Enabled,
+    IReadOnlyList<StorageGamepadHidBinding> Bindings);
+
+public readonly record struct StorageGamepadPress(
+    Guid DeviceId,
+    StorageGamepadButton Button,
+    long MonotonicTimestamp,
+    Guid CalibrationSessionId);
+
+public sealed record StorageGamepadButtonPeriodAggregate(
+    Guid DeviceId,
+    int ConfigurationRevision,
+    StorageGamepadButton Button,
+    long PressCount);
+
+public sealed record StorageGamepadButtonPeriodResult(
+    StorageResolvedPeriod Period,
+    IReadOnlyList<StorageGamepadButtonPeriodAggregate> Aggregates,
     IReadOnlyList<string> AvailableCaptureTimeZoneIds);
 
 public readonly record struct StorageMouseButtonTransition(

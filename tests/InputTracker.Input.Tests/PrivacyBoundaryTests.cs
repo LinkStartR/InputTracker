@@ -1,4 +1,5 @@
 using System.Reflection;
+using InputTracker.Input.Win32;
 
 namespace InputTracker.Input.Tests;
 
@@ -50,6 +51,31 @@ public sealed class PrivacyBoundaryTests
                 Assert.DoesNotContain(token, source, StringComparison.Ordinal);
             }
         }
+    }
+
+    [Fact]
+    public void PublicGamepadHardwareSummaryOmitsHidIdentity()
+    {
+        var information = new RawInputInterop.NativeRawDeviceInfo
+        {
+            Type = RawInputInterop.RimTypeHid,
+            Data = new RawInputInterop.NativeRawDeviceInfoData
+            {
+                Hid = new RawInputInterop.NativeHidDeviceInfo
+                {
+                    UsagePage = RawInputInterop.UsagePageGenericDesktop,
+                    Usage = RawInputInterop.UsageGamepad,
+                    VendorId = 0x1234,
+                    ProductId = 0x5678
+                }
+            }
+        };
+
+        string summary = RawDeviceInfoProvider.CreateHardwareSummary(RawDeviceKind.Gamepad, information);
+
+        Assert.Equal("gamepad", summary);
+        Assert.DoesNotContain("1234", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("5678", summary, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string FindRepositoryRoot()

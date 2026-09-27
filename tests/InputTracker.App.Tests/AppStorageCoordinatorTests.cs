@@ -195,6 +195,256 @@ public sealed class AppStorageCoordinatorTests
         });
     }
 
+    [Fact]
+    public async Task GamepadCaptureRequiresSeparateConsentAndDoesNotPersistIdentityBeforeIt()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        var writer = new FakeWriter(StorageServiceState.Running);
+        var coordinator = new AppStorageCoordinator(writer, Guid.NewGuid(), settings);
+
+        coordinator.ObserveGamepadIdentity(new RuntimeDeviceId(51), new StorageDeviceObservation(
+            StorageDeviceKind.Gamepad, @"\\?\HID#private", ["HID_DEVICE"], null, null,
+            false, false, false));
+
+        Assert.Empty(writer.Observations);
+        Assert.False(settings.Load().GamepadConsentGranted);
+    }
+
+    [Fact]
+    public async Task QueuedGamepadInputBeforeConfigurationCutoffCannotUseNewRevision()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var writer = new FakeWriter(StorageServiceState.Running);
+        Guid calibration = Guid.NewGuid();
+        var coordinator = new AppStorageCoordinator(writer, calibration, settings);
+        RuntimeDeviceId runtime = new(52);
+        const string path = @"\\?\HID#pad";
+        coordinator.ObserveGamepadIdentity(runtime, new StorageDeviceObservation(
+            StorageDeviceKind.Gamepad, path, ["HID_DEVICE"], null, null, false, false, false));
+        Guid deviceId = writer.LastResolution!.Device.DeviceId;
+        await coordinator.WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+            DeviceChangeKind.Arrived,
+            new InputDeviceDescriptor(runtime, 1, RawDeviceKind.Gamepad, path, null, DeviceIdentityConfidence.RequiresConfirmation),
+            1)), CancellationToken.None);
+        var binding = new StorageGamepadHidBinding(StorageGamepadButton.South, 0x09, 1, 0, 0, [1]);
+        writer.SetGamepadConfiguration(deviceId, false, [binding]);
+
+        coordinator.SetGamepadEnabled(runtime, enabled: true);
+        coordinator.SetGamepadCaptureEnabled(true);
+        long baseline = System.Diagnostics.Stopwatch.GetTimestamp() + 1;
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, new GamepadControlId(0x09, 1, 0, 0), 0, baseline, IsBaseline: true)), CancellationToken.None);
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, new GamepadControlId(0x09, 1, 0, 0), 1, 1)), CancellationToken.None);
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, new GamepadControlId(0x09, 1, 0, 0), 1, baseline + 1)), CancellationToken.None);
+
+        Assert.Single(writer.GamepadPresses);
+        Assert.Equal(baseline + 1, writer.GamepadPresses[0].MonotonicTimestamp);
+        Assert.Equal(deviceId, writer.GamepadPresses[0].DeviceId);
+    }
+
+    [Fact]
+    public async Task HatSwitchUpValueZeroCanBeConfirmedDuringCalibration()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var writer = new FakeWriter(StorageServiceState.Running);
+        var coordinator = new AppStorageCoordinator(writer, Guid.NewGuid(), settings);
+        RuntimeDeviceId runtime = new(53);
+        const string path = @"\\?\HID#hat";
+        coordinator.ObserveGamepadIdentity(runtime, new StorageDeviceObservation(
+            StorageDeviceKind.Gamepad, path, ["HID_DEVICE"], null, null, false, false, false));
+        await coordinator.WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+            DeviceChangeKind.Arrived,
+            new InputDeviceDescriptor(runtime, 1, RawDeviceKind.Gamepad, path, null, DeviceIdentityConfidence.RequiresConfirmation),
+            1)), CancellationToken.None);
+        var hat = new GamepadControlId(0x01, 0x39, 0, 0);
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, hat, -1, 2, IsBaseline: true, LogicalMinimum: 0, LogicalMaximum: 7)), CancellationToken.None);
+        coordinator.BeginGamepadCalibration(runtime, StorageGamepadButton.DpadUp);
+
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, hat, 0, 3, LogicalMinimum: 0, LogicalMaximum: 7)), CancellationToken.None);
+
+        Assert.True(coordinator.HasGamepadCalibrationCandidate);
+        coordinator.AcceptGamepadCalibrationCandidate();
+        Assert.Equal(new[] { 0, 1, 7 }, coordinator.GamepadCalibrationBindings[StorageGamepadButton.DpadUp].ActiveValues);
+    }
+
+    [Fact]
+    public async Task TriggerCalibrationRequiresExplicitRestingPointAfterRelease()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var writer = new FakeWriter(StorageServiceState.Running);
+        var coordinator = new AppStorageCoordinator(writer, Guid.NewGuid(), settings);
+        RuntimeDeviceId runtime = new(54);
+        const string path = @"\\?\HID#trigger";
+        coordinator.ObserveGamepadIdentity(runtime, new StorageDeviceObservation(
+            StorageDeviceKind.Gamepad, path, ["HID_DEVICE"], null, null, false, false, false));
+        await ArriveGamepad(coordinator, runtime, path);
+        var trigger = new GamepadControlId(0x01, 0x32, 0, 0);
+
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, trigger, 255, 1, IsBaseline: true, LogicalMinimum: 0, LogicalMaximum: 255)), CancellationToken.None);
+        coordinator.BeginGamepadCalibration(runtime, StorageGamepadButton.LeftTrigger);
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, trigger, 0, 2, LogicalMinimum: 0, LogicalMaximum: 255)), CancellationToken.None);
+
+        Assert.False(coordinator.HasGamepadCalibrationCandidate);
+        Assert.True(coordinator.IsGamepadTriggerAwaitingRestingConfirmation);
+        Assert.True(coordinator.ConfirmGamepadTriggerRestingPoint());
+        await coordinator.WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+            runtime, trigger, 255, 3, LogicalMinimum: 0, LogicalMaximum: 255)), CancellationToken.None);
+
+        Assert.True(coordinator.HasGamepadCalibrationCandidate);
+        StorageGamepadHidBinding binding = Assert.IsType<StorageGamepadHidBinding>(coordinator.CurrentGamepadCalibrationCandidate);
+        Assert.Equal(StorageGamepadAxisDirection.Increasing, binding.AxisDirection);
+    }
+
+    [Fact]
+    public async Task OnlyOneGamepadCanBeEnabledAndDisablingStaleDeviceKeepsCurrentDeviceEnabled()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var writer = new FakeWriter(StorageServiceState.Running);
+        var coordinator = new AppStorageCoordinator(writer, Guid.NewGuid(), settings);
+        RuntimeDeviceId a = new(55);
+        RuntimeDeviceId b = new(56);
+        coordinator.ObserveGamepadIdentity(a, GamepadObservation(@"\\?\HID#A"));
+        Guid idA = writer.LastResolution!.Device.DeviceId;
+        coordinator.ObserveGamepadIdentity(b, GamepadObservation(@"\\?\HID#B"));
+        Guid idB = writer.LastResolution!.Device.DeviceId;
+        var bindingA = new StorageGamepadHidBinding(StorageGamepadButton.South, 0x09, 1, 0, 0, [1]);
+        var bindingB = new StorageGamepadHidBinding(StorageGamepadButton.East, 0x09, 2, 0, 0, [1]);
+        writer.SetGamepadConfiguration(idA, false, [bindingA]);
+        writer.SetGamepadConfiguration(idB, false, [bindingB]);
+
+        coordinator.SetGamepadEnabled(a, true);
+        InvalidOperationException blocked = Assert.Throws<InvalidOperationException>(() => coordinator.SetGamepadEnabled(b, true));
+        Assert.Contains("请先停用当前手柄", blocked.Message);
+        Assert.True(writer.GetGamepadConfiguration(idA)!.Enabled);
+        Assert.False(writer.GetGamepadConfiguration(idB)!.Enabled);
+        Assert.True(coordinator.IsGamepadEnabled(a));
+        Assert.False(coordinator.IsGamepadEnabled(b));
+
+        coordinator.SetGamepadEnabled(a, false);
+        coordinator.SetGamepadEnabled(b, true);
+        coordinator.SetGamepadEnabled(a, false);
+        Assert.False(writer.GetGamepadConfiguration(idA)!.Enabled);
+        Assert.True(writer.GetGamepadConfiguration(idB)!.Enabled);
+        Assert.True(coordinator.IsGamepadEnabled(b));
+    }
+
+    [Fact]
+    public async Task RemovingCalibratingGamepadCancelsSessionAndRequiresRestart()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var coordinator = new AppStorageCoordinator(new FakeWriter(StorageServiceState.Running), Guid.NewGuid(), settings);
+        RuntimeDeviceId runtime = new(57);
+        const string path = @"\\?\HID#remove";
+        coordinator.ObserveGamepadIdentity(runtime, GamepadObservation(path));
+        await ArriveGamepad(coordinator, runtime, path);
+        coordinator.BeginGamepadCalibration(runtime, StorageGamepadButton.South);
+
+        await coordinator.WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+            DeviceChangeKind.Removed,
+            new InputDeviceDescriptor(runtime, 1, RawDeviceKind.Gamepad, path, null, DeviceIdentityConfidence.RequiresConfirmation),
+            10)), CancellationToken.None);
+
+        Assert.False(coordinator.IsGamepadCalibrating);
+        Assert.True(coordinator.GamepadCalibrationInterrupted);
+    }
+
+    [Fact]
+    public async Task PausingCalibratingGamepadCancelsSessionAndRequiresRestart()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var coordinator = new AppStorageCoordinator(new FakeWriter(StorageServiceState.Running), Guid.NewGuid(), settings);
+        RuntimeDeviceId runtime = new(58);
+        const string path = @"\\?\HID#pause";
+        coordinator.ObserveGamepadIdentity(runtime, GamepadObservation(path));
+        await ArriveGamepad(coordinator, runtime, path);
+        coordinator.BeginGamepadCalibration(runtime, StorageGamepadButton.South);
+
+        await coordinator.WriteAsync(CapturedInput.FromBoundary(new AggregationBoundaryEvent(
+            AggregationBoundaryKind.Paused, runtime, PauseReason.User, 10)), CancellationToken.None);
+
+        Assert.False(coordinator.IsGamepadCalibrating);
+        Assert.True(coordinator.GamepadCalibrationInterrupted);
+    }
+
+    [Fact]
+    public async Task CalibrationCannotBeSavedForDifferentRuntimeDevice()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        var coordinator = new AppStorageCoordinator(new FakeWriter(StorageServiceState.Running), Guid.NewGuid(), settings);
+        RuntimeDeviceId runtimeA = new(59);
+        const string path = @"\\?\HID#calibration";
+        coordinator.ObserveGamepadIdentity(runtimeA, GamepadObservation(path));
+        await ArriveGamepad(coordinator, runtimeA, path);
+        coordinator.BeginGamepadCalibration(runtimeA, StorageGamepadButton.South);
+
+        Assert.Throws<InvalidOperationException>(() => coordinator.SaveGamepadCalibration(new RuntimeDeviceId(60)));
+    }
+
+    [Fact]
+    public void PreviouslyDisabledGamepadDoesNotRemainActiveAcrossRestart()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new PortableSettingsStore(temporary.Path);
+        settings.GrantCollectionConsent();
+        settings.SetGamepadConsent(true);
+        Guid oldDeviceId = Guid.NewGuid();
+        settings.SetGamepadConfiguration(true, oldDeviceId);
+        settings.SetGamepadConfiguration(false);
+        Assert.Equal(oldDeviceId, settings.Load().GamepadDeviceId);
+
+        var writer = new FakeWriter(StorageServiceState.Running);
+        var coordinator = new AppStorageCoordinator(writer, Guid.NewGuid(), settings);
+        RuntimeDeviceId newRuntime = new(61);
+        const string path = @"\\?\HID#new-controller";
+        coordinator.ObserveGamepadIdentity(newRuntime, GamepadObservation(path));
+        Guid newDeviceId = writer.LastResolution!.Device.DeviceId;
+        writer.SetGamepadConfiguration(newDeviceId, false,
+            [new StorageGamepadHidBinding(StorageGamepadButton.South, 0x09, 1, 0, 0, [1])]);
+
+        coordinator.SetGamepadEnabled(newRuntime, true);
+
+        Assert.True(writer.GetGamepadConfiguration(newDeviceId)!.Enabled);
+        Assert.Equal(newDeviceId, settings.Load().GamepadDeviceId);
+    }
+
+    private static StorageDeviceObservation GamepadObservation(string path) => new(
+        StorageDeviceKind.Gamepad, path, ["HID_DEVICE"], null, null, false, false, false);
+
+    private static async Task ArriveGamepad(AppStorageCoordinator coordinator, RuntimeDeviceId runtime, string path) =>
+        await coordinator.WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+            DeviceChangeKind.Arrived,
+            new InputDeviceDescriptor(runtime, 1, RawDeviceKind.Gamepad, path, null, DeviceIdentityConfidence.RequiresConfirmation),
+            1)), CancellationToken.None);
+
     private sealed class FakeWriter(StorageServiceState state) : IAppStorageWriter
     {
         public StorageServiceHealth Health { get; } = new(
@@ -209,6 +459,9 @@ public sealed class AppStorageCoordinatorTests
         public StorageDeviceResolution? LastResolution { get; private set; }
         public List<StorageDeviceObservation> Observations { get; } = [];
         public List<Guid> RemovedDevices { get; } = [];
+        public List<StorageGamepadPress> GamepadPresses { get; } = [];
+        public StorageGamepadConfiguration? GamepadConfiguration { get; private set; }
+        private readonly Dictionary<Guid, StorageGamepadConfiguration> _gamepadConfigurations = [];
         public bool FailResume { get; init; }
         public void WriteKeyboard(StorageKeyboardTransition value) { Throw(); KeyboardWrites++; Keyboard = value; }
         public void WriteMouseButtons(StorageMouseButtonTransition value) { Throw(); Mouse = value; }
@@ -226,6 +479,19 @@ public sealed class AppStorageCoordinatorTests
             return LastResolution;
         }
         public IReadOnlyList<StorageDeviceInfo> ListDevices() => [];
+        public StorageDeviceResolution ObserveGamepad(StorageDeviceObservation value) => ObserveDevice(value);
+        public StorageGamepadConfiguration? GetGamepadConfiguration(Guid deviceId) =>
+            _gamepadConfigurations.GetValueOrDefault(deviceId);
+        public StorageGamepadConfiguration SetGamepadConfiguration(
+            Guid deviceId, bool enabled, IReadOnlyList<StorageGamepadHidBinding> bindings)
+        {
+            _gamepadConfigurations.TryGetValue(deviceId, out StorageGamepadConfiguration? prior);
+            GamepadConfiguration = new StorageGamepadConfiguration(
+                deviceId, (prior?.Revision ?? 0) + 1, StorageGamepadLayout.Xbox, enabled, bindings);
+            _gamepadConfigurations[deviceId] = GamepadConfiguration;
+            return GamepadConfiguration;
+        }
+        public void WriteGamepadPress(StorageGamepadPress value) { Throw(); GamepadPresses.Add(value); }
         private void Throw() { if (WriteError is not null) throw WriteError; }
     }
 
@@ -261,5 +527,7 @@ public sealed class AppStorageCoordinatorTests
             StatusChanged?.Invoke(this, CurrentStatus);
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }

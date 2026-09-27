@@ -13,9 +13,11 @@ internal static class StorageDeviceCatalog
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(observation);
-        if (observation.Kind is not StorageDeviceKind.Keyboard and not StorageDeviceKind.Mouse)
+        if (observation.Kind is not StorageDeviceKind.Keyboard
+            and not StorageDeviceKind.Mouse
+            and not StorageDeviceKind.Gamepad)
         {
-            throw new ArgumentOutOfRangeException(nameof(observation), "A device observation must be a keyboard or mouse.");
+            throw new ArgumentOutOfRangeException(nameof(observation), "A device observation kind is unsupported.");
         }
 
         if (string.IsNullOrWhiteSpace(observation.InterfacePath))

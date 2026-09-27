@@ -10,7 +10,8 @@ public enum StorageDeletionCapability
     BlockedByCurrentFormat = 0,
     ExactKeyboardDailyAggregates = 1,
     ExactMouseButtonDailyAggregates = 2,
-    ExactKeyboardAndMouseDailyAggregates = 3
+    ExactKeyboardAndMouseDailyAggregates = 3,
+    ExactGamepadDailyAggregates = 4
 }
 
 public sealed record StorageDeletionPreview(
@@ -24,7 +25,9 @@ public sealed record StorageDeletionPreview(
     StorageDeletionCapability Capability,
     string? BlockedReason,
     string Token,
-    string StateFingerprint);
+    string StateFingerprint,
+    long GamepadAggregateCount = 0,
+    long GamepadPressCount = 0);
 
 public sealed record StorageDeletionResult(
     Guid DeviceId,
@@ -34,7 +37,9 @@ public sealed record StorageDeletionResult(
     long DeletedKeyboardHoldDurationMicroseconds,
     long DeletedMouseButtonAggregateCount,
     long DeletedMouseButtonPressCount,
-    StorageBackupArtifact PreDeletionBackup);
+    StorageBackupArtifact PreDeletionBackup,
+    long DeletedGamepadAggregateCount = 0,
+    long DeletedGamepadPressCount = 0);
 
 public sealed record StorageDeletionBatchPreview(
     Guid KeyboardDeviceId,
@@ -74,16 +79,28 @@ internal sealed record StorageMouseButtonDeletionRow(
     string TimeZoneId,
     long PressCount);
 
+internal sealed record StorageGamepadButtonDeletionRow(
+    int ConfigurationRevision,
+    StorageGamepadButton Button,
+    DateOnly CaptureLocalDate,
+    string TimeZoneId,
+    long PressCount);
+
 internal sealed record StorageDeletionImpact(
     StorageDeviceKind Kind,
     IReadOnlyList<StorageKeyboardDeletionRow> KeyboardRows,
     IReadOnlyList<StorageMouseButtonDeletionRow> MouseButtonRows,
+    IReadOnlyList<StorageGamepadButtonDeletionRow> GamepadRows,
     bool HasPartialDayOverlap)
 {
-    public long AggregateCount => checked(KeyboardRows.Count + MouseButtonRows.Count);
-    public long PressCount => Kind == StorageDeviceKind.Keyboard
-        ? KeyboardRows.Sum(row => row.PressCount)
-        : MouseButtonRows.Sum(row => row.PressCount);
+    public long AggregateCount => checked(KeyboardRows.Count + MouseButtonRows.Count + GamepadRows.Count);
+    public long PressCount => Kind switch
+    {
+        StorageDeviceKind.Keyboard => KeyboardRows.Sum(row => row.PressCount),
+        StorageDeviceKind.Mouse => MouseButtonRows.Sum(row => row.PressCount),
+        StorageDeviceKind.Gamepad => GamepadRows.Sum(row => row.PressCount),
+        _ => throw new InvalidDataException("Deletion device kind is invalid.")
+    };
     public long HoldDurationMicroseconds => KeyboardRows.Sum(row => row.HoldDurationMicroseconds);
 }
 
@@ -95,9 +112,13 @@ internal static class StorageDeletion
         StorageUtcRange range)
     {
         StorageDeviceKind kind = ReadDeviceKind(connection, deviceId);
-        return kind == StorageDeviceKind.Keyboard
-            ? DescribeKeyboardImpact(connection, deviceId, range)
-            : DescribeMouseButtonImpact(connection, deviceId, range);
+        return kind switch
+        {
+            StorageDeviceKind.Keyboard => DescribeKeyboardImpact(connection, deviceId, range),
+            StorageDeviceKind.Mouse => DescribeMouseButtonImpact(connection, deviceId, range),
+            StorageDeviceKind.Gamepad => DescribeGamepadImpact(connection, deviceId, range),
+            _ => throw new InvalidDataException("Deletion device kind is invalid.")
+        };
     }
 
     private static StorageDeletionImpact DescribeKeyboardImpact(
@@ -129,7 +150,7 @@ internal static class StorageDeletion
                 checked((int)reader.GetInt64(0)), date, timeZoneId,
                 reader.GetInt64(3), reader.GetInt64(4)));
         }
-        return new StorageDeletionImpact(StorageDeviceKind.Keyboard, rows, [], partial);
+        return new StorageDeletionImpact(StorageDeviceKind.Keyboard, rows, [], [], partial);
     }
 
     private static StorageDeletionImpact DescribeMouseButtonImpact(
@@ -165,7 +186,42 @@ internal static class StorageDeletion
             rows.Add(new StorageMouseButtonDeletionRow(
                 (StorageMouseButton)rawButton, date, timeZoneId, pressCount));
         }
-        return new StorageDeletionImpact(StorageDeviceKind.Mouse, [], rows, partial);
+        return new StorageDeletionImpact(StorageDeviceKind.Mouse, [], rows, [], partial);
+    }
+
+    private static StorageDeletionImpact DescribeGamepadImpact(
+        SqliteConnection connection,
+        Guid deviceId,
+        StorageUtcRange range)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT configuration_revision, button, capture_local_date, time_zone_id, press_count
+            FROM gamepad_daily WHERE device_id = $device
+            ORDER BY configuration_revision, capture_local_date, time_zone_id, button;
+            """;
+        command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        using SqliteDataReader reader = command.ExecuteReader();
+        var rows = new List<StorageGamepadButtonDeletionRow>();
+        bool partial = false;
+        while (reader.Read())
+        {
+            long revision = reader.GetInt64(0);
+            long rawButton = reader.GetInt64(1);
+            DateOnly date = ParseDate(reader.GetString(2));
+            string zone = reader.GetString(3);
+            long count = reader.GetInt64(4);
+            if (revision <= 0 || rawButton is < 0 or > 15 || count <= 0)
+                throw new InvalidDataException("Gamepad deletion found an invalid aggregate.");
+            switch (ClassifyDay(date, zone, range))
+            {
+                case DayRangeRelation.Outside: continue;
+                case DayRangeRelation.Partial: partial = true; continue;
+            }
+            rows.Add(new StorageGamepadButtonDeletionRow(
+                checked((int)revision), (StorageGamepadButton)rawButton, date, zone, count));
+        }
+        return new StorageDeletionImpact(StorageDeviceKind.Gamepad, [], [], rows, partial);
     }
 
     public static long DeleteRows(
@@ -190,10 +246,20 @@ internal static class StorageDeletion
         long deleted = 0;
         foreach ((Guid deviceId, StorageDeletionImpact impact) in targets)
         {
-            string table = impact.Kind == StorageDeviceKind.Keyboard ? "keyboard_daily" : "mouse_button_daily";
-            IEnumerable<(DateOnly CaptureLocalDate, string TimeZoneId)> buckets = impact.Kind == StorageDeviceKind.Keyboard
-                ? impact.KeyboardRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId))
-                : impact.MouseButtonRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId));
+            string table = impact.Kind switch
+            {
+                StorageDeviceKind.Keyboard => "keyboard_daily",
+                StorageDeviceKind.Mouse => "mouse_button_daily",
+                StorageDeviceKind.Gamepad => "gamepad_daily",
+                _ => throw new InvalidDataException("Deletion device kind is invalid.")
+            };
+            IEnumerable<(DateOnly CaptureLocalDate, string TimeZoneId)> buckets = impact.Kind switch
+            {
+                StorageDeviceKind.Keyboard => impact.KeyboardRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId)),
+                StorageDeviceKind.Mouse => impact.MouseButtonRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId)),
+                StorageDeviceKind.Gamepad => impact.GamepadRows.Select(row => (row.CaptureLocalDate, row.TimeZoneId)),
+                _ => throw new InvalidDataException("Deletion device kind is invalid.")
+            };
             foreach ((DateOnly date, string timeZoneId) in buckets.Distinct())
             {
                 using SqliteCommand command = connection.CreateCommand();
@@ -252,6 +318,14 @@ internal static class StorageDeletion
         foreach (StorageMouseButtonDeletionRow row in impact.MouseButtonRows)
         {
             text.Append("|M|").Append((int)row.Button)
+                .Append('|').Append(FormatDate(row.CaptureLocalDate))
+                .Append('|').Append(row.TimeZoneId)
+                .Append('|').Append(row.PressCount);
+        }
+        foreach (StorageGamepadButtonDeletionRow row in impact.GamepadRows)
+        {
+            text.Append("|G|").Append(row.ConfigurationRevision)
+                .Append('|').Append((int)row.Button)
                 .Append('|').Append(FormatDate(row.CaptureLocalDate))
                 .Append('|').Append(row.TimeZoneId)
                 .Append('|').Append(row.PressCount);

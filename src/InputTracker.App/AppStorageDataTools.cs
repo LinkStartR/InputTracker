@@ -73,13 +73,21 @@ internal sealed class StorageDeletionDisplay
     public long KeyboardHoldDurationMicroseconds => Preview.KeyboardHoldDurationMicroseconds;
     public long MouseButtonAggregateCount => Preview.MouseButtonAggregateCount;
     public long MouseButtonPressCount => Preview.MouseButtonPressCount;
-    public long AggregateCount => DeviceKind == StorageDeviceKind.Keyboard
-        ? KeyboardAggregateCount : MouseButtonAggregateCount;
+    public long GamepadAggregateCount => Preview.GamepadAggregateCount;
+    public long GamepadPressCount => Preview.GamepadPressCount;
+    public long AggregateCount => DeviceKind switch
+    {
+        StorageDeviceKind.Keyboard => KeyboardAggregateCount,
+        StorageDeviceKind.Mouse => MouseButtonAggregateCount,
+        StorageDeviceKind.Gamepad => GamepadAggregateCount,
+        _ => 0
+    };
     public long PressCount => DeviceKind == StorageDeviceKind.Keyboard
-        ? KeyboardPressCount : MouseButtonPressCount;
+        ? KeyboardPressCount : DeviceKind == StorageDeviceKind.Mouse ? MouseButtonPressCount : GamepadPressCount;
     public bool CanExecute =>
         (Preview.Capability is StorageDeletionCapability.ExactKeyboardDailyAggregates
-            or StorageDeletionCapability.ExactMouseButtonDailyAggregates)
+            or StorageDeletionCapability.ExactMouseButtonDailyAggregates
+            or StorageDeletionCapability.ExactGamepadDailyAggregates)
         && AggregateCount > 0;
     public string Status { get; }
 
@@ -181,7 +189,7 @@ internal sealed class AppStorageDataToolsController
         StorageUtcRange range,
         CancellationToken cancellationToken = default)
     {
-        if (expectedKind is not StorageDeviceKind.Keyboard and not StorageDeviceKind.Mouse)
+        if (expectedKind is not StorageDeviceKind.Keyboard and not StorageDeviceKind.Mouse and not StorageDeviceKind.Gamepad)
             throw new InvalidDataException("删除目标类型无效。");
 
         return await RunExclusiveAsync(async () =>
@@ -210,6 +218,8 @@ internal sealed class AppStorageDataToolsController
                     $"将删除 {preview.KeyboardPressCount:N0} 次按键（{preview.KeyboardAggregateCount:N0} 条统计），执行前会自动备份。",
                 StorageDeletionCapability.ExactMouseButtonDailyAggregates =>
                     $"将删除 {preview.MouseButtonPressCount:N0} 次鼠标按键（{preview.MouseButtonAggregateCount:N0} 条统计），执行前会自动备份。",
+                StorageDeletionCapability.ExactGamepadDailyAggregates =>
+                    $"将删除 {preview.GamepadPressCount:N0} 次手柄按键（{preview.GamepadAggregateCount:N0} 条统计），执行前会自动备份。",
                 _ => "删除能力状态未知，未执行任何删除。"
             };
             var display = new StorageDeletionDisplay(preview, expectedKind, status);

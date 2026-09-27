@@ -44,7 +44,7 @@ Expected device-removal races, access denial, missing properties, malformed prop
 
 Raw identity is delivered only through the internal `IRawDeviceIdentityObserver`. The standalone default observer discards it; the production App supplies `AppStorageCoordinator`, which immediately maps the observation to Storage's hash-only device catalog. `CapturedInput` and its public `InputDeviceDescriptor` retain the existing API shape but arrivals intentionally carry `InterfacePath = null`; they never expose hardware IDs, serial numbers, or container IDs. UI and logging code must not receive the private observation.
 
-The Input-to-Storage adapter maps `Indeterminate` to transient/requires-confirmation behavior and must not persist raw identity values in SQLite, WAL, configuration, logs, CSV, PNG, or backups.
+The Input-to-Storage adapter maps `Indeterminate` to transient/requires-confirmation behavior and must not persist raw device identity values in SQLite, WAL, configuration, logs, CSV, PNG, or backups. Gamepad capture requires separate, explicit gamepad consent and is disabled by default; keyboard/mouse consent does not authorize it. Raw interface paths, hardware IDs, serial numbers, and container IDs remain private identity inputs and are reduced to hash-derived identity before persistence. Calibration stores the HID descriptor coordinates needed to recognize mapped controls, but not raw control values or event streams; user-facing diagnostics must not expose raw device identity values.
 
 ## Verification boundary
 

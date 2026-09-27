@@ -6,7 +6,8 @@
 
 - [绿色版使用、数据位置与卸载](portable/README.md)
 - [输入设备身份与隐私边界](input/device-identity-v1.md)
-- Storage：[写入与设备身份](storage/storage-service-v1.md)、[查询](storage/storage-query-v1.md)、[导出、备份、恢复与删除](storage/export-backup-delete-v2.md)、[App 离线恢复流程](storage/offline-restore-app-design.md)
+- Storage：[写入、设备身份与手柄物理按键配置](storage/storage-service-v1.md)、[查询](storage/storage-query-v1.md)、[导出、备份、恢复与删除](storage/export-backup-delete-v2.md)、[App 离线恢复流程](storage/offline-restore-app-design.md)
+- 手柄真实硬件验收步骤见[输入硬件与性能](../tests/Acceptance/Manual/input-core-hardware-runbook.md)；当前界面提供 Xbox 布局，第三方手柄须按实测校准。
 
 ## 验收
 

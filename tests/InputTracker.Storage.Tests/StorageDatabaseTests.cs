@@ -13,7 +13,7 @@ public sealed class StorageDatabaseTests
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
         Assert.StartsWith(directory.Path, database.Layout.DatabasePath, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(6, database.SchemaVersion);
+        Assert.Equal(StorageSchema.CurrentVersion, database.SchemaVersion);
         Assert.Equal("wal", database.JournalMode, ignoreCase: true);
         Assert.Equal(2, database.Synchronous);
         Assert.True(database.ForeignKeysEnabled);
@@ -31,7 +31,7 @@ public sealed class StorageDatabaseTests
         {
             connection.Open();
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 7;";
+            command.CommandText = "PRAGMA user_version = 8;";
             command.ExecuteNonQuery();
         }
 
@@ -100,7 +100,7 @@ public sealed class StorageDatabaseTests
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
-        Assert.Equal(6, database.SchemaVersion);
+        Assert.Equal(StorageSchema.CurrentVersion, database.SchemaVersion);
         using SqliteCommand checksum = database.Connection.CreateCommand();
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 2;";
         Assert.Equal(StorageSchema.Version2Checksum, (string)checksum.ExecuteScalar()!);
@@ -112,12 +112,15 @@ public sealed class StorageDatabaseTests
         Assert.Equal(StorageSchema.Version5Checksum, (string)checksum.ExecuteScalar()!);
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 6;";
         Assert.Equal(StorageSchema.Version6Checksum, (string)checksum.ExecuteScalar()!);
+        checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 7;";
+        Assert.Equal(StorageSchema.Version7Checksum, (string)checksum.ExecuteScalar()!);
         Assert.Contains("mouse_chunks", database.ReadSchemaColumns().Keys);
         Assert.Contains("device_identity_mappings", database.ReadSchemaColumns().Keys);
         Assert.Contains("mouse_spool_segments", database.ReadSchemaColumns().Keys);
         Assert.Contains("mouse_device_watermarks", database.ReadSchemaColumns().Keys);
         Assert.Contains("mouse_button_daily", database.ReadSchemaColumns().Keys);
         Assert.Contains("mouse_button_aggregated_segments", database.ReadSchemaColumns().Keys);
+        Assert.Contains("gamepad_configuration_revisions", database.ReadSchemaColumns().Keys);
     }
 
     [Fact]
@@ -150,7 +153,7 @@ public sealed class StorageDatabaseTests
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
 
-        Assert.Equal(6, database.SchemaVersion);
+        Assert.Equal(StorageSchema.CurrentVersion, database.SchemaVersion);
         Assert.Contains("device_identity_mappings", database.ReadSchemaColumns().Keys);
         using SqliteCommand checksum = database.Connection.CreateCommand();
         checksum.CommandText = "SELECT checksum FROM schema_migrations WHERE version = 3;";
@@ -368,7 +371,7 @@ public sealed class StorageDatabaseTests
         }
 
         using StorageDatabase database = StorageDatabase.Open(layout, new FakeClock());
-        Assert.Equal(6, database.SchemaVersion);
+        Assert.Equal(StorageSchema.CurrentVersion, database.SchemaVersion);
         using (SqliteCommand migrated = database.Connection.CreateCommand())
         {
             migrated.CommandText = """

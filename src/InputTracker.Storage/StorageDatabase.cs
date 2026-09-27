@@ -138,6 +138,294 @@ public sealed class StorageDatabase : IDisposable
     public StorageDeviceInfo SetDeviceAlias(Guid deviceId, string? alias) =>
         StorageDeviceCatalog.SetAlias(this, deviceId, alias);
 
+    public StorageGamepadConfiguration SetGamepadConfiguration(
+        Guid deviceId,
+        StorageGamepadLayout layout,
+        bool enabled,
+        IReadOnlyList<StorageGamepadHidBinding> bindings,
+        long createdUtcMicroseconds)
+    {
+        ArgumentNullException.ThrowIfNull(bindings);
+        ValidateGamepadConfiguration(deviceId, layout, bindings, createdUtcMicroseconds);
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        EnsureDeviceKind(_connection, transaction, deviceId, StorageDeviceKind.Gamepad);
+        int revision;
+        using (SqliteCommand current = _connection.CreateCommand())
+        {
+            current.Transaction = transaction;
+            current.CommandText = "SELECT revision FROM gamepad_configuration_current WHERE device_id = $device;";
+            current.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            object? value = current.ExecuteScalar();
+            revision = value is long previous ? checked((int)previous + 1) : 1;
+        }
+
+        using (SqliteCommand config = _connection.CreateCommand())
+        {
+            config.Transaction = transaction;
+            config.CommandText = """
+                INSERT INTO gamepad_configuration_revisions(device_id, revision, layout, enabled, created_utc_us)
+                VALUES ($device, $revision, $layout, $enabled, $created);
+                INSERT INTO gamepad_configuration_current(device_id, revision)
+                VALUES ($device, $revision)
+                ON CONFLICT(device_id) DO UPDATE SET revision = excluded.revision;
+                """;
+            config.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            config.Parameters.AddWithValue("$revision", revision);
+            config.Parameters.AddWithValue("$layout", (int)layout);
+            config.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
+            config.Parameters.AddWithValue("$created", createdUtcMicroseconds);
+            config.ExecuteNonQuery();
+        }
+
+        foreach (StorageGamepadHidBinding binding in bindings)
+        {
+            if (binding.ActiveValues.Count == 0)
+            {
+                using SqliteCommand axis = _connection.CreateCommand();
+                axis.Transaction = transaction;
+                axis.CommandText = """
+                    INSERT INTO gamepad_hid_axis_bindings(
+                        device_id, revision, button, usage_page, usage, link_collection, element_index,
+                        activation_threshold, release_threshold, axis_direction)
+                    VALUES ($device, $revision, $button, $page, $usage, $collection, $element, $activation, $release, $direction);
+                    """;
+                axis.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+                axis.Parameters.AddWithValue("$revision", revision);
+                axis.Parameters.AddWithValue("$button", (int)binding.Button);
+                axis.Parameters.AddWithValue("$page", (int)binding.UsagePage);
+                axis.Parameters.AddWithValue("$usage", (int)binding.Usage);
+                axis.Parameters.AddWithValue("$collection", (int)binding.LinkCollection);
+                axis.Parameters.AddWithValue("$element", (int)binding.ElementIndex);
+                axis.Parameters.AddWithValue("$activation", binding.ActivationThreshold!.Value);
+                axis.Parameters.AddWithValue("$release", binding.ReleaseThreshold!.Value);
+                axis.Parameters.AddWithValue("$direction", (int)binding.AxisDirection!.Value);
+                axis.ExecuteNonQuery();
+                continue;
+            }
+            foreach (int activeValue in binding.ActiveValues.Distinct())
+            {
+                using SqliteCommand insert = _connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT INTO gamepad_hid_bindings(
+                        device_id, revision, button, usage_page, usage, link_collection, element_index, active_value)
+                    VALUES ($device, $revision, $button, $page, $usage, $collection, $element, $value);
+                    """;
+                insert.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+                insert.Parameters.AddWithValue("$revision", revision);
+                insert.Parameters.AddWithValue("$button", (int)binding.Button);
+                insert.Parameters.AddWithValue("$page", (int)binding.UsagePage);
+                insert.Parameters.AddWithValue("$usage", (int)binding.Usage);
+                insert.Parameters.AddWithValue("$collection", (int)binding.LinkCollection);
+                insert.Parameters.AddWithValue("$element", (int)binding.ElementIndex);
+                insert.Parameters.AddWithValue("$value", activeValue);
+                insert.ExecuteNonQuery();
+            }
+        }
+
+        transaction.Commit();
+        return GetGamepadConfiguration(deviceId) ?? throw new InvalidDataException("Saved gamepad configuration is missing.");
+    }
+
+    public StorageGamepadConfiguration? GetGamepadConfiguration(Guid deviceId)
+    {
+        EnsureDeviceKind(_connection, transaction: null, deviceId, StorageDeviceKind.Gamepad);
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = """
+            SELECT r.revision, r.layout, r.enabled
+            FROM gamepad_configuration_current c
+            JOIN gamepad_configuration_revisions r
+              ON r.device_id = c.device_id AND r.revision = c.revision
+            WHERE c.device_id = $device;
+            """;
+        command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        using SqliteDataReader reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        int revision = checked((int)reader.GetInt64(0));
+        var layout = (StorageGamepadLayout)reader.GetInt32(1);
+        long enabled = reader.GetInt64(2);
+        if (!Enum.IsDefined(layout) || (enabled != 0 && enabled != 1))
+            throw new InvalidDataException("Stored gamepad configuration is invalid.");
+        reader.Close();
+
+        using SqliteCommand bindings = _connection.CreateCommand();
+        bindings.CommandText = """
+            SELECT button, usage_page, usage, link_collection, element_index, active_value
+            FROM gamepad_hid_bindings
+            WHERE device_id = $device AND revision = $revision
+            ORDER BY button, usage_page, usage, link_collection, element_index, active_value;
+            """;
+        bindings.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        bindings.Parameters.AddWithValue("$revision", revision);
+        using SqliteDataReader bindingReader = bindings.ExecuteReader();
+        var grouped = new Dictionary<(StorageGamepadButton Button, ushort Page, ushort Usage, ushort Collection, ushort Element), List<int>>();
+        while (bindingReader.Read())
+        {
+            long rawButton = bindingReader.GetInt64(0);
+            if (rawButton is < 0 or > 15) throw new InvalidDataException("Stored gamepad binding button is invalid.");
+            var key = ((StorageGamepadButton)rawButton,
+                checked((ushort)bindingReader.GetInt64(1)),
+                checked((ushort)bindingReader.GetInt64(2)),
+                checked((ushort)bindingReader.GetInt64(3)),
+                checked((ushort)bindingReader.GetInt64(4)));
+            if (!grouped.TryGetValue(key, out List<int>? values)) grouped.Add(key, values = []);
+            values.Add(checked((int)bindingReader.GetInt64(5)));
+        }
+        var result = grouped.Select(pair => new StorageGamepadHidBinding(
+            pair.Key.Button, pair.Key.Page, pair.Key.Usage, pair.Key.Collection, pair.Key.Element, pair.Value)).ToList();
+        using (SqliteCommand axes = _connection.CreateCommand())
+        {
+            axes.CommandText = """
+                SELECT button, usage_page, usage, link_collection, element_index,
+                       activation_threshold, release_threshold, axis_direction
+                FROM gamepad_hid_axis_bindings WHERE device_id = $device AND revision = $revision
+                ORDER BY button, usage_page, usage, link_collection, element_index;
+                """;
+            axes.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+            axes.Parameters.AddWithValue("$revision", revision);
+            using SqliteDataReader axisReader = axes.ExecuteReader();
+            while (axisReader.Read())
+            {
+                long rawButton = axisReader.GetInt64(0);
+                long rawDirection = axisReader.GetInt64(7);
+                int activation = checked((int)axisReader.GetInt64(5));
+                int release = checked((int)axisReader.GetInt64(6));
+                if (rawButton is < 0 or > 15 || rawDirection is < 0 or > 1
+                    || rawDirection == 0 && activation <= release
+                    || rawDirection == 1 && activation >= release)
+                    throw new InvalidDataException("Stored gamepad axis binding is invalid.");
+                result.Add(new StorageGamepadHidBinding(
+                    (StorageGamepadButton)rawButton,
+                    checked((ushort)axisReader.GetInt64(1)),
+                    checked((ushort)axisReader.GetInt64(2)),
+                    checked((ushort)axisReader.GetInt64(3)),
+                    checked((ushort)axisReader.GetInt64(4)),
+                    [], activation, release, (StorageGamepadAxisDirection)rawDirection));
+            }
+        }
+        return new StorageGamepadConfiguration(deviceId, revision, layout, enabled == 1, result);
+    }
+
+    internal StorageServiceOrdinals CommitGamepadPress(
+        StorageGamepadPress press,
+        DateOnly captureLocalDate,
+        string timeZoneId,
+        IStorageServiceFaultInjector faultInjector)
+    {
+        if (press.DeviceId == Guid.Empty || !Enum.IsDefined(press.Button)
+            || string.IsNullOrWhiteSpace(timeZoneId))
+            throw new InvalidDataException("A gamepad press is invalid.");
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        using SqliteCommand kind = _connection.CreateCommand();
+        kind.Transaction = transaction;
+        kind.CommandText = """
+            SELECT r.revision, r.enabled FROM devices d
+            JOIN gamepad_configuration_current c ON c.device_id = d.device_id
+            JOIN gamepad_configuration_revisions r ON r.device_id = c.device_id AND r.revision = c.revision
+            WHERE d.device_id = $device AND d.kind = $kind;
+            """;
+        kind.Parameters.AddWithValue("$device", press.DeviceId.ToString("N"));
+        kind.Parameters.AddWithValue("$kind", (int)StorageDeviceKind.Gamepad);
+        using SqliteDataReader config = kind.ExecuteReader();
+        if (!config.Read())
+            throw new InvalidDataException("A gamepad press references a device without a configuration.");
+        int revision = checked((int)config.GetInt64(0));
+        bool enabled = config.GetInt64(1) == 1;
+        config.Close();
+        if (!enabled)
+        {
+            transaction.Rollback();
+            return ReadStorageServiceOrdinals();
+        }
+
+        using (SqliteCommand mapped = _connection.CreateCommand())
+        {
+            mapped.Transaction = transaction;
+            mapped.CommandText = """
+                SELECT
+                    (SELECT COUNT(*) FROM gamepad_hid_bindings
+                     WHERE device_id = $device AND revision = $revision AND button = $button)
+                  + (SELECT COUNT(*) FROM gamepad_hid_axis_bindings
+                     WHERE device_id = $device AND revision = $revision AND button = $button);
+                """;
+            mapped.Parameters.AddWithValue("$device", press.DeviceId.ToString("N"));
+            mapped.Parameters.AddWithValue("$revision", revision);
+            mapped.Parameters.AddWithValue("$button", (int)press.Button);
+            if (Convert.ToInt64(mapped.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 0)
+                throw new InvalidDataException("A gamepad press button is not present in its calibrated configuration.");
+        }
+
+        using SqliteCommand aggregate = _connection.CreateCommand();
+        aggregate.Transaction = transaction;
+        aggregate.CommandText = """
+            INSERT INTO gamepad_daily(device_id, configuration_revision, button, capture_local_date, time_zone_id, press_count)
+            VALUES ($device, $revision, $button, $date, $zone, 1)
+            ON CONFLICT(device_id, configuration_revision, button, capture_local_date, time_zone_id)
+            DO UPDATE SET press_count = press_count + 1;
+            """;
+        aggregate.Parameters.AddWithValue("$device", press.DeviceId.ToString("N"));
+        aggregate.Parameters.AddWithValue("$revision", revision);
+        aggregate.Parameters.AddWithValue("$button", (int)press.Button);
+        aggregate.Parameters.AddWithValue("$date", captureLocalDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+        aggregate.Parameters.AddWithValue("$zone", timeZoneId);
+        aggregate.ExecuteNonQuery();
+        StorageServiceOrdinals current = ReadStorageServiceOrdinals(_connection, transaction);
+        var next = new StorageServiceOrdinals(checked(current.CommitOrdinal + 1), current.KeyboardAggregateCommitOrdinal);
+        WriteStorageServiceOrdinals(_connection, transaction, next);
+        faultInjector.BeforeStorageCommit(boundary: null, keyboardRowCount: 0);
+        transaction.Commit();
+        return next;
+    }
+
+    private static void ValidateGamepadConfiguration(
+        Guid deviceId,
+        StorageGamepadLayout layout,
+        IReadOnlyList<StorageGamepadHidBinding> bindings,
+        long createdUtcMicroseconds)
+    {
+        if (deviceId == Guid.Empty || !Enum.IsDefined(layout) || createdUtcMicroseconds < 0)
+            throw new ArgumentException("Gamepad configuration fields or bindings are invalid.", nameof(bindings));
+        var identities = new HashSet<(StorageGamepadButton, ushort, ushort, ushort, ushort)>();
+        foreach (StorageGamepadHidBinding binding in bindings)
+        {
+            if (binding is null || !Enum.IsDefined(binding.Button) || binding.ActiveValues is null
+                || !identities.Add((binding.Button, binding.UsagePage, binding.Usage,
+                    binding.LinkCollection, binding.ElementIndex)))
+                throw new ArgumentException("Gamepad binding identity is invalid or duplicated.", nameof(bindings));
+            if (binding.ActiveValues.Count > 0)
+            {
+                if (binding.ActivationThreshold is not null || binding.ReleaseThreshold is not null
+                    || binding.AxisDirection is not null
+                    || binding.ActiveValues.Distinct().Count() != binding.ActiveValues.Count)
+                    throw new ArgumentException("Digital gamepad bindings require unique active values only.", nameof(bindings));
+                continue;
+            }
+
+            if (binding.ActivationThreshold is not int activation
+                || binding.ReleaseThreshold is not int release
+                || binding.AxisDirection is not StorageGamepadAxisDirection direction
+                || !Enum.IsDefined(direction)
+                || direction == StorageGamepadAxisDirection.Increasing && activation <= release
+                || direction == StorageGamepadAxisDirection.Decreasing && activation >= release)
+                throw new ArgumentException("Axis gamepad bindings require ordered activation and release thresholds.", nameof(bindings));
+        }
+    }
+
+    private static void EnsureDeviceKind(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid deviceId,
+        StorageDeviceKind expected)
+    {
+        if (deviceId == Guid.Empty) throw new ArgumentException("Device identifier must be non-empty.", nameof(deviceId));
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT kind FROM devices WHERE device_id = $device;";
+        command.Parameters.AddWithValue("$device", deviceId.ToString("N"));
+        if (command.ExecuteScalar() is not long kind || kind != (long)expected)
+            throw new InvalidDataException("The device has an unexpected kind or is missing.");
+    }
+
     public void UpsertKeyboardDaily(
         Guid deviceId,
         ushort makeCode,
@@ -1148,6 +1436,25 @@ public sealed class StorageDatabase : IDisposable
 
         VerifyMigrationChecksum(connection, 6, StorageSchema.Version6Checksum);
         ValidateVersionSixShape(connection);
+        if (version == 6)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Execute(connection, StorageSchema.Version7Sql, transaction);
+            using SqliteCommand record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText = """
+                INSERT INTO schema_migrations(version, name, checksum, applied_utc_us)
+                VALUES (7, 'gamepad-physical-button-aggregates', $checksum, $applied);
+                """;
+            record.Parameters.AddWithValue("$checksum", StorageSchema.Version7Checksum);
+            record.Parameters.AddWithValue("$applied", ToUnixMicroseconds(clock.GetUtcNow()));
+            record.ExecuteNonQuery();
+            transaction.Commit();
+            version = 7;
+        }
+
+        VerifyMigrationChecksum(connection, 7, StorageSchema.Version7Checksum);
+        ValidateVersionSevenShape(connection);
     }
 
     private static void ValidateVersionFourShape(SqliteConnection connection)
@@ -1282,6 +1589,26 @@ public sealed class StorageDatabase : IDisposable
         {
             throw new InvalidDataException("Storage schema version 6 mouse button aggregate shape is invalid.");
         }
+    }
+
+    private static void ValidateVersionSevenShape(SqliteConnection connection)
+    {
+        string[] expected = [
+            "gamepad_configuration_revisions", "gamepad_configuration_current",
+            "gamepad_hid_bindings", "gamepad_hid_axis_bindings", "gamepad_daily"];
+        long tables = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM pragma_table_list
+            WHERE name IN ('gamepad_configuration_revisions', 'gamepad_configuration_current',
+                'gamepad_hid_bindings', 'gamepad_hid_axis_bindings', 'gamepad_daily')
+              AND type = 'table' AND wr = 1 AND strict = 1;
+            """);
+        long buttonChecks = Scalar<long>(connection, """
+            SELECT COUNT(*) FROM sqlite_schema
+            WHERE type = 'table' AND name IN ('gamepad_hid_bindings', 'gamepad_hid_axis_bindings', 'gamepad_daily')
+              AND sql LIKE '%button BETWEEN 0 AND 15%';
+            """);
+        if (tables != expected.Length || buttonChecks != 3)
+            throw new InvalidDataException("Storage schema version 7 gamepad table shape is invalid.");
     }
 
     private static void VerifyMigrationChecksum(SqliteConnection connection, int version, string expected)

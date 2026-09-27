@@ -18,6 +18,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
     private PortableSystemEventBridge? _systemEvents;
     private AppStorageDataToolsController? _dataTools;
     private StorageLayout? _storageLayout;
+    private PortableSettingsStore? _settings;
     private bool _disposeStorageOnExit = true;
     private InputCaptureService? _releasedCaptureForRestore;
     private readonly AppOfflineRestoreLifecycleGate _offlineRestoreLifecycle = new();
@@ -68,8 +69,9 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
         {
             try
             {
+                _settings = new PortableSettingsStore(AppContext.BaseDirectory);
                 collectionConsentGranted = FirstRunConsent.EnsureGranted(
-                    new PortableSettingsStore(AppContext.BaseDirectory),
+                    _settings,
                     new WpfPortableConsentPrompt());
             }
             catch (Exception error)
@@ -80,6 +82,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
 
         string? storageStartupError = null;
         DashboardViewModel? dashboard = null;
+        bool gamepadAutoStart = false;
         if (directory.IsWritable && collectionConsentGranted)
         {
             try
@@ -88,8 +91,12 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                 _storage = StorageService.Open(_storageLayout);
                 Guid calibrationSession = Guid.NewGuid();
                 _storage.Start(TimeCalibrationSegment.Capture(calibrationSession, SystemStorageClock.Instance));
+                PortableSettings gamepadSettings = _settings!.Load();
                 _storageCoordinator = new AppStorageCoordinator(
-                    new StorageServiceWriter(_storage), calibrationSession);
+                    new StorageServiceWriter(_storage), calibrationSession, _settings);
+                gamepadAutoStart = GamepadStartupPolicy.ShouldAutoStart(
+                    gamepadSettings, _storage.ListDevices(), _storage.GetGamepadConfiguration);
+                _storageCoordinator.InitializeGamepadCapture(gamepadAutoStart);
                 _storageCoordinator.EnsureReady();
                 _capture = new InputCaptureService(
                     _storageCoordinator,
@@ -125,7 +132,9 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                 collectionControl,
                 directory.DirectoryPath)
             : null;
-        var window = new MainWindow(_collection, directory, dashboard, startup, _dataTools);
+        var window = new MainWindow(
+            _collection, directory, dashboard, startup, _dataTools,
+            _storageCoordinator, _capture, _storage, _settings);
 
         _trayIcon = new TrayIconController(
             _collection,
@@ -165,6 +174,8 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                     return;
                 }
 
+                if (gamepadAutoStart)
+                    await _capture.SetGamepadCaptureEnabledAsync(true);
                 await _capture.StartAsync();
             }
             catch (Exception error)

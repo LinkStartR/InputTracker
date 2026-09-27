@@ -107,7 +107,7 @@ internal static class StorageBackup
                 ownerLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.WriteThrough);
             RecoverInterruptedRestore(layout, ownerLock);
             manifest = ExtractAndVerify(backupPath, stagingRoot, budget);
-            if (manifest.FormatVersion != FormatVersion || manifest.SchemaVersion != StorageSchema.CurrentVersion)
+            if (manifest.FormatVersion != FormatVersion || !IsSupportedBackupSchema(manifest.SchemaVersion))
             {
                 throw new InvalidDataException("Backup format or storage schema version is not supported.");
             }
@@ -332,7 +332,7 @@ internal static class StorageBackup
             manifest = JsonSerializer.Deserialize<StorageBackupManifest>(stream)
                 ?? throw new InvalidDataException("Backup manifest is empty.");
         }
-        if (manifest.FormatVersion != FormatVersion || manifest.SchemaVersion != StorageSchema.CurrentVersion)
+        if (manifest.FormatVersion != FormatVersion || !IsSupportedBackupSchema(manifest.SchemaVersion))
         {
             throw new InvalidDataException("Backup format or storage schema version is not supported.");
         }
@@ -829,6 +829,9 @@ internal static class StorageBackup
         }
         Directory.Delete(path, recursive: true);
     }
+
+    private static bool IsSupportedBackupSchema(int version) =>
+        version == 6 || version == StorageSchema.CurrentVersion;
 
     private sealed record StorageBackupManifest(
         int FormatVersion,

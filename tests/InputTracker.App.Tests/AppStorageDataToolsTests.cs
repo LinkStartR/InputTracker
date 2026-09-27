@@ -525,5 +525,7 @@ public sealed class AppStorageDataToolsTests
             StatusChanged?.Invoke(this, CurrentStatus);
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }

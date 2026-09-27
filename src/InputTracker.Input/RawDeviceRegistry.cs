@@ -85,6 +85,21 @@ internal sealed class RawDeviceRegistry
             DeviceIdentityConfidence.RequiresConfirmation);
     }
 
+    public IReadOnlyList<InputDeviceDescriptor> RemoveKind(RawDeviceKind kind)
+    {
+        var removed = new List<InputDeviceDescriptor>();
+        foreach ((nint handle, ActiveDevice active) in _active.ToArray())
+        {
+            if (active.Descriptor.Kind == kind)
+            {
+                _active.Remove(handle);
+                removed.Add(active.Descriptor);
+            }
+        }
+
+        return removed;
+    }
+
     private static InputDeviceDescriptor Unattributed() => new(
         RuntimeDeviceId.Unattributed,
         0,

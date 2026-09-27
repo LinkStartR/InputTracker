@@ -91,6 +91,7 @@ internal sealed class AcceptanceFakeHost(
     public bool StopAfterFaultCalled { get; private set; }
     public bool Destroyed { get; private set; }
     public bool BoundaryAcknowledged { get; private set; }
+    public bool GamepadCaptureEnabled { get; private set; }
 
     public ValueTask StartAsync(CancellationToken cancellationToken)
     {
@@ -120,6 +121,13 @@ internal sealed class AcceptanceFakeHost(
     {
         Register();
         IngressOpen = true;
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        GamepadCaptureEnabled = enabled;
         return ValueTask.CompletedTask;
     }
 

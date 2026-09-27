@@ -133,6 +133,8 @@ public sealed class PortablePauseControllerTests
             StatusChanged?.Invoke(this, CurrentStatus);
             return ValueTask.CompletedTask;
         }
+
+        public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private sealed class BlockingCapture : IInputCaptureControl
@@ -162,5 +164,7 @@ public sealed class PortablePauseControllerTests
                 null);
             StatusChanged?.Invoke(this, CurrentStatus);
         }
+
+        public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }

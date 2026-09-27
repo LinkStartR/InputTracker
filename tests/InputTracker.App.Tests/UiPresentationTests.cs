@@ -206,9 +206,11 @@ public sealed class UiPresentationTests
         Assert.Contains("x:Name=\"DeletionKindSelector\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"键盘统计\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Content=\"鼠标按键统计\"", windowXaml, StringComparison.Ordinal);
-        Assert.Contains("Content=\"全部（键盘 + 鼠标）\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"键盘和鼠标\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"手柄按键统计\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"DeletionKeyboardDeviceSelector\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"DeletionMouseDeviceSelector\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DeletionGamepadDeviceSelector\"", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("设备沿用键盘热力图或鼠标按键页中当前选择的设备", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ViewDateRangePicker\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"DeletionDateRangePicker\"", windowXaml, StringComparison.Ordinal);

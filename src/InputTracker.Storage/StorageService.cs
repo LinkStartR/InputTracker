@@ -153,6 +153,38 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public StorageGamepadConfiguration? GetGamepadConfiguration(Guid deviceId)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return _database.GetGamepadConfiguration(deviceId);
+        }
+    }
+
+    public StorageGamepadConfiguration SetGamepadConfiguration(
+        Guid deviceId,
+        StorageGamepadLayout layout,
+        bool enabled,
+        IReadOnlyList<StorageGamepadHidBinding> bindings)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            EnsureDeviceCatalogWritable();
+            try
+            {
+                long now = checked((_clock.GetUtcNow().UtcDateTime.Ticks - 621355968000000000L) / 10);
+                return _database.SetGamepadConfiguration(deviceId, layout, enabled, bindings, now);
+            }
+            catch (Exception error) when (IsControlledFailure(error))
+            {
+                EnterFault("storage.gamepad-configuration-failed", "Gamepad configuration update failed closed.", null);
+                throw;
+            }
+        }
+    }
+
     public StorageKeyboardPeriodResult QueryKeyboardPeriod(
         StoragePeriodKind kind,
         DateOnly containingDate,
@@ -225,6 +257,34 @@ public sealed class StorageService : IDisposable
         }
     }
 
+    public StorageGamepadButtonPeriodResult QueryGamepadButtonsPeriod(
+        StoragePeriodKind kind,
+        DateOnly containingDate,
+        string timeZoneId,
+        Guid? deviceId = null)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.QueryGamepadButtonsPeriod(
+                _database.Connection, kind, containingDate, timeZoneId, deviceId);
+        }
+    }
+
+    public StorageGamepadButtonPeriodResult QueryGamepadButtonsRange(
+        DateOnly inclusiveStartDate,
+        DateOnly inclusiveEndDate,
+        string timeZoneId,
+        Guid? deviceId = null)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+            return StorageQuery.QueryGamepadButtonsRange(
+                _database.Connection, inclusiveStartDate, inclusiveEndDate, timeZoneId, deviceId);
+        }
+    }
+
     public StorageExportArtifact ExportKeyboardCsv(
         StorageKeyboardPeriodResult result,
         string relativePath)
@@ -292,9 +352,13 @@ public sealed class StorageService : IDisposable
             deviceId, utcRange, impact, watermark);
         StorageDeletionCapability capability = impact.HasPartialDayOverlap || impact.AggregateCount == 0
             ? StorageDeletionCapability.BlockedByCurrentFormat
-            : impact.Kind == StorageDeviceKind.Keyboard
-                ? StorageDeletionCapability.ExactKeyboardDailyAggregates
-                : StorageDeletionCapability.ExactMouseButtonDailyAggregates;
+            : impact.Kind switch
+            {
+                StorageDeviceKind.Keyboard => StorageDeletionCapability.ExactKeyboardDailyAggregates,
+                StorageDeviceKind.Mouse => StorageDeletionCapability.ExactMouseButtonDailyAggregates,
+                StorageDeviceKind.Gamepad => StorageDeletionCapability.ExactGamepadDailyAggregates,
+                _ => StorageDeletionCapability.BlockedByCurrentFormat
+            };
         var preview = new StorageDeletionPreview(
             deviceId,
             utcRange,
@@ -310,7 +374,9 @@ public sealed class StorageService : IDisposable
                     ? "The selected range contains no matching daily aggregate records."
                     : null,
             StorageDeletion.CreateToken(fingerprint),
-            fingerprint);
+            fingerprint,
+            impact.Kind == StorageDeviceKind.Gamepad ? impact.AggregateCount : 0,
+            impact.Kind == StorageDeviceKind.Gamepad ? impact.PressCount : 0);
         return Task.FromResult(preview);
     }
 
@@ -389,7 +455,8 @@ public sealed class StorageService : IDisposable
                 throw new InvalidOperationException("Deletion confirmation token does not match its preview.");
             }
             if (preview.Capability is not StorageDeletionCapability.ExactKeyboardDailyAggregates
-                and not StorageDeletionCapability.ExactMouseButtonDailyAggregates)
+                and not StorageDeletionCapability.ExactMouseButtonDailyAggregates
+                and not StorageDeletionCapability.ExactGamepadDailyAggregates)
             {
                 throw new InvalidOperationException(
                     preview.BlockedReason ?? "Deletion is blocked by the current storage format.");
@@ -410,10 +477,14 @@ public sealed class StorageService : IDisposable
                 || current.HoldDurationMicroseconds != preview.KeyboardHoldDurationMicroseconds
                 || current.MouseButtonRows.Count != preview.MouseButtonAggregateCount
                 || (current.Kind == StorageDeviceKind.Mouse ? current.PressCount : 0) != preview.MouseButtonPressCount
+                || current.GamepadRows.Count != preview.GamepadAggregateCount
+                || (current.Kind == StorageDeviceKind.Gamepad ? current.PressCount : 0) != preview.GamepadPressCount
                 || (current.Kind == StorageDeviceKind.Keyboard
                     && preview.Capability != StorageDeletionCapability.ExactKeyboardDailyAggregates)
                 || (current.Kind == StorageDeviceKind.Mouse
-                    && preview.Capability != StorageDeletionCapability.ExactMouseButtonDailyAggregates))
+                    && preview.Capability != StorageDeletionCapability.ExactMouseButtonDailyAggregates)
+                || (current.Kind == StorageDeviceKind.Gamepad
+                    && preview.Capability != StorageDeletionCapability.ExactGamepadDailyAggregates))
             {
                 throw new InvalidOperationException(
                     "Stored data changed after the deletion preview; review the range again before deleting.");
@@ -433,7 +504,9 @@ public sealed class StorageService : IDisposable
                 current.Kind == StorageDeviceKind.Keyboard ? current.HoldDurationMicroseconds : 0,
                 current.Kind == StorageDeviceKind.Mouse ? deleted : 0,
                 current.Kind == StorageDeviceKind.Mouse ? current.PressCount : 0,
-                backup);
+                backup,
+                current.Kind == StorageDeviceKind.Gamepad ? deleted : 0,
+                current.Kind == StorageDeviceKind.Gamepad ? current.PressCount : 0);
         }
     }
 
@@ -1202,6 +1275,38 @@ public sealed class StorageService : IDisposable
             catch (Exception error) when (IsControlledFailure(error))
             {
                 EnterFault("storage.mouse-button-commit-failed", "Mouse button aggregate failed closed.", null);
+                throw;
+            }
+        }
+    }
+
+    public void WriteGamepadPress(StorageGamepadPress press)
+    {
+        lock (_gate)
+        {
+            EnsureRunningAndAccepting();
+            if (press.DeviceId == Guid.Empty || !Enum.IsDefined(press.Button)
+                || press.CalibrationSessionId == Guid.Empty || press.MonotonicTimestamp < 0)
+            {
+                Fail("gamepad.press-invalid", "Gamepad press fields are invalid.", null);
+                return;
+            }
+            if (_activeCalibration is not TimeCalibrationSegment calibration)
+            {
+                Fail("gamepad.press-invalid", "Gamepad press requires active calibration.", null);
+                return;
+            }
+            if (press.CalibrationSessionId != calibration.SessionId)
+                Fail("gamepad.calibration-mismatch", "Gamepad press calibration does not match the active segment.", null);
+            TrackTimestamp(press.MonotonicTimestamp, boundary: null);
+            try
+            {
+                DateOnly date = StorageKeyboardTime.GetLocalDate(calibration, press.MonotonicTimestamp);
+                _ordinals = _database.CommitGamepadPress(press, date, calibration.TimeZoneId, _faultInjector);
+            }
+            catch (Exception error) when (IsControlledFailure(error))
+            {
+                EnterFault("storage.gamepad-press-commit-failed", "Gamepad press aggregate failed closed.", null);
                 throw;
             }
         }

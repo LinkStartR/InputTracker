@@ -14,6 +14,7 @@ internal static class RawInputInterop
     internal const nuint RimInput = 0;
     internal const uint RimTypeMouse = 0;
     internal const uint RimTypeKeyboard = 1;
+    internal const uint RimTypeHid = 2;
     internal const uint RidInput = 0x10000003;
     internal const uint RidiDeviceName = 0x20000007;
     internal const uint RidiDeviceInfo = 0x2000000B;
@@ -25,7 +26,12 @@ internal static class RawInputInterop
 
     internal const ushort UsagePageGenericDesktop = 0x01;
     internal const ushort UsageMouse = 0x02;
+    internal const ushort UsageJoystick = 0x04;
     internal const ushort UsageKeyboard = 0x06;
+    internal const ushort UsageGamepad = 0x05;
+    internal const ushort UsageButton = 0x09;
+    internal const ushort UsageHatSwitch = 0x39;
+    internal const uint RidiPreparsedData = 0x20000005;
 
     internal static readonly nint HwndMessage = new(-3);
 
@@ -56,6 +62,18 @@ internal static class RawInputInterop
         internal readonly uint Flags = flags;
         internal readonly nint Target = target;
     }
+
+    internal static RawInputDevice[] GamepadRegistrations(uint flags, nint target) =>
+    [
+        new(UsagePageGenericDesktop, UsageGamepad, flags, target),
+        new(UsagePageGenericDesktop, UsageJoystick, flags, target)
+    ];
+
+    internal static RawInputDevice[] GamepadRemovals() =>
+    [
+        new(UsagePageGenericDesktop, UsageGamepad, RidevRemove, 0),
+        new(UsagePageGenericDesktop, UsageJoystick, RidevRemove, 0)
+    ];
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct NativeRawInputHeader
@@ -150,6 +168,26 @@ internal static class RawInputInterop
         internal ushort Usage;
     }
 
+    [StructLayout(LayoutKind.Explicit, Size = 64)]
+    internal struct HidpCaps
+    {
+        [FieldOffset(0)] internal ushort Usage;
+        [FieldOffset(2)] internal ushort UsagePage;
+        [FieldOffset(4)] internal ushort InputReportByteLength;
+        [FieldOffset(6)] internal ushort OutputReportByteLength;
+        [FieldOffset(8)] internal ushort FeatureReportByteLength;
+        [FieldOffset(44)] internal ushort NumberLinkCollectionNodes;
+        [FieldOffset(46)] internal ushort NumberInputButtonCaps;
+        [FieldOffset(48)] internal ushort NumberInputValueCaps;
+        [FieldOffset(50)] internal ushort NumberInputDataIndices;
+        [FieldOffset(52)] internal ushort NumberOutputButtonCaps;
+        [FieldOffset(54)] internal ushort NumberOutputValueCaps;
+        [FieldOffset(56)] internal ushort NumberOutputDataIndices;
+        [FieldOffset(58)] internal ushort NumberFeatureButtonCaps;
+        [FieldOffset(60)] internal ushort NumberFeatureValueCaps;
+        [FieldOffset(62)] internal ushort NumberFeatureDataIndices;
+    }
+
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     internal static extern ushort RegisterClassExW(ref WindowClass windowClass);
 
@@ -219,6 +257,52 @@ internal static class RawInputInterop
         uint command,
         ref NativeRawDeviceInfo data,
         ref uint size);
+
+    [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", SetLastError = true)]
+    internal static extern uint GetRawInputDevicePreparsedData(
+        nint device,
+        uint command,
+        nint data,
+        ref uint size);
+
+    [DllImport("hid.dll", EntryPoint = "HidP_GetCaps")]
+    internal static extern int HidPGetCaps(nint preparsedData, out HidpCaps capabilities);
+
+    [DllImport("hid.dll", EntryPoint = "HidP_GetButtonCaps")]
+    internal static extern int HidPGetButtonCaps(
+        ushort reportType,
+        nint buttonCaps,
+        ref ushort buttonCapsLength,
+        nint preparsedData);
+
+    [DllImport("hid.dll", EntryPoint = "HidP_GetValueCaps")]
+    internal static extern int HidPGetValueCaps(
+        ushort reportType,
+        nint valueCaps,
+        ref ushort valueCapsLength,
+        nint preparsedData);
+
+    [DllImport("hid.dll", EntryPoint = "HidP_GetUsages")]
+    internal static extern int HidPGetUsages(
+        ushort reportType,
+        ushort usagePage,
+        ushort linkCollection,
+        nint usageList,
+        ref uint usageLength,
+        nint preparsedData,
+        nint report,
+        uint reportLength);
+
+    [DllImport("hid.dll", EntryPoint = "HidP_GetUsageValue")]
+    internal static extern int HidPGetUsageValue(
+        ushort reportType,
+        ushort usagePage,
+        ushort linkCollection,
+        ushort usage,
+        out uint value,
+        nint preparsedData,
+        nint report,
+        uint reportLength);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     internal static extern nint GetModuleHandleW(string? moduleName);

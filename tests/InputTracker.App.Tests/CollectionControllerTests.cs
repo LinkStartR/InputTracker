@@ -228,6 +228,8 @@ public sealed class CollectionControllerTests
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+
         public void Publish(InputCaptureState state, PauseReason reasons, string? error)
         {
             CurrentStatus = new InputCaptureStatus(state, reasons, error);
