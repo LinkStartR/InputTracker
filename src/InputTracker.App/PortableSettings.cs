@@ -8,12 +8,19 @@ internal sealed record PortableSettings(
     bool CollectionConsentGranted,
     bool GamepadConsentGranted = false,
     bool GamepadCaptureEnabled = false,
-    Guid? GamepadDeviceId = null);
+    Guid? GamepadDeviceId = null,
+    Dictionary<Guid, GamepadBrand>? GamepadBrands = null);
+
+internal enum GamepadBrand
+{
+    Xbox,
+    ThirdParty
+}
 
 internal sealed class PortableSettingsStore
 {
     internal const string FileName = "InputTracker.settings.json";
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private readonly string _programDirectory;
 
     public PortableSettingsStore(string programDirectory)
@@ -34,12 +41,18 @@ internal sealed class PortableSettingsStore
         {
             PortableSettings? settings = JsonSerializer.Deserialize<PortableSettings>(
                 File.ReadAllText(SettingsPath), JsonOptions);
-            if (settings is null || settings.SchemaVersion is not 1 and not CurrentSchemaVersion)
+            if (settings is null || settings.SchemaVersion is not 1 and not 2 and not CurrentSchemaVersion)
             {
                 throw new InvalidDataException("Portable settings schema is missing or unsupported.");
             }
 
-            return settings with { SchemaVersion = CurrentSchemaVersion };
+            Dictionary<Guid, GamepadBrand> gamepadBrands = settings.GamepadBrands ?? [];
+            if (gamepadBrands.Any(pair => pair.Key == Guid.Empty || !Enum.IsDefined(pair.Value)))
+            {
+                throw new InvalidDataException("Portable settings contain an unsupported gamepad brand entry.");
+            }
+
+            return settings with { SchemaVersion = CurrentSchemaVersion, GamepadBrands = gamepadBrands };
         }
         catch (InvalidDataException)
         {
@@ -60,7 +73,8 @@ internal sealed class PortableSettingsStore
     {
         GamepadConsentGranted = granted,
         GamepadCaptureEnabled = granted && settings.GamepadCaptureEnabled,
-        GamepadDeviceId = granted ? settings.GamepadDeviceId : null
+        GamepadDeviceId = granted ? settings.GamepadDeviceId : null,
+        GamepadBrands = granted ? settings.GamepadBrands : []
     });
 
     public void SetGamepadConfiguration(bool enabled, Guid? deviceId = null) => Update(settings =>
@@ -69,12 +83,35 @@ internal sealed class PortableSettingsStore
         {
             throw new InvalidOperationException("Gamepad consent and a selected device are required before enabling capture.");
         }
+        if (deviceId is Guid selectedDeviceId
+            && (!settings.GamepadConsentGranted || selectedDeviceId == Guid.Empty))
+        {
+            throw new InvalidOperationException("Gamepad consent and a selected device are required before saving gamepad selection.");
+        }
 
         return settings with
         {
             GamepadCaptureEnabled = enabled,
-            GamepadDeviceId = enabled ? deviceId : settings.GamepadDeviceId
+            GamepadDeviceId = deviceId ?? settings.GamepadDeviceId
         };
+    });
+
+    public GamepadBrand? GetGamepadBrand(Guid deviceId)
+    {
+        if (deviceId == Guid.Empty) return null;
+        return Load().GamepadBrands!.TryGetValue(deviceId, out GamepadBrand brand) ? brand : null;
+    }
+
+    public void SetGamepadBrand(Guid deviceId, GamepadBrand brand) => Update(settings =>
+    {
+        if (!settings.GamepadConsentGranted)
+            throw new InvalidOperationException("Gamepad consent is required before saving a brand preference.");
+        if (deviceId == Guid.Empty || !Enum.IsDefined(brand))
+            throw new ArgumentOutOfRangeException(nameof(deviceId), "A known brand and selected gamepad are required.");
+
+        Dictionary<Guid, GamepadBrand> brands = new(settings.GamepadBrands ?? []);
+        brands[deviceId] = brand;
+        return settings with { GamepadBrands = brands };
     });
 
     private void Update(Func<PortableSettings, PortableSettings> update)

@@ -672,6 +672,23 @@ internal sealed class RawInputMessageWindow : IRawInputHost
         }
 
         Volatile.Write(ref _gamepadRegistered, 1);
+        EnqueueExistingGamepadArrivals();
+    }
+
+    private void EnqueueExistingGamepadArrivals()
+    {
+        foreach (nint deviceHandle in GamepadDeviceDiscovery.EnumerateDeviceHandles())
+        {
+            if (!_queue.TryWrite(new InputIngressEvent(
+                    IngressEventKind.DeviceArrived,
+                    deviceHandle,
+                    Stopwatch.GetTimestamp(),
+                    DeviceKind: RawDeviceKind.Gamepad)))
+            {
+                FailIntegrity("Raw Input queue capacity was exceeded while enumerating connected gamepads.");
+                return;
+            }
+        }
     }
 
     private void UnregisterGamepad()

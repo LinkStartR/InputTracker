@@ -81,6 +81,94 @@ public sealed class GamepadControlStateTrackerTests
     }
 
     [Fact]
+    public void ExistingDeviceDiscoveryFiltersHidGamepadsAndDeduplicatesHandles()
+    {
+        nint gamepad = new(11);
+        nint joystick = new(12);
+        nint mouse = new(13);
+        var devices = new[]
+        {
+            Device(gamepad, RawInputInterop.RimTypeHid),
+            Device(gamepad, RawInputInterop.RimTypeHid),
+            Device(joystick, RawInputInterop.RimTypeHid),
+            Device(mouse, RawInputInterop.RimTypeMouse),
+            Device(0, RawInputInterop.RimTypeHid)
+        };
+        var queried = new List<nint>();
+
+        nint[] handles = GamepadDeviceDiscovery.FindGamepadDeviceHandles(devices, handle =>
+        {
+            queried.Add(handle);
+            return handle switch
+            {
+                var value when value == gamepad => DeviceInformation(
+                    RawInputInterop.RimTypeHid,
+                    RawInputInterop.UsagePageGenericDesktop,
+                    RawInputInterop.UsageGamepad),
+                var value when value == joystick => DeviceInformation(
+                    RawInputInterop.RimTypeHid,
+                    RawInputInterop.UsagePageGenericDesktop,
+                    RawInputInterop.UsageJoystick),
+                _ => null
+            };
+        });
+
+        Assert.Equal(new[] { gamepad, joystick }, handles);
+        Assert.Equal(new[] { gamepad, joystick }, queried);
+    }
+
+    [Fact]
+    public void ExistingDeviceDiscoverySkipsMismatchedDescriptorsAndPerDeviceFailures()
+    {
+        nint wrongType = new(21);
+        nint wrongPage = new(22);
+        nint wrongUsage = new(23);
+        nint missingInfo = new(24);
+        nint failedInfo = new(25);
+        nint valid = new(26);
+        var devices = new[]
+        {
+            Device(wrongType, RawInputInterop.RimTypeHid),
+            Device(wrongPage, RawInputInterop.RimTypeHid),
+            Device(wrongUsage, RawInputInterop.RimTypeHid),
+            Device(missingInfo, RawInputInterop.RimTypeHid),
+            Device(failedInfo, RawInputInterop.RimTypeHid),
+            Device(valid, RawInputInterop.RimTypeHid)
+        };
+
+        nint[] handles = GamepadDeviceDiscovery.FindGamepadDeviceHandles(devices, handle =>
+        {
+            if (handle == failedInfo)
+            {
+                throw new InvalidOperationException("Device was removed during enumeration.");
+            }
+
+            return handle switch
+            {
+                var value when value == wrongType => DeviceInformation(
+                    RawInputInterop.RimTypeMouse,
+                    RawInputInterop.UsagePageGenericDesktop,
+                    RawInputInterop.UsageGamepad),
+                var value when value == wrongPage => DeviceInformation(
+                    RawInputInterop.RimTypeHid,
+                    0x09,
+                    RawInputInterop.UsageGamepad),
+                var value when value == wrongUsage => DeviceInformation(
+                    RawInputInterop.RimTypeHid,
+                    RawInputInterop.UsagePageGenericDesktop,
+                    RawInputInterop.UsageKeyboard),
+                var value when value == valid => DeviceInformation(
+                    RawInputInterop.RimTypeHid,
+                    RawInputInterop.UsagePageGenericDesktop,
+                    RawInputInterop.UsageGamepad),
+                _ => null
+            };
+        });
+
+        Assert.Equal(new[] { valid }, handles);
+    }
+
+    [Fact]
     public void ReportNormalizationPreservesAxisBoundsAndBaselineIntoIngress()
     {
         var change = new GamepadControlEvent(
@@ -101,4 +189,26 @@ public sealed class GamepadControlStateTrackerTests
         Assert.Equal(change.LogicalMinimum, ingress.GamepadLogicalMinimum);
         Assert.Equal(change.LogicalMaximum, ingress.GamepadLogicalMaximum);
     }
+
+    private static RawInputInterop.NativeRawInputDeviceList Device(nint handle, uint type) => new()
+    {
+        DeviceHandle = handle,
+        Type = type
+    };
+
+    private static RawInputInterop.NativeRawDeviceInfo DeviceInformation(
+        uint type,
+        ushort usagePage,
+        ushort usage) => new()
+    {
+        Type = type,
+        Data = new RawInputInterop.NativeRawDeviceInfoData
+        {
+            Hid = new RawInputInterop.NativeHidDeviceInfo
+            {
+                UsagePage = usagePage,
+                Usage = usage
+            }
+        }
+    };
 }

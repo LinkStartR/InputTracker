@@ -66,6 +66,8 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
     private (StorageGamepadButton Button, StorageGamepadHidBinding Binding)? _calibrationPending;
     private bool _calibrationInterrupted;
     private bool _triggerRestingConfirmed;
+    private GamepadAutomaticCalibration? _automaticCalibration;
+    private long _automaticCalibrationLastInputAt;
 
     internal IReadOnlyList<InputDeviceDescriptor> GamepadDevices { get { lock (_gamepadGate) return _gamepadDescriptors.Values.ToArray(); } }
     internal string? GetGamepadStatus(RuntimeDeviceId runtimeId) { lock (_gamepadGate) return _gamepadStatuses.GetValueOrDefault(runtimeId); }
@@ -309,7 +311,14 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
         return ValueTask.CompletedTask;
     }
 
-    internal void SetGamepadCaptureEnabled(bool enabled) { lock (_gamepadGate) _gamepadEnabled = enabled; }
+    internal void SetGamepadCaptureEnabled(bool enabled)
+    {
+        lock (_gamepadGate)
+        {
+            _gamepadEnabled = enabled;
+            if (!enabled && _calibrationRuntimeId.HasValue) CancelGamepadCalibration(interrupted: true);
+        }
+    }
     internal void InitializeGamepadCapture(bool enabled)
     {
         lock (_gamepadGate)
@@ -334,6 +343,7 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
         {
         if (!_gamepadDescriptors.ContainsKey(runtimeId) || !_gamepads.ContainsKey(runtimeId))
             throw new InvalidOperationException("请先选择已检测到的手柄。");
+        _automaticCalibration = null;
         _calibrationBindings.Clear();
         _calibrationPending = null;
         _calibrationRestingValues.Clear();
@@ -346,6 +356,66 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
         _triggerRestingConfirmed = button is not StorageGamepadButton.LeftTrigger and not StorageGamepadButton.RightTrigger;
         _gamepadConfigurations.Remove(runtimeId);
         ClearGamepadState(runtimeId);
+        }
+    }
+
+    internal void BeginGamepadAutomaticCalibration(RuntimeDeviceId runtimeId, StorageGamepadButton button = StorageGamepadButton.South)
+    {
+        lock (_gamepadGate)
+        {
+            GamepadControlEvent[] baseline = _gamepadLatestEvents.Values.Where(value => value.DeviceId == runtimeId).ToArray();
+            BeginGamepadCalibration(runtimeId, button);
+            _automaticCalibration = new GamepadAutomaticCalibration(baseline);
+            _automaticCalibration.BeginTarget(button, Stopwatch.GetTimestamp());
+        }
+    }
+
+    internal bool IsGamepadAutomaticCalibration { get { lock (_gamepadGate) return _automaticCalibration is not null; } }
+    internal string? GamepadAutomaticCalibrationFeedback { get { lock (_gamepadGate) return _automaticCalibration?.Feedback; } }
+
+    internal void UpdateGamepadAutomaticCalibration(long? timestamp = null)
+    {
+        lock (_gamepadGate)
+        {
+            if (_automaticCalibration is null || _calibrationTarget is not StorageGamepadButton target) return;
+            long now = timestamp ?? Stopwatch.GetTimestamp();
+            if (!timestamp.HasValue && now - _automaticCalibrationLastInputAt < Math.Max(1, Stopwatch.Frequency / 50)) return;
+            StorageGamepadHidBinding? binding = _automaticCalibration.TryComplete(now);
+            if (binding is null) return;
+            if (_calibrationBindings.Values.Any(existing => existing.Binding.UsagePage == binding.UsagePage
+                && existing.Binding.Usage == binding.Usage && existing.Binding.LinkCollection == binding.LinkCollection
+                && existing.Binding.ElementIndex == binding.ElementIndex
+                && (binding.AxisDirection.HasValue || existing.Binding.ActiveValues.SequenceEqual(binding.ActiveValues))))
+            {
+                _automaticCalibration.RetryDuplicate(target, now);
+                return;
+            }
+            _calibrationBindings[target] = (default, binding);
+            _calibrationTarget = NextUncalibrated(target);
+            if (_calibrationTarget is StorageGamepadButton next) _automaticCalibration.BeginTarget(next, now);
+        }
+    }
+
+    internal void CancelGamepadCalibration()
+    {
+        lock (_gamepadGate) CancelGamepadCalibration(interrupted: false);
+    }
+
+    internal void SwitchGamepadCalibrationToManual()
+    {
+        lock (_gamepadGate)
+        {
+            if (_automaticCalibration is null || !_calibrationRuntimeId.HasValue || !_calibrationTarget.HasValue) return;
+            _calibrationRestingValues.Clear();
+            foreach (GamepadControlEvent value in _automaticCalibration.LatestValues)
+            {
+                _calibrationRestingValues[value.Control] = value.Value;
+                _gamepadLatestEvents[(value.DeviceId, value.Control)] = value;
+            }
+            _automaticCalibration = null;
+            _calibrationPending = null;
+            _triggerRestingPoints.Clear();
+            _triggerRestingConfirmed = _calibrationTarget is not StorageGamepadButton.LeftTrigger and not StorageGamepadButton.RightTrigger;
         }
     }
 
@@ -377,7 +447,11 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
 
     internal void RetryGamepadCalibrationTarget()
     {
-        lock (_gamepadGate) _calibrationPending = null;
+        lock (_gamepadGate)
+        {
+            _calibrationPending = null;
+            if (_calibrationTarget is StorageGamepadButton target) _automaticCalibration?.BeginTarget(target, Stopwatch.GetTimestamp());
+        }
     }
 
     internal void SkipGamepadCalibrationTarget()
@@ -387,6 +461,7 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
         if (_calibrationTarget is not StorageGamepadButton current) return;
         _calibrationPending = null;
         _calibrationTarget = NextUncalibrated(current);
+        if (_calibrationTarget is StorageGamepadButton next) _automaticCalibration?.BeginTarget(next, Stopwatch.GetTimestamp());
         }
     }
 
@@ -408,6 +483,7 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
         _calibrationRestingValues.Clear();
         _triggerRestingPoints.Clear();
         _triggerRestingConfirmed = false;
+        _automaticCalibration = null;
         }
     }
 
@@ -447,7 +523,11 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
 
     internal bool IsGamepadTriggerAwaitingRestingConfirmation
     {
-        get { lock (_gamepadGate) return (_calibrationTarget is StorageGamepadButton.LeftTrigger or StorageGamepadButton.RightTrigger) && !_triggerRestingConfirmed; }
+        get
+        {
+            lock (_gamepadGate) return (_calibrationTarget is StorageGamepadButton.LeftTrigger or StorageGamepadButton.RightTrigger)
+                && (_automaticCalibration?.AwaitingRestingConfirmation ?? !_triggerRestingConfirmed);
+        }
     }
 
     internal bool ConfirmGamepadTriggerRestingPoint()
@@ -457,6 +537,7 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
             if (_calibrationRuntimeId is not RuntimeDeviceId runtimeId
                 || _calibrationTarget is not StorageGamepadButton.LeftTrigger and not StorageGamepadButton.RightTrigger)
                 return false;
+            if (_automaticCalibration is not null) return _automaticCalibration.ConfirmRestingPoint();
             _triggerRestingPoints.Clear();
             foreach (GamepadControlEvent value in _gamepadLatestEvents.Values.Where(value =>
                 value.DeviceId == runtimeId && value.Control.UsagePage == 0x01
@@ -472,12 +553,19 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
     {
         if (!_gamepadDescriptors.ContainsKey(value.DeviceId)) return;
         if (_gamepadCutoffs.TryGetValue(value.DeviceId, out long cutoff) && value.Timestamp <= cutoff) return;
-        _gamepadValues.TryGetValue((value.DeviceId, value.Control), out int previousValue);
+        bool hasPreviousValue = _gamepadValues.TryGetValue((value.DeviceId, value.Control), out int previousValue);
         _gamepadValues[(value.DeviceId, value.Control)] = value.Value;
         _gamepadLatestEvents[(value.DeviceId, value.Control)] = value;
         if (_calibrationRuntimeId is RuntimeDeviceId calibrationDevice && value.DeviceId != calibrationDevice) return;
         if (_calibrationTarget is StorageGamepadButton target)
         {
+            if (_automaticCalibration is not null)
+            {
+                if ((!hasPreviousValue || previousValue != value.Value) && _automaticCalibration.AffectsSettling(value))
+                    _automaticCalibrationLastInputAt = Stopwatch.GetTimestamp();
+                _automaticCalibration.Observe(value);
+                return;
+            }
             if (value.IsBaseline || _calibrationPending.HasValue) return;
             if (target is StorageGamepadButton.LeftTrigger or StorageGamepadButton.RightTrigger)
             {
@@ -488,14 +576,15 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
                     || !_triggerRestingPoints.TryGetValue(value.Control, out GamepadControlEvent restingPoint)) return;
                 int min = value.LogicalMinimum.Value;
                 int max = value.LogicalMaximum.Value;
-                int span = Math.Abs(max - min);
                 int resting = restingPoint.Value;
-                int delta = value.Value - resting;
+                if (max <= min || resting < min || resting > max || value.Value < min || value.Value > max) return;
+                long delta = (long)value.Value - resting;
                 if (delta == 0) return;
-                if (Math.Abs(delta) < Math.Ceiling(span * .55)) return;
                 bool increasing = delta > 0;
-                int activation = resting + (int)Math.Round(delta * .55);
-                int release = resting + (int)Math.Round(delta * .30);
+                long travel = increasing ? (long)max - resting : (long)resting - min;
+                if (travel <= 0 || Math.Abs(delta) < Math.Ceiling(travel * .55)) return;
+                int activation = (int)(resting + Math.Round(delta * .55));
+                int release = (int)(resting + Math.Round(delta * .30));
                 var binding = new StorageGamepadHidBinding(target, value.Control.UsagePage,
                     value.Control.Usage, value.Control.LinkCollection, value.Control.ElementIndex,
                     [], activation, release, increasing ? StorageGamepadAxisDirection.Increasing : StorageGamepadAxisDirection.Decreasing);
@@ -516,7 +605,9 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
             return;
         }
 
-        if (!_gamepadEnabled || value.IsBaseline || !_gamepads.TryGetValue(value.DeviceId, out Guid deviceId)
+        if (_calibrationRuntimeId.HasValue) return;
+
+        if (!_gamepadEnabled || !_gamepads.TryGetValue(value.DeviceId, out Guid deviceId)
             || _enabledGamepadId != deviceId) return;
         StorageGamepadConfiguration? configuration = _gamepadConfigurations.GetValueOrDefault(value.DeviceId)
             ?? _storage.GetGamepadConfiguration(deviceId);
@@ -534,7 +625,7 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
                     ? wasActive ? value.Value > binding.ReleaseThreshold : value.Value >= binding.ActivationThreshold
                     : wasActive ? value.Value < binding.ReleaseThreshold : value.Value <= binding.ActivationThreshold;
             _gamepadActive[key] = isActive;
-            if (!wasActive && isActive)
+            if (!value.IsBaseline && !wasActive && isActive)
                 _storage.WriteGamepadPress(new StorageGamepadPress(deviceId, binding.Button, value.Timestamp, _calibrationSessionId));
         }
     }
@@ -577,6 +668,7 @@ internal sealed class AppStorageCoordinator : IInputEventSink, IRawDeviceIdentit
         _triggerRestingPoints.Clear();
         _triggerRestingConfirmed = false;
         _calibrationInterrupted = interrupted;
+        _automaticCalibration = null;
     }
 
     private Guid Resolve(RuntimeDeviceId runtimeId, StorageDeviceKind kind)

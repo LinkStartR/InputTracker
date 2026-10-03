@@ -83,6 +83,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
         string? storageStartupError = null;
         DashboardViewModel? dashboard = null;
         bool gamepadAutoStart = false;
+        bool gamepadAutoDetect = false;
         if (directory.IsWritable && collectionConsentGranted)
         {
             try
@@ -92,10 +93,13 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                 Guid calibrationSession = Guid.NewGuid();
                 _storage.Start(TimeCalibrationSegment.Capture(calibrationSession, SystemStorageClock.Instance));
                 PortableSettings gamepadSettings = _settings!.Load();
+                IReadOnlyList<StorageDeviceInfo> knownDevices = _storage.ListDevices();
+                gamepadAutoDetect = GamepadStartupPolicy.ShouldAutoDetect(
+                    gamepadSettings, knownDevices, _storage.GetGamepadConfiguration);
                 _storageCoordinator = new AppStorageCoordinator(
                     new StorageServiceWriter(_storage), calibrationSession, _settings);
                 gamepadAutoStart = GamepadStartupPolicy.ShouldAutoStart(
-                    gamepadSettings, _storage.ListDevices(), _storage.GetGamepadConfiguration);
+                    gamepadSettings, knownDevices, _storage.GetGamepadConfiguration);
                 _storageCoordinator.InitializeGamepadCapture(gamepadAutoStart);
                 _storageCoordinator.EnsureReady();
                 _capture = new InputCaptureService(
@@ -174,7 +178,7 @@ public partial class App : System.Windows.Application, IAppOfflineRestoreRuntime
                     return;
                 }
 
-                if (gamepadAutoStart)
+                if (gamepadAutoStart || gamepadAutoDetect)
                     await _capture.SetGamepadCaptureEnabledAsync(true);
                 await _capture.StartAsync();
             }

@@ -160,7 +160,7 @@ public sealed class UiPresentationTests
         Assert.Contains("暂不授权", gamepadActions, StringComparison.Ordinal);
         Assert.Contains("保存校准", gamepadActions, StringComparison.Ordinal);
         Assert.Contains("启用统计", gamepadActions, StringComparison.Ordinal);
-        Assert.Equal(4, CountOccurrences(gamepadActions, "new GamepadConfirmationWindow("));
+        Assert.Equal(6, CountOccurrences(gamepadActions, "new GamepadConfirmationWindow("));
         Assert.DoesNotContain("MessageBox", gamepadActions, StringComparison.Ordinal);
     }
 

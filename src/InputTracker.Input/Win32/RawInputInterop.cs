@@ -168,6 +168,13 @@ internal static class RawInputInterop
         internal ushort Usage;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NativeRawInputDeviceList
+    {
+        internal nint DeviceHandle;
+        internal uint Type;
+    }
+
     [StructLayout(LayoutKind.Explicit, Size = 64)]
     internal struct HidpCaps
     {
@@ -243,6 +250,12 @@ internal static class RawInputInterop
         nint data,
         ref uint size,
         uint headerSize);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern uint GetRawInputDeviceList(
+        nint devices,
+        ref uint deviceCount,
+        uint deviceSize);
 
     [DllImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", SetLastError = true, CharSet = CharSet.Unicode)]
     internal static extern uint GetRawInputDeviceName(

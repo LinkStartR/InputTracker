@@ -1100,7 +1100,7 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <ComboBox x:Name="GamepadDeviceSelector"
-                                                      DisplayMemberPath="DisplayName" SelectedValuePath="InterfacePath"
+                                                      DisplayMemberPath="DisplayName" SelectedValuePath="RuntimeId"
                                                       IsEnabled="False" />
                                             <Button x:Name="GamepadDetectDevicesButton" Grid.Column="1"
                                                     MinWidth="84" Margin="6,0,0,0" Content="检测设备"
@@ -1267,6 +1267,10 @@
                                                     Margin="0,0,8,0" Content="启用统计" IsEnabled="False" />
                                             <Button x:Name="GamepadSkipButton" MinWidth="96"
                                                     Content="此键不支持" IsEnabled="False" />
+                                            <Button x:Name="GamepadManualCalibrationButton"
+                                                    Style="{StaticResource SoftButtonStyle}"
+                                                    MinWidth="132" Margin="8,0,0,0"
+                                                    Content="手动确认当前键" Visibility="Collapsed" IsEnabled="False" />
                                         </WrapPanel>
                                     </Grid>
                                 </StackPanel>

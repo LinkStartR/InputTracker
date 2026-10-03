@@ -23,10 +23,18 @@ public partial class MainWindow : Window
     private readonly PortableSettingsStore? _settings;
     private readonly KeyboardLayoutModel _keyboardLayout = KeyboardLayoutModel.CreateDefault();
     private readonly DispatcherTimer _dashboardRefreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private readonly DispatcherTimer _gamepadCalibrationRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
     private bool _dashboardRefreshInProgress;
     private bool _dashboardRefreshPending;
     private bool _updatingDeviceSelectors;
     private bool _deviceAliasChangeInProgress;
+    private bool _updatingGamepadUi;
+    private bool _userSelectedGamepadThisRun;
+    private bool _gamepadAutomaticCalibrationTickInFlight;
+    private bool _gamepadCalibrationUiClosed;
+    private GamepadBrand? _pendingGamepadBrand;
+    private RuntimeDeviceId? _gamepadCalibrationRuntimeId;
+    private Guid? _gamepadPreferenceDeviceId;
 
     internal MainWindow(
         CollectionController collection,
@@ -53,12 +61,15 @@ public partial class MainWindow : Window
         GamepadBrandSelector.SelectedIndex = -1;
         GamepadLayoutSelector.ItemsSource = new[] { "Xbox 布局" };
         GamepadLayoutSelector.SelectedIndex = -1;
+        RestoreRememberedGamepadPreferences(
+            settings?.Load().GamepadDeviceId ?? FindRememberedGamepadDeviceId());
         GamepadDetectDevicesButton.Click += GamepadDetectDevicesButton_Click;
         GamepadCheckButtonsButton.Click += GamepadCheckButtonsButton_Click;
         GamepadSkipButton.Click += GamepadSkipButton_Click;
+        GamepadManualCalibrationButton.Click += GamepadManualCalibrationButton_Click;
         GamepadEnableStatsButton.Click += GamepadEnableStatsButton_Click;
-        GamepadDeviceSelector.SelectionChanged += (_, _) => RefreshGamepadUi();
-        GamepadBrandSelector.SelectionChanged += (_, _) => RefreshGamepadUi();
+        GamepadDeviceSelector.SelectionChanged += GamepadDeviceSelector_SelectionChanged;
+        GamepadBrandSelector.SelectionChanged += GamepadBrandSelector_SelectionChanged;
         GamepadLayoutSelector.SelectionChanged += (_, _) => RefreshGamepadUi();
         DeletionKindSelector.SelectionChanged += DeletionKindSelector_SelectionChanged;
         UpdateDeletionDeviceSelectorVisibility();
@@ -67,6 +78,7 @@ public partial class MainWindow : Window
         DeletionDateRangePicker.SetRange(today, today, today);
         _collection.Changed += Collection_Changed;
         _dashboardRefreshTimer.Tick += DashboardRefreshTimer_Tick;
+        _gamepadCalibrationRefreshTimer.Tick += GamepadAutomaticCalibrationRefreshTimer_Tick;
         IsVisibleChanged += MainWindow_IsVisibleChanged;
         Closed += MainWindow_Closed;
         KeyboardHeatmapPresentation emptyHeatmap = KeyboardHeatmapPresentation.Create(_keyboardLayout, []);
@@ -567,6 +579,54 @@ public partial class MainWindow : Window
         if (_gamepadCoordinator is null || SelectedGamepad is not { } device) return;
         try
         {
+            if (_gamepadCoordinator.IsGamepadAutomaticCalibration)
+            {
+                if (_gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation)
+                {
+                    if (!_gamepadCoordinator.ConfirmGamepadTriggerRestingPoint())
+                    {
+                        GamepadStatusText.Text = "尚未检测到扳机轴状态。请松开当前扳机并操作一次手柄，再确认松开值。";
+                        return;
+                    }
+                    RefreshGamepadUi(automaticCalibrationProgressOnly: true);
+                    return;
+                }
+
+                if (_gamepadCoordinator.CurrentCalibrationTarget is null)
+                {
+                    bool confirmation = new GamepadConfirmationWindow(
+                        "确认保存手柄校准",
+                        $"已识别 {_gamepadCoordinator.GamepadCalibrationBindings.Count} 个按键映射。保存后，统计会按这组映射写入本机数据。请确认设备和 Xbox 布局选择正确。",
+                        "保存校准",
+                        "返回检查") { Owner = this }.ShowDialog() == true;
+                    if (!confirmation) return;
+                    _gamepadCalibrationRefreshTimer.Stop();
+                    _gamepadCoordinator.SaveGamepadCalibration(device.RuntimeId);
+                    _gamepadCalibrationRuntimeId = null;
+                    if (device.PersistentDeviceId is Guid selectedDeviceId)
+                        _settings?.SetGamepadConfiguration(enabled: false, deviceId: selectedDeviceId);
+                    SaveSelectedGamepadBrand(device);
+                    GamepadStatusText.Text = "校准已保存；统计仍保持停用。";
+                    RefreshGamepadUi();
+                    return;
+                }
+
+                bool cancel = new GamepadConfirmationWindow(
+                    "取消自动检测",
+                    "本次尚未保存的按键映射会被丢弃，原有校准配置会保留。",
+                    "取消检测",
+                    "继续检测") { Owner = this }.ShowDialog() == true;
+                if (cancel)
+                {
+                    _gamepadCalibrationRefreshTimer.Stop();
+                    _gamepadCoordinator.CancelGamepadCalibration();
+                    _gamepadCalibrationRuntimeId = null;
+                    GamepadStatusText.Text = "自动检测已取消；已保存的校准配置仍保留。";
+                    RefreshGamepadUi();
+                }
+                return;
+            }
+
             if (_gamepadCoordinator.IsGamepadCalibrating)
             {
                 if (_gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation)
@@ -599,18 +659,31 @@ public partial class MainWindow : Window
                     "返回检查") { Owner = this }.ShowDialog() == true;
                 if (!confirmation) return;
                 _gamepadCoordinator.SaveGamepadCalibration(device.RuntimeId);
+                _gamepadCalibrationRuntimeId = null;
+                if (device.PersistentDeviceId is Guid selectedDeviceId)
+                    _settings?.SetGamepadConfiguration(enabled: false, deviceId: selectedDeviceId);
+                SaveSelectedGamepadBrand(device);
                 GamepadStatusText.Text = "校准已保存；尚未启用统计。";
             }
             else
             {
+                StorageGamepadConfiguration? previous = _gamepadCoordinator.GetGamepadConfiguration(device.RuntimeId);
+                if (_gamepadCoordinator.HasEnabledGamepad || previous?.Enabled == true)
+                    throw new InvalidOperationException("请先停用当前统计，再重新检测手柄按键。");
+                if (GamepadLayoutSelector.SelectedItem is null)
+                    throw new InvalidOperationException("请先选择 Xbox 布局。");
+                if ((previous is null || previous.Bindings.Count == 0) && SelectedGamepadBrand is null)
+                    throw new InvalidOperationException("首次检测前请先选择品牌。");
                 bool start = new GamepadConfirmationWindow(
-                    "开始逐键校准",
-                    "请按屏幕提示依次操作面键、方向键、肩键、系统键、摇杆按下和扳机。校准扳机时先松开并确认松开值，再完全按下；不支持的按键可以跳过。校准完成并确认保存前不会累计次数。",
-                    "开始校准",
+                    "自动检测手柄按键",
+                    "请按屏幕提示依次按下并松开手柄按键。识别成功后会自动进入下一项；不支持的按键可以跳过。扳机可能需要先确认松开值。完成后统一确认保存，本次保存前不会累计次数。",
+                    "开始检测",
                     "稍后再说") { Owner = this }.ShowDialog() == true;
                 if (!start) return;
-                _gamepadCoordinator.BeginGamepadCalibration(device.RuntimeId, StorageGamepadButton.South);
-                GamepadStatusText.Text = "请按提示操作；不支持的按键可跳过。";
+                _gamepadCoordinator.BeginGamepadAutomaticCalibration(device.RuntimeId);
+                _gamepadCalibrationRuntimeId = device.RuntimeId;
+                _gamepadCalibrationRefreshTimer.Start();
+                GamepadStatusText.Text = "请按提示按下并松开按键；检测会自动推进。";
             }
             RefreshGamepadUi();
         }
@@ -626,6 +699,15 @@ public partial class MainWindow : Window
             _gamepadCoordinator.RetryGamepadCalibrationTarget();
         else
             _gamepadCoordinator?.SkipGamepadCalibrationTarget();
+        RefreshGamepadUi(_gamepadCoordinator?.IsGamepadAutomaticCalibration == true);
+    }
+
+    private void GamepadManualCalibrationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gamepadCoordinator?.IsGamepadAutomaticCalibration != true) return;
+        _gamepadCoordinator.SwitchGamepadCalibrationToManual();
+        _gamepadCalibrationRefreshTimer.Stop();
+        GamepadStatusText.Text = "已切换为手动确认当前按键；请按提示操作并确认识别结果。";
         RefreshGamepadUi();
     }
 
@@ -641,8 +723,7 @@ public partial class MainWindow : Window
             {
                 if (_gamepadCoordinator.IsGamepadCalibrating || previous is null || previous.Bindings.Count == 0)
                     throw new InvalidOperationException("请先完成并保存至少一个按键映射，再启用统计。");
-                if (GamepadBrandSelector.SelectedItem is not string brand)
-                    throw new InvalidOperationException("请选择 Xbox 或其他品牌/第三方手柄。");
+                string brand = GamepadBrandSelector.SelectedItem as string ?? "品牌未记录";
                 bool final = new GamepadConfirmationWindow(
                     "确认启用手柄统计",
                     $"将开始统计“{device.DisplayName}”（{brand}，Xbox 布局）中已校准按键的按下次数，并保存在本机。再次点击可停用；修改校准会使用新的配置版本。",
@@ -652,7 +733,8 @@ public partial class MainWindow : Window
             }
             _gamepadCoordinator.SetGamepadEnabled(device.RuntimeId, enable);
             configurationChanged = true;
-            bool captureEnabled = _gamepadCoordinator.HasEnabledGamepad;
+            if (enable) SaveSelectedGamepadBrand(device);
+            bool captureEnabled = _settings.Load().GamepadConsentGranted;
             await _capture.SetGamepadCaptureEnabledAsync(captureEnabled);
             GamepadStatusText.Text = enable ? "手柄统计已启用。" : "手柄统计已停用。";
             RefreshGamepadUi();
@@ -664,7 +746,7 @@ public partial class MainWindow : Window
                 try
                 {
                     _gamepadCoordinator.SetGamepadEnabled(device.RuntimeId, previous?.Enabled == true);
-                    await _capture.SetGamepadCaptureEnabledAsync(_gamepadCoordinator.HasEnabledGamepad);
+                    await _capture.SetGamepadCaptureEnabledAsync(_settings.Load().GamepadConsentGranted);
                 }
                 catch { }
             }
@@ -674,70 +756,236 @@ public partial class MainWindow : Window
 
     private GamepadDeviceChoice? SelectedGamepad => GamepadDeviceSelector.SelectedItem as GamepadDeviceChoice;
 
+    private void GamepadDeviceSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingGamepadUi) return;
+        if (_gamepadCalibrationRuntimeId is RuntimeDeviceId calibrationDevice
+            && SelectedGamepad?.RuntimeId != calibrationDevice)
+        {
+            _gamepadCalibrationRefreshTimer.Stop();
+            _gamepadCoordinator?.CancelGamepadCalibration();
+            _gamepadCalibrationRuntimeId = null;
+            GamepadStatusText.Text = "所选手柄已变化，未保存的校准已取消。";
+        }
+        _userSelectedGamepadThisRun = true;
+        RestoreRememberedGamepadPreferences(SelectedGamepad?.PersistentDeviceId, keepPendingBrand: true);
+        RefreshGamepadUi();
+    }
+
+    private void GamepadBrandSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingGamepadUi) return;
+        GamepadBrand? brand = SelectedGamepadBrand;
+        if (SelectedGamepad is { PersistentDeviceId: Guid deviceId } && brand is GamepadBrand selectedBrand)
+        {
+            if (_settings?.Load().GamepadConsentGranted == true)
+                _settings.SetGamepadBrand(deviceId, selectedBrand);
+            _pendingGamepadBrand = null;
+        }
+        else
+        {
+            _pendingGamepadBrand = brand;
+        }
+
+        RefreshGamepadUi();
+    }
+
+    private GamepadBrand? SelectedGamepadBrand => GamepadBrandSelector.SelectedItem switch
+    {
+        "Xbox" => GamepadBrand.Xbox,
+        "其他品牌 / 第三方" => GamepadBrand.ThirdParty,
+        _ => null
+    };
+
+    private void SaveSelectedGamepadBrand(GamepadDeviceChoice device)
+    {
+        if (device.PersistentDeviceId is not Guid deviceId || SelectedGamepadBrand is not GamepadBrand brand
+            || _settings?.Load().GamepadConsentGranted != true)
+            return;
+
+        _settings.SetGamepadBrand(deviceId, brand);
+        _pendingGamepadBrand = null;
+    }
+
+    private void RestoreRememberedGamepadPreferences(Guid? deviceId, bool keepPendingBrand = false)
+    {
+        if (_settings is null) return;
+        deviceId ??= FindRememberedGamepadDeviceId();
+        GamepadBrand? brand = deviceId is Guid id ? _settings.GetGamepadBrand(id) : null;
+        if (brand is not null) _pendingGamepadBrand = null;
+        else if (!keepPendingBrand) _pendingGamepadBrand = null;
+        brand ??= _pendingGamepadBrand;
+        bool wasUpdatingGamepadUi = _updatingGamepadUi;
+        _updatingGamepadUi = true;
+        try
+        {
+            GamepadBrandSelector.SelectedItem = brand switch
+            {
+                GamepadBrand.Xbox => "Xbox",
+                GamepadBrand.ThirdParty => "其他品牌 / 第三方",
+                _ => null
+            };
+            StorageGamepadConfiguration? configuration = deviceId is Guid storedId
+                ? _storage?.GetGamepadConfiguration(storedId)
+                : null;
+            if (configuration?.Layout == StorageGamepadLayout.Xbox)
+                GamepadLayoutSelector.SelectedIndex = 0;
+            else if (GamepadDeviceSelection.ShouldClearUnrememberedLayout(
+                         _gamepadPreferenceDeviceId, deviceId, configuration?.Layout))
+                GamepadLayoutSelector.SelectedIndex = -1;
+            _gamepadPreferenceDeviceId = deviceId;
+        }
+        finally
+        {
+            _updatingGamepadUi = wasUpdatingGamepadUi;
+        }
+    }
+
+    private Guid? FindRememberedGamepadDeviceId()
+    {
+        if (_storage is null) return null;
+        Guid? preferredDeviceId = _settings?.Load().GamepadDeviceId;
+        IReadOnlyList<StorageDeviceInfo> devices = _storage.ListDevices()
+            .Where(device => device.Kind == StorageDeviceKind.Gamepad)
+            .OrderBy(device => device.CreatedUtcMicroseconds)
+            .ThenBy(device => device.DeviceId)
+            .ToArray();
+        if (preferredDeviceId is Guid preferred
+            && _storage.GetGamepadConfiguration(preferred) is { Bindings.Count: > 0 })
+            return preferred;
+
+        return devices.FirstOrDefault(device =>
+            _storage.GetGamepadConfiguration(device.DeviceId) is { Bindings.Count: > 0 })?.DeviceId;
+    }
+
     private void RefreshGamepadUi()
+        => RefreshGamepadUi(automaticCalibrationProgressOnly: false);
+
+    private void RefreshGamepadUi(bool automaticCalibrationProgressOnly)
     {
         if (_gamepadCoordinator is null || _settings is null) return;
-        bool consented = _settings.Load().GamepadConsentGranted;
+        if (_updatingGamepadUi) return;
+        bool progressOnly = automaticCalibrationProgressOnly || _gamepadCoordinator.IsGamepadAutomaticCalibration;
+        _updatingGamepadUi = true;
+        try
+        {
+            RefreshGamepadUiCore(progressOnly);
+        }
+        finally
+        {
+            _updatingGamepadUi = false;
+        }
+    }
+
+    private void RefreshGamepadUiCore(bool automaticCalibrationProgressOnly)
+    {
+        AppStorageCoordinator gamepadCoordinator = _gamepadCoordinator!;
+        if (automaticCalibrationProgressOnly)
+        {
+            RefreshGamepadCalibrationProgress(gamepadCoordinator);
+            return;
+        }
+
+        PortableSettingsStore settingsStore = _settings!;
+        bool consented = settingsStore.Load().GamepadConsentGranted;
         GamepadBrandSelector.IsEnabled = _capture is not null;
         GamepadLayoutSelector.IsEnabled = _capture is not null;
-        GamepadDeviceSelector.IsEnabled = consented && !_gamepadCoordinator.IsGamepadCalibrating;
+        GamepadDeviceSelector.IsEnabled = consented && !gamepadCoordinator.IsGamepadCalibrating;
         GamepadDetectDevicesButton.IsEnabled = _capture is not null
             && GamepadBrandSelector.SelectedItem is string && GamepadLayoutSelector.SelectedItem is not null;
         GamepadCheckButtonsButton.IsEnabled = consented && SelectedGamepad is not null;
-        GamepadSkipButton.IsEnabled = consented && _gamepadCoordinator.IsGamepadCalibrating
-            && _gamepadCoordinator.CurrentCalibrationTarget is not null;
-        GamepadSkipButton.Content = _gamepadCoordinator.HasGamepadCalibrationCandidate ? "重新操作" : "此键不支持";
+        GamepadSkipButton.IsEnabled = consented && gamepadCoordinator.IsGamepadCalibrating
+            && gamepadCoordinator.CurrentCalibrationTarget is not null;
+        GamepadSkipButton.Content = gamepadCoordinator.HasGamepadCalibrationCandidate ? "重新操作" : "此键不支持";
         StorageGamepadConfiguration? selectedConfiguration = SelectedGamepad is { } selectedChoice
-            ? _gamepadCoordinator.GetGamepadConfiguration(selectedChoice.RuntimeId) : null;
+            ? gamepadCoordinator.GetGamepadConfiguration(selectedChoice.RuntimeId) : null;
         GamepadEnableStatsButton.IsEnabled = consented && SelectedGamepad is not null
-            && !_gamepadCoordinator.IsGamepadCalibrating
+            && !gamepadCoordinator.IsGamepadCalibrating
             && (selectedConfiguration is { Bindings.Count: > 0 } || selectedConfiguration is { Enabled: true });
-        GamepadDeviceChoice[] devices = _gamepadCoordinator.GamepadDevices
-            .Select((device, index) => new GamepadDeviceChoice(device,
-                $"手柄 {index + 1}",
-                _gamepadCoordinator.GetGamepadStorageId(device.RuntimeId)))
+        IReadOnlyDictionary<Guid, string> labels = _storage is null
+            ? new Dictionary<Guid, string>()
+            : GamepadDeviceLabels.Create(_storage.ListDevices());
+        GamepadDeviceChoice[] devices = gamepadCoordinator.GamepadDevices
+            .Select(device =>
+            {
+                Guid? persistentDeviceId = gamepadCoordinator.GetGamepadStorageId(device.RuntimeId);
+                string displayName = persistentDeviceId is Guid id && labels.TryGetValue(id, out string? label)
+                    ? label : "待识别手柄";
+                return new GamepadDeviceChoice(device, displayName, persistentDeviceId);
+            })
             .ToArray();
-        Guid? preferredDeviceId = _settings.Load().GamepadDeviceId;
-        string? selectedPath = SelectedGamepad?.InterfacePath
-            ?? devices.FirstOrDefault(device => device.PersistentDeviceId == preferredDeviceId)?.InterfacePath;
+        Guid? preferredDeviceId = settingsStore.Load().GamepadDeviceId;
+        RuntimeDeviceId? selectedRuntimeId = GamepadDeviceSelection.SelectRuntimeId(
+            devices.Select(device => (device.RuntimeId, device.PersistentDeviceId)).ToArray(),
+            preferredDeviceId,
+            SelectedGamepad?.RuntimeId,
+            _userSelectedGamepadThisRun);
         if (!GamepadDeviceSelector.Items.Cast<GamepadDeviceChoice>().SequenceEqual(devices))
             GamepadDeviceSelector.ItemsSource = devices;
-        GamepadDeviceSelector.SelectedValue = devices.Any(device => device.InterfacePath == selectedPath)
-            ? selectedPath : devices.FirstOrDefault()?.InterfacePath;
+        GamepadDeviceSelector.SelectedValue = selectedRuntimeId;
+        GamepadDeviceChoice? selectedDevice = SelectedGamepad;
+        if (selectedDevice?.PersistentDeviceId is Guid selectedStorageId)
+            RestoreRememberedGamepadPreferences(selectedStorageId, keepPendingBrand: true);
         if (SelectedGamepad is not { } gamepad)
         {
-            GamepadEnabledStatusText.Text = consented ? "等待检测设备" : "尚未授权";
-            GamepadCalibrationStatusText.Text = _gamepadCoordinator.GamepadCalibrationInterrupted
-                ? "连接中断，请重新选择设备并校准" : "尚未校准";
+            Guid? rememberedId = FindRememberedGamepadDeviceId();
+            StorageGamepadConfiguration? rememberedConfiguration = rememberedId is Guid id
+                ? _storage?.GetGamepadConfiguration(id) : null;
+            string rememberedLabel = rememberedId is Guid remembered
+                && labels.TryGetValue(remembered, out string? savedLabel) ? savedLabel : "上次手柄";
+            bool hasRestoredCalibration = rememberedConfiguration is { Bindings.Count: > 0, Layout: StorageGamepadLayout.Xbox };
+            bool rememberedCaptureEnabled = rememberedConfiguration?.Enabled == true
+                && settingsStore.Load().GamepadCaptureEnabled;
+            GamepadEnabledStatusText.Text = !consented ? "尚未授权"
+                : hasRestoredCalibration
+                    ? $"已恢复配置 · {(rememberedCaptureEnabled ? "统计已启用" : "统计已停用，配置已保留")} · 等待上次手柄连接"
+                    : "等待检测设备";
+            GamepadCalibrationStatusText.Text = hasRestoredCalibration
+                ? $"已恢复 Xbox 布局校准 {rememberedConfiguration!.Bindings.Count} 键"
+            : gamepadCoordinator.GamepadCalibrationInterrupted ? "连接中断，请重新选择设备并校准" : "尚未校准";
             GamepadHeatmapItems.ItemsSource = GamepadLayoutModel.CreateXboxLayout();
-            SetGamepadHighlights([], "连接手柄并完成按键校准后，这里会显示真实按键次数。");
-            if (consented && devices.Length == 0)
-                GamepadStatusText.Text = "请按一下手柄任意键使设备出现在列表中。设备名仅在本次运行中使用匿名序号显示。";
+            SetGamepadHighlights([], hasRestoredCalibration
+                ? $"已记住“{rememberedLabel}”的 Xbox 布局配置；连接并操作该手柄后会自动恢复。"
+                : "连接手柄并完成按键校准后，这里会显示真实按键次数。");
+            if (consented && hasRestoredCalibration)
+                GamepadStatusText.Text = $"已恢复“{rememberedLabel}”的校准配置；{(rememberedCaptureEnabled ? "统计已启用" : "上次已停用，本次不会自动启用统计")}。等待该手柄连接；如未出现在列表中，可按一下唤醒。";
+            else if (consented && devices.Length == 0)
+                GamepadStatusText.Text = "请连接手柄；如设备未出现在列表中，可按一下唤醒。";
             return;
         }
-        StorageGamepadConfiguration? config = _gamepadCoordinator.GetGamepadConfiguration(gamepad.RuntimeId);
-        string deviceStatus = _gamepadCoordinator.GetGamepadStatus(gamepad.RuntimeId) ?? "已连接";
-        GamepadEnabledStatusText.Text = $"{deviceStatus} · {(config?.Enabled == true ? "统计已启用" : "统计已停用")}";
-        bool globallyEnabled = _gamepadCoordinator.IsGamepadEnabled(gamepad.RuntimeId);
+        StorageGamepadConfiguration? config = gamepadCoordinator.GetGamepadConfiguration(gamepad.RuntimeId);
+        string deviceStatus = gamepadCoordinator.GetGamepadStatus(gamepad.RuntimeId) ?? "已连接";
+        bool restoredConfiguration = config is { Bindings.Count: > 0, Layout: StorageGamepadLayout.Xbox }
+            && settingsStore.Load().GamepadDeviceId == gamepadCoordinator.GetGamepadStorageId(gamepad.RuntimeId);
+        GamepadEnabledStatusText.Text = $"{deviceStatus} · {(restoredConfiguration ? "已恢复配置 · " : string.Empty)}{(config?.Enabled == true ? "统计已启用" : "统计已停用")}";
+        bool globallyEnabled = gamepadCoordinator.IsGamepadEnabled(gamepad.RuntimeId);
         GamepadEnableStatsButton.Content = globallyEnabled ? "停用统计" : "启用统计";
-        StorageGamepadButton? target = _gamepadCoordinator.CurrentCalibrationTarget;
-        GamepadCalibrationStatusText.Text = _gamepadCoordinator.GamepadCalibrationInterrupted
+        StorageGamepadButton? target = gamepadCoordinator.CurrentCalibrationTarget;
+        GamepadCalibrationStatusText.Text = gamepadCoordinator.GamepadCalibrationInterrupted
             ? "连接中断，请重新校准"
-            : _gamepadCoordinator.IsGamepadCalibrating
-            ? _gamepadCoordinator.HasGamepadCalibrationCandidate
+            : gamepadCoordinator.IsGamepadCalibrating
+            ? gamepadCoordinator.HasGamepadCalibrationCandidate
                 ? $"已识别：{GetGamepadButtonLabel(target!.Value)}，请确认或重试"
-                : target is null ? "可保存校准" : _gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation
+                : target is null ? "可保存校准" : gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation
                     ? $"请松开并确认：{GetGamepadButtonLabel(target.Value)}" : $"请操作：{GetGamepadButtonLabel(target.Value)}"
-            : config is null ? "尚未校准" : $"已校准 {config.Bindings.Count} 键";
-        GamepadCheckButtonsButton.Content = _gamepadCoordinator.IsGamepadCalibrating && target is null
-            ? "确认并保存" : _gamepadCoordinator.HasGamepadCalibrationCandidate ? "确认此键"
-            : _gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation ? "确认扳机松开值"
-            : _gamepadCoordinator.IsGamepadCalibrating ? "校准中" : "检查按键";
+            : config is null ? "尚未校准" : restoredConfiguration
+                ? $"已恢复 Xbox 布局校准 {config.Bindings.Count} 键"
+                : $"已校准 {config.Bindings.Count} 键";
+        GamepadCheckButtonsButton.Content = gamepadCoordinator.IsGamepadAutomaticCalibration
+            ? target is null ? "确认并保存"
+                : gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation ? "确认扳机松开值" : "取消自动检测"
+            : gamepadCoordinator.IsGamepadCalibrating && target is null
+                ? "确认并保存" : gamepadCoordinator.HasGamepadCalibrationCandidate ? "确认此键"
+                : gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation ? "确认扳机松开值"
+                : gamepadCoordinator.IsGamepadCalibrating ? "校准中" : "自动检测按键";
+        GamepadManualCalibrationButton.Visibility = gamepadCoordinator.IsGamepadAutomaticCalibration
+            ? Visibility.Visible : Visibility.Collapsed;
+        GamepadManualCalibrationButton.IsEnabled = gamepadCoordinator.IsGamepadAutomaticCalibration;
         IReadOnlySet<GamepadPhysicalPosition>? support = config is null
             ? null
             : config.Bindings.Select(binding => ToPhysicalPosition(binding.Button)).ToHashSet();
         Dictionary<GamepadPhysicalPosition, long> counts = [];
-        Guid? storageId = _gamepadCoordinator.GetGamepadStorageId(gamepad.RuntimeId);
+        Guid? storageId = gamepadCoordinator.GetGamepadStorageId(gamepad.RuntimeId);
         bool countsRead = false;
         if (config is not null && _storage is not null && storageId is Guid deviceId)
         {
@@ -763,6 +1011,29 @@ public partial class MainWindow : Window
             ? "完成逐键校准后，这里会显示真实按键次数。"
             : countsRead ? "所选时间范围内暂无按键记录。" : "暂时无法读取当前手柄的真实次数。";
         SetGamepadHighlights(highlights, emptyMessage);
+    }
+
+    private void RefreshGamepadCalibrationProgress(AppStorageCoordinator gamepadCoordinator)
+    {
+        if (!gamepadCoordinator.IsGamepadAutomaticCalibration) return;
+        StorageGamepadButton? target = gamepadCoordinator.CurrentCalibrationTarget;
+        bool awaitingRestingPoint = gamepadCoordinator.IsGamepadTriggerAwaitingRestingConfirmation;
+        GamepadCalibrationStatusText.Text = awaitingRestingPoint
+            ? $"请松开并确认：{GetGamepadButtonLabel(target!.Value)}"
+            : target is null ? "全部按键已检测，可统一保存校准"
+            : gamepadCoordinator.HasGamepadCalibrationCandidate
+                ? $"已识别：{GetGamepadButtonLabel(target.Value)}，请松开手柄"
+                : $"请按下并松开：{GetGamepadButtonLabel(target.Value)}";
+        GamepadCheckButtonsButton.Content = target is null ? "确认并保存"
+            : awaitingRestingPoint ? "确认扳机松开值" : "取消自动检测";
+        GamepadManualCalibrationButton.Visibility = Visibility.Visible;
+        GamepadManualCalibrationButton.IsEnabled = true;
+        GamepadSkipButton.Content = gamepadCoordinator.HasGamepadCalibrationCandidate ? "重新操作" : "此键不支持";
+        GamepadSkipButton.IsEnabled = target is not null;
+        GamepadStatusText.Text = gamepadCoordinator.GamepadAutomaticCalibrationFeedback
+            ?? (awaitingRestingPoint ? "请松开当前扳机并确认松开值。"
+                : target is null ? "所有支持的按键已识别；确认后统一保存。"
+                : $"请按下并松开{GetGamepadButtonLabel(target.Value)}，识别后会自动进入下一项。");
     }
 
     private void SetGamepadHighlights(IReadOnlyCollection<GamepadHeatmapPosition> highlights, string emptyMessage)
@@ -816,7 +1087,6 @@ public partial class MainWindow : Window
 
     private sealed record GamepadDeviceChoice(InputDeviceDescriptor Descriptor, string DisplayName, Guid? PersistentDeviceId)
     {
-        public string? InterfacePath => Descriptor.InterfacePath;
         public RuntimeDeviceId RuntimeId => Descriptor.RuntimeId;
     }
 
@@ -824,6 +1094,12 @@ public partial class MainWindow : Window
     {
         _dashboardRefreshTimer.Stop();
         _dashboardRefreshTimer.Tick -= DashboardRefreshTimer_Tick;
+        _gamepadCalibrationRefreshTimer.Stop();
+        _gamepadCalibrationRefreshTimer.Tick -= GamepadAutomaticCalibrationRefreshTimer_Tick;
+        _gamepadCalibrationUiClosed = true;
+        if (_gamepadCoordinator?.IsGamepadCalibrating == true)
+            _gamepadCoordinator.CancelGamepadCalibration();
+        _gamepadCalibrationRuntimeId = null;
         IsVisibleChanged -= MainWindow_IsVisibleChanged;
         _collection.Changed -= Collection_Changed;
     }
@@ -843,6 +1119,78 @@ public partial class MainWindow : Window
 
     private async void DashboardRefreshTimer_Tick(object? sender, EventArgs e) =>
         await RefreshDashboardAsync();
+
+    private async void GamepadAutomaticCalibrationRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_gamepadCoordinator is null || !_gamepadCoordinator.IsGamepadAutomaticCalibration)
+        {
+            _gamepadCalibrationRefreshTimer.Stop();
+            if (_gamepadCoordinator?.IsGamepadCalibrating != true)
+                _gamepadCalibrationRuntimeId = null;
+            RefreshGamepadUi();
+            return;
+        }
+
+        if (_gamepadAutomaticCalibrationTickInFlight) return;
+        if (_gamepadCalibrationUiClosed || _capture is null)
+        {
+            _gamepadCalibrationRefreshTimer.Stop();
+            _gamepadCoordinator.CancelGamepadCalibration();
+            _gamepadCalibrationRuntimeId = null;
+            RefreshGamepadUi();
+            return;
+        }
+        if (_settings?.Load().GamepadConsentGranted != true)
+        {
+            _gamepadCalibrationRefreshTimer.Stop();
+            _gamepadCoordinator.CancelGamepadCalibration();
+            _gamepadCalibrationRuntimeId = null;
+            try { await _capture.SetGamepadCaptureEnabledAsync(false); }
+            catch { }
+            RefreshGamepadUi();
+            return;
+        }
+
+        _gamepadAutomaticCalibrationTickInFlight = true;
+        try
+        {
+            await _capture.SetGamepadCaptureEnabledAsync(true);
+            if (_gamepadCalibrationUiClosed || !_gamepadCalibrationRefreshTimer.IsEnabled
+                || !_gamepadCoordinator.IsGamepadAutomaticCalibration)
+                return;
+            if (_settings.Load().GamepadConsentGranted != true)
+            {
+                _gamepadCalibrationRefreshTimer.Stop();
+                _gamepadCoordinator.CancelGamepadCalibration();
+                _gamepadCalibrationRuntimeId = null;
+                await _capture.SetGamepadCaptureEnabledAsync(false);
+                RefreshGamepadUi();
+                return;
+            }
+
+            _gamepadCoordinator.UpdateGamepadAutomaticCalibration();
+            if (_gamepadCoordinator.IsGamepadAutomaticCalibration)
+                RefreshGamepadUi(automaticCalibrationProgressOnly: true);
+            else
+            {
+                _gamepadCalibrationRefreshTimer.Stop();
+                _gamepadCalibrationRuntimeId = null;
+                RefreshGamepadUi();
+            }
+        }
+        catch
+        {
+            _gamepadCalibrationRefreshTimer.Stop();
+            _gamepadCoordinator.CancelGamepadCalibration();
+            _gamepadCalibrationRuntimeId = null;
+            GamepadStatusText.Text = "自动检测已停止；采集状态发生变化，请检查设备后重新检测。";
+            RefreshGamepadUi();
+        }
+        finally
+        {
+            _gamepadAutomaticCalibrationTickInFlight = false;
+        }
+    }
 
     private async void RefreshDashboardButton_Click(object sender, RoutedEventArgs e) =>
         await RefreshDashboardAsync();
