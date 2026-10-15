@@ -29,18 +29,18 @@ internal sealed record UiThemePalette(
 internal static class UiThemeCatalog
 {
     public static UiThemePalette Light { get; } = new(
-        "#FFF4F6FB", "#FFFFFFFF", "#FFF0F3F8", "#FF18212F", "#FF647084",
-        "#FFDDE3EC", "#FF087C85", "#FFE4F5F3", "#FFFFFFFF", "#FF0C5A64",
-        "#FF526078", "#FFE2F4F2", "#FFFFFFFF",
-        ["#FFE2E8F0", "#FFDBEAFE", "#FF93C5FD", "#FF3B82F6", "#FF1D4ED8", "#FF172554"],
+        "#FFF4F8F7", "#FFFFFFFF", "#FFEEF6F3", "#FF18332F", "#FF5B7068",
+        "#FFDCE8E3", "#FF087F75", "#FFE4F4EF", "#FFFFFFFF", "#FF075F57",
+        "#FF5B7068", "#FFE4F4EF", "#FFFFFFFF",
+        ["#FFE3EDEA", "#FFCFE6E0", "#FF8FC9BE", "#FF37AC9C", "#FF146B5F", "#FF0A3A34"],
         ["#FF0F172A", "#FF0F172A", "#FF0F172A", "#FF0F172A", "#FFFFFFFF", "#FFFFFFFF"]);
 
     public static UiThemePalette Dark { get; } = new(
-        "#FF0A0F1C", "#FF111827", "#FF182235", "#FFF8FAFC", "#FFA8B3C7",
-        "#FF26334A", "#FF46D5C8", "#FF15373C", "#FF070B14", "#FFF8FAFC",
-        "#FF94A3B8", "#FF173C41", "#FF0A0F1C",
-        ["#FF1E293B", "#FF1E3A5F", "#FF1D4ED8", "#FF2563EB", "#FF60A5FA", "#FFBFDBFE"],
-        ["#FFF8FAFC", "#FFF8FAFC", "#FFFFFFFF", "#FFFFFFFF", "#FF0F172A", "#FF0F172A"]);
+        "#FF101C1A", "#FF182824", "#FF1C3029", "#FFEAF4EF", "#FFADC2B8",
+        "#FF2C433B", "#FF5BD0B5", "#FF203D34", "#FF0B1614", "#FFF2FBF7",
+        "#FF9FB5AC", "#FF1D3A33", "#FF08201B",
+        ["#FF1F3A35", "#FF25544A", "#FF2A7263", "#FF43A08C", "#FF5BD0B5", "#FFA8EDD9"],
+        ["#FFF8FAFC", "#FFF8FAFC", "#FFF8FAFC", "#FF0F172A", "#FF0F172A", "#FF0F172A"]);
 }
 
 internal static class UiThemeController
