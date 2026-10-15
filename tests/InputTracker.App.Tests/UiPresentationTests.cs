@@ -412,6 +412,20 @@ public sealed class UiPresentationTests
         }
     }
 
+    [Fact]
+    public void InteractiveTemplatesExposeAnExplicitTwoPixelKeyboardFocusRing()
+    {
+        string windowXaml = LoadXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+        string pickerXaml = LoadXaml("DateRangePicker.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("TargetName=\"CaptionButtonBackground\" Property=\"BorderThickness\" Value=\"2\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("TargetName=\"NavigationChrome\" Property=\"BorderThickness\" Value=\"2\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("TargetName=\"ExpanderHeaderChrome\" Property=\"BorderThickness\" Value=\"2\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("TargetName=\"ComboBoxFocusRing\" Property=\"BorderThickness\" Value=\"2\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"IsKeyboardFocusWithin\" Value=\"True\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("TargetName=\"Chrome\" Property=\"BorderThickness\" Value=\"2\"", pickerXaml, StringComparison.Ordinal);
+    }
+
     private static XDocument LoadXaml(string fileName) =>
         XDocument.Load(Path.Combine(FindRepositoryRoot(), "src", "InputTracker.App", fileName));
 

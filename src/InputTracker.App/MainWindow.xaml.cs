@@ -256,9 +256,14 @@ public partial class MainWindow : Window
     {
         if (_startup is null)
         {
-            StartupStatusText.Text = "当前无法设置开机启动。";
+            EnableStartupButton.IsEnabled = false;
+            DisableStartupButton.IsEnabled = false;
+            StartupStatusText.Text = "当前无法设置开机启动：这台电脑上没有可用的 Startup 文件夹，程序不会创建或删除任何快捷方式。";
             return;
         }
+
+        EnableStartupButton.IsEnabled = true;
+        DisableStartupButton.IsEnabled = true;
 
         try
         {

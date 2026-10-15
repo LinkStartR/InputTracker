@@ -129,6 +129,10 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="CaptionButtonBackground" Property="Opacity" Value="0.7" />
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="CaptionButtonBackground" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="CaptionButtonBackground" Property="BorderThickness" Value="2" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -144,6 +148,12 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CaretBrush" Value="{DynamicResource PrimaryTextBrush}" />
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="ComboBox">
@@ -226,10 +236,19 @@
                                     </ScrollViewer>
                                 </Border>
                             </Popup>
+                            <Border x:Name="ComboBoxFocusRing"
+                                    BorderThickness="0"
+                                    BorderBrush="Transparent"
+                                    CornerRadius="11"
+                                    IsHitTestVisible="False" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="DropDownToggle" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ComboBoxFocusRing" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="ComboBoxFocusRing" Property="BorderThickness" Value="2" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -362,6 +381,7 @@
                                             </Trigger>
                                             <Trigger Property="IsKeyboardFocused" Value="True">
                                                 <Setter TargetName="ExpanderHeaderChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                                <Setter TargetName="ExpanderHeaderChrome" Property="BorderThickness" Value="2" />
                                             </Trigger>
                                             <Trigger Property="IsEnabled" Value="False">
                                                 <Setter TargetName="ExpanderHeaderChrome" Property="Opacity" Value="0.5" />
@@ -438,6 +458,10 @@
                             <Trigger Property="Tag" Value="DataTools"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE74E;" /></Trigger>
                             <Trigger Property="Tag" Value="Settings"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE713;" /></Trigger>
                             <Trigger Property="Tag" Value="Privacy"><Setter TargetName="NavigationGlyph" Property="Text" Value="&#xE72E;" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="NavigationChrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="NavigationChrome" Property="BorderThickness" Value="2" />
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="NavigationChrome" Property="Opacity" Value="0.45" />
                             </Trigger>
@@ -1401,8 +1425,8 @@
                                                    Foreground="{DynamicResource SecondaryTextBrush}" />
                                     </StackPanel>
                                     <WrapPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource PrimaryButtonStyle}" Click="EnableStartupButton_Click" Content="启用开机启动" />
-                                        <Button Click="DisableStartupButton_Click" Content="关闭开机启动" />
+                                        <Button x:Name="EnableStartupButton" Style="{StaticResource PrimaryButtonStyle}" Click="EnableStartupButton_Click" Content="启用开机启动" />
+                                        <Button x:Name="DisableStartupButton" Click="DisableStartupButton_Click" Content="关闭开机启动" />
                                     </WrapPanel>
                                 </Grid>
                             </Border>

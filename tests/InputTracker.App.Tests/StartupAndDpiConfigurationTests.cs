@@ -29,6 +29,20 @@ public sealed class StartupAndDpiConfigurationTests
         Assert.Equal("false", (string?)runtimeOption.Attribute("Value"));
     }
 
+    [Fact]
+    public void StartupButtonsAreDisabledAndExplainedWhenNoStartupFolderIsAvailable()
+    {
+        string root = FindRepositoryRoot();
+        string code = File.ReadAllText(Path.Combine(root, "src", "InputTracker.App", "MainWindow.xaml.cs"));
+        string xaml = File.ReadAllText(Path.Combine(root, "src", "InputTracker.App", "MainWindow.xaml"));
+
+        Assert.Contains("x:Name=\"EnableStartupButton\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DisableStartupButton\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("EnableStartupButton.IsEnabled = false;", code, StringComparison.Ordinal);
+        Assert.Contains("DisableStartupButton.IsEnabled = false;", code, StringComparison.Ordinal);
+        Assert.Contains("没有可用的 Startup 文件夹", code, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
