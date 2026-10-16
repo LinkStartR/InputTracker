@@ -1,7 +1,47 @@
+using InputTracker.Input.Win32;
+
 namespace InputTracker.Input.Tests;
 
 public sealed class InputCaptureServiceTests
 {
+    [Fact]
+    public async Task PrivateIdentityObserverFlowsThroughServiceOncePerArrivalGeneration()
+    {
+        var factory = new FakeHostFactory();
+        var observer = new RecordingIdentityObserver();
+        var provider = new IdentityProvider();
+        await using var service = new InputCaptureService(
+            new CountingSink(),
+            options: null,
+            factory,
+            provider,
+            observer);
+        await service.StartAsync();
+        nint handle = new(71);
+
+        Assert.True(factory.Host.Inject(Mouse(handle, 1)));
+        Assert.True(factory.Host.Inject(Mouse(handle, 2)));
+        Assert.True(factory.Host.Inject(new InputIngressEvent(
+            IngressEventKind.DeviceRemoved,
+            handle,
+            3,
+            DeviceKind: RawDeviceKind.Mouse)));
+        Assert.True(factory.Host.Inject(Mouse(handle, 4)));
+
+        await service.StopAsync();
+
+        Assert.Equal(2, provider.QueryCount);
+        Assert.Equal(2, observer.Items.Count);
+        Assert.NotEqual(observer.Items[0].RuntimeId, observer.Items[1].RuntimeId);
+        Assert.All(observer.Items, item => Assert.Equal("PRIVATE-SERIAL", item.Identity.SerialNumber));
+        Assert.False(typeof(IRawDeviceIdentityObserver).IsPublic);
+        Assert.False(typeof(RawDeviceIdentityObservation).IsPublic);
+        Assert.DoesNotContain(
+            typeof(InputCaptureService).GetConstructors(),
+            constructor => constructor.GetParameters().Any(parameter =>
+                parameter.ParameterType == typeof(IRawDeviceIdentityObserver)));
+    }
+
     [Fact]
     public async Task NativeHostRegistersPausesResumesAndStopsWithoutHardwareMock()
     {
@@ -27,6 +67,32 @@ public sealed class InputCaptureServiceTests
         Assert.False(service.Diagnostics.RawInputRegistered);
         Assert.Equal(2, service.Diagnostics.SuccessfulRegistrations);
         Assert.Equal(2, service.Diagnostics.SuccessfulUnregistrations);
+    }
+
+    [Fact]
+    public async Task GamepadCaptureIsOptInAndRemainsDisabledAcrossPauseUntilEnabled()
+    {
+        var factory = new FakeHostFactory();
+        await using var service = new InputCaptureService(new CountingSink(), null, factory);
+
+        await service.StartAsync();
+        Assert.False(factory.Host.GamepadCaptureEnabled);
+        Assert.False(factory.Host.GamepadRegistered);
+
+        await service.SetGamepadCaptureEnabledAsync(true);
+        Assert.True(factory.Host.GamepadCaptureEnabled);
+        Assert.True(factory.Host.GamepadRegistered);
+
+        await service.SetPauseReasonAsync(PauseReason.User, true);
+        Assert.False(factory.Host.GamepadRegistered);
+        Assert.True(factory.Host.GamepadCaptureEnabled);
+
+        await service.SetPauseReasonAsync(PauseReason.User, false);
+        Assert.True(factory.Host.GamepadRegistered);
+        await service.SetGamepadCaptureEnabledAsync(false);
+        Assert.False(factory.Host.GamepadCaptureEnabled);
+        Assert.False(factory.Host.GamepadRegistered);
+        await service.StopAsync();
     }
 
     [Fact]
@@ -186,8 +252,10 @@ public sealed class InputCaptureServiceTests
         Assert.False(service.Diagnostics.RawInputRegistered);
     }
 
-    private static InputIngressEvent Mouse(long timestamp) =>
-        new(IngressEventKind.Mouse, 0, timestamp, DeltaX: 1, DeltaY: -1);
+    private static InputIngressEvent Mouse(long timestamp) => Mouse(0, timestamp);
+
+    private static InputIngressEvent Mouse(nint handle, long timestamp) =>
+        new(IngressEventKind.Mouse, handle, timestamp, DeltaX: 1, DeltaY: -1);
 
     private sealed class CountingSink : IInputEventSink
     {
@@ -221,6 +289,45 @@ public sealed class InputCaptureServiceTests
                 : ValueTask.CompletedTask;
     }
 
+    private sealed class RecordingIdentityObserver : IRawDeviceIdentityObserver
+    {
+        public List<(RuntimeDeviceId RuntimeId, RawDeviceIdentityObservation Identity)> Items { get; } = [];
+
+        public ValueTask ObserveAsync(
+            RuntimeDeviceId runtimeId,
+            RawDeviceIdentityObservation identity,
+            CancellationToken cancellationToken)
+        {
+            Items.Add((runtimeId, identity));
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class IdentityProvider : IRawDeviceInfoProvider
+    {
+        public int QueryCount { get; private set; }
+
+        public RawDeviceMetadata Query(nint deviceHandle, RawDeviceKind hintedKind)
+        {
+            QueryCount++;
+            return new RawDeviceMetadata(
+                hintedKind,
+                InterfacePath: null,
+                HardwareSummary: "mouse",
+                DeviceIdentityConfidence.RequiresConfirmation,
+                new RawDeviceIdentityObservation(
+                    hintedKind,
+                    "PRIVATE-INTERFACE",
+                    ["HID\\PRIVATE-HARDWARE-ID"],
+                    "PRIVATE-SERIAL",
+                    Guid.NewGuid(),
+                    DeviceTransportAssessment.Physical,
+                    DeviceIdentityEvidence.RawInputInterfacePath |
+                    DeviceIdentityEvidence.DevNodeHardwareIds |
+                    DeviceIdentityEvidence.ContainerId));
+        }
+    }
+
     private sealed class FakeHostFactory : IRawInputHostFactory
     {
         public FakeHost Host { get; private set; } = null!;
@@ -244,6 +351,8 @@ public sealed class InputCaptureServiceTests
         private bool _registered;
 
         public bool IngressOpen { get; private set; }
+        public bool GamepadCaptureEnabled { get; private set; }
+        public bool GamepadRegistered { get; private set; }
         public bool Destroyed { get; private set; }
         public bool StopBarrierCompleted { get; private set; }
         public bool StopAfterFaultCalled { get; private set; }
@@ -276,8 +385,27 @@ public sealed class InputCaptureServiceTests
         public ValueTask ResumeAsync(CancellationToken cancellationToken)
         {
             Register();
+            GamepadRegistered = GamepadCaptureEnabled;
             IngressOpen = true;
             return ValueTask.CompletedTask;
+        }
+
+        public async ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken)
+        {
+            GamepadCaptureEnabled = enabled;
+            GamepadRegistered = _registered && enabled;
+            var barrier = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!queue.TryWrite(new InputIngressEvent(
+                    IngressEventKind.GamepadBarrier,
+                    0,
+                    1,
+                    GamepadCaptureEnabled: enabled,
+                    Barrier: barrier)))
+            {
+                throw new InvalidOperationException("test gamepad barrier overflow");
+            }
+
+            await barrier.Task.WaitAsync(cancellationToken);
         }
 
         public async ValueTask PrepareStopAsync(bool enqueueBarrier, CancellationToken cancellationToken)
@@ -357,6 +485,7 @@ public sealed class InputCaptureServiceTests
             }
 
             _registered = true;
+            GamepadRegistered = GamepadCaptureEnabled;
             onRegistrationChanged(true);
         }
 
@@ -368,6 +497,7 @@ public sealed class InputCaptureServiceTests
             }
 
             _registered = false;
+            GamepadRegistered = false;
             onRegistrationChanged(false);
         }
     }

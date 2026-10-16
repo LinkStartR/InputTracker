@@ -1,11 +1,15 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('Bootstrap', 'InputCore')]
+    [ValidateSet('Bootstrap', 'InputCore', 'Storage', 'Portable')]
     [string]$Stage = 'Bootstrap',
 
     [string]$InjectedDataPath,
 
-    [switch]$InjectInputCoreOutOfOrder
+    [switch]$InjectInputCoreOutOfOrder,
+
+    [switch]$InjectStorageChunkCorruption,
+
+    [switch]$InjectStorageAggregateMismatch
 )
 
 Set-StrictMode -Version Latest
@@ -50,6 +54,9 @@ $script:evidence = [ordered]@{
     gates = @()
     testSummary = $null
     inputCore = $null
+    storage = $null
+    portable = $null
+    offlineRestore = $null
     error = $null
 }
 
@@ -128,23 +135,54 @@ function Invoke-CheckedCommand {
     )
 
     $script:commandNumber++
+    $invokeStep = 'prepare'
+    try {
     $stdoutPath = Join-Path $evidenceDirectory ('{0:D2}-{1}.stdout.log' -f $script:commandNumber, $Name)
     $stderrPath = Join-Path $evidenceDirectory ('{0:D2}-{1}.stderr.log' -f $script:commandNumber, $Name)
     $startedAt = Get-Date
-    $startParameters = @{
-        FilePath = $FilePath
-        ArgumentList = ConvertTo-ArgumentString -Arguments $Arguments
-        WorkingDirectory = $repositoryRoot
-        NoNewWindow = $true
-        Wait = $true
-        PassThru = $true
-        RedirectStandardOutput = $stdoutPath
-        RedirectStandardError = $stderrPath
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $invokeStep = 'start-info'
+    $startInfo.FileName = $FilePath
+    $startInfo.WorkingDirectory = $repositoryRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Arguments = ConvertTo-ArgumentString -Arguments $Arguments
+    $invokeStep = 'normalize-environment'
+    $normalizedEnvironment = [Collections.Generic.Dictionary[string, string]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    $currentEnvironment = [Environment]::GetEnvironmentVariables('Process')
+    foreach ($rawName in $currentEnvironment.Keys) {
+        $environmentVariableName = [string]$rawName
+        if ([string]::IsNullOrEmpty($environmentVariableName) -or
+            [string]::Equals($environmentVariableName, 'Path', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        $normalizedEnvironment[$environmentVariableName] = [string]$currentEnvironment[$rawName]
     }
-    $process = Start-Process @startParameters
+    $processPath = [Environment]::GetEnvironmentVariable('Path', 'Process')
+    if (-not [string]::IsNullOrEmpty($processPath)) {
+        $normalizedEnvironment['Path'] = $processPath
+    }
+    $invokeStep = 'apply-environment'
+    $processEnvironment = $startInfo.Environment
+    if ($null -eq $processEnvironment) { $processEnvironment = $startInfo.Environment }
+    if ($null -eq $processEnvironment) { throw 'ProcessStartInfo.Environment unavailable.' }
+    $processEnvironment.Clear()
+    foreach ($environmentName in $normalizedEnvironment.Keys) {
+        if ([string]::IsNullOrEmpty($environmentName)) { continue }
+        $environmentValue = $normalizedEnvironment[$environmentName]
+        $processEnvironment[$environmentName] = $(if ($null -eq $environmentValue) { '' } else { $environmentValue })
+    }
+    $invokeStep = 'start-process'
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw "$Name 无法启动。" }
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    Set-Content -LiteralPath $stdoutPath -Value $stdout -Encoding UTF8 -NoNewline
+    Set-Content -LiteralPath $stderrPath -Value $stderr -Encoding UTF8 -NoNewline
     $finishedAt = Get-Date
-    $stdout = if (Test-Path -LiteralPath $stdoutPath) { Get-Content -LiteralPath $stdoutPath -Raw -Encoding UTF8 } else { '' }
-    $stderr = if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath -Raw -Encoding UTF8 } else { '' }
 
     $script:evidence.commands = @($script:evidence.commands) + @([ordered]@{
         name = $Name
@@ -172,8 +210,13 @@ function Invoke-CheckedCommand {
 
     return [pscustomobject]@{
         ExitCode = $process.ExitCode
+        ProcessId = $process.Id
         Stdout = $stdout
         Stderr = $stderr
+    }
+    }
+    catch {
+        throw "$Name 在 $invokeStep 失败：$($_.Exception.Message)"
     }
 }
 
@@ -270,6 +313,48 @@ function Assert-InputCorePerformanceSchema {
     return $schema
 }
 
+function Assert-PassedTestContract {
+    param(
+        [Parameter(Mandatory)] [xml]$Trx,
+        [Parameter(Mandatory)] [string]$FullyQualifiedMethod,
+        [int]$MinimumPassed = 1
+    )
+
+    $results = @($Trx.SelectNodes("/*[local-name()='TestRun']/*[local-name()='Results']/*[local-name()='UnitTestResult']") |
+        Where-Object {
+            $name = [string]$_.testName
+            $name -eq $FullyQualifiedMethod -or $name.StartsWith($FullyQualifiedMethod + '(', [StringComparison]::Ordinal)
+        })
+    if ($results.Count -lt $MinimumPassed) {
+        throw "TRX 缺少精确测试契约或数量不足：$FullyQualifiedMethod，实际 $($results.Count)，至少 $MinimumPassed。"
+    }
+    $notPassed = @($results | Where-Object { [string]$_.outcome -ne 'Passed' })
+    if ($notPassed.Count -ne 0) {
+        throw "TRX 测试契约不是 Passed：$FullyQualifiedMethod。"
+    }
+}
+
+function Assert-TerminalEvidenceSchema {
+    param(
+        [Parameter(Mandatory)] [string]$SchemaPath,
+        [Parameter(Mandatory)] [string[]]$RequiredFields
+    )
+
+    if (-not (Test-Path -LiteralPath $SchemaPath -PathType Leaf)) {
+        throw "现场证据 schema 不存在：$SchemaPath"
+    }
+    $schema = Get-Content -LiteralPath $SchemaPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($field in $RequiredFields) {
+        if (@($schema.required) -notcontains $field) {
+            throw "现场证据 schema 缺少必填字段：$field"
+        }
+    }
+    if ($schema.properties.releaseEligible.const -ne $false) {
+        throw '当前阶段现场证据必须固定 releaseEligible=false。'
+    }
+    return $schema
+}
+
 function Get-ApplicationMutexName {
     param([Parameter(Mandatory)] [string]$ApplicationDirectory)
 
@@ -351,29 +436,73 @@ try {
         'inputcore-device-generation-isolation', 'inputcore-device-change-lifecycle',
         'inputcore-hardware-runbook-present', 'inputcore-performance-schema-present'
     )
+    $storageGateIds = @(
+        'storage-bootstrap-regression', 'storage-inputcore-regression',
+        'storage-period-timezone-dst', 'storage-export-csv-privacy', 'storage-export-png',
+        'storage-backup-restore', 'storage-backup-corruption-fail-closed',
+        'storage-active-owner-rejected', 'storage-restore-budget',
+        'storage-restore-journal-recovery', 'storage-migration-versioned',
+        'storage-privacy-schema-source-policy', 'storage-device-mapping-confidence',
+        'storage-no-trajectory-artifacts', 'deletion-preview-and-execution-blocked',
+        'storage-manual-terminal-status'
+    )
+    $portableGateIds = @(
+        'portable-storage-regression', 'portable-consent-fail-closed',
+        'portable-startup-exact-ownership', 'portable-lock-suspend-barrier',
+        'portable-session-ending-controlled', 'portable-terminal-status-not-run',
+        'offline-restore-public-facade', 'offline-restore-active-owner-fail-closed',
+        'offline-restore-abc-roundtrip', 'offline-restore-path-boundary',
+        'offline-restore-reparse-boundary', 'offline-restore-forged-layout-boundary',
+        'offline-restore-app-lifecycle-contract',
+        'offline-restore-published-disposable-self-check',
+        'offline-restore-manual-terminal-status'
+    )
+    $knownGateIds = @($bootstrapGateIds + $inputCoreGateIds + $storageGateIds + $portableGateIds)
+    foreach ($requiredGateId in $requiredGateIds) {
+        if ($knownGateIds -notcontains $requiredGateId) {
+            throw "验收基线引用了尚未实现的 gate：$requiredGateId"
+        }
+    }
     foreach ($gateId in $bootstrapGateIds) {
         if ($requiredGateIds -notcontains $gateId) {
             throw "验收基线缺少不可移除 gate：$gateId"
         }
     }
-    if ($Stage -eq 'InputCore') {
+    if ($Stage -in @('InputCore', 'Storage', 'Portable')) {
         foreach ($gateId in $inputCoreGateIds) {
             if ($requiredGateIds -notcontains $gateId) {
                 throw "InputCore 验收基线缺少不可移除 gate：$gateId"
             }
         }
     }
-    $requiredGateIdsForStage = if ($Stage -eq 'InputCore') {
-        @($bootstrapGateIds + $inputCoreGateIds)
+    $requiredGateIdsForStage = switch ($Stage) {
+        'InputCore' { @($bootstrapGateIds + $inputCoreGateIds) }
+        'Storage' { @($bootstrapGateIds + $inputCoreGateIds + $storageGateIds) }
+        'Portable' { @($bootstrapGateIds + $inputCoreGateIds + $storageGateIds + $portableGateIds) }
+        default { $bootstrapGateIds }
     }
-    else {
-        $bootstrapGateIds
+    $minimumGateCountForStage = $requiredGateIdsForStage.Count
+
+    if ($InjectInputCoreOutOfOrder -and $Stage -notin @('InputCore', 'Storage', 'Portable')) {
+        throw 'InputCore 反向注入只允许用于 InputCore/Storage/Portable 阶段。'
     }
-    $minimumGateCountForStage = if ($Stage -eq 'InputCore') {
-        [int]$baseline.minimumGateCount
+    $storageInjectionCount = @($InjectStorageChunkCorruption, $InjectStorageAggregateMismatch |
+        Where-Object { $_ }).Count
+    if ($storageInjectionCount -gt 1) {
+        throw 'Storage 两种反向注入互斥，一次只允许选择一种。'
     }
-    else {
-        $bootstrapGateIds.Count
+    if ($storageInjectionCount -ne 0 -and $Stage -notin @('Storage', 'Portable')) {
+        throw 'Storage 反向注入只允许用于 Storage/Portable 阶段。'
+    }
+    if ($Stage -in @('Storage', 'Portable')) {
+        $script:evidence.storage = [ordered]@{
+            injection = $(if ($InjectStorageChunkCorruption) { 'chunk-corruption' } elseif ($InjectStorageAggregateMismatch) { 'aggregate-mismatch' } else { 'none' })
+            hardwareTerminalStatus = 'not-run'
+            physicalPowerStatus = 'not-run'
+            deletionCapability = 'not-run'
+            releaseEligible = $false
+        }
+        Write-Evidence
     }
 
     foreach ($revision in @('HEAD', 'HEAD^')) {
@@ -445,7 +574,7 @@ try {
 
     $inputCoreEvidenceDirectory = Join-Path $evidenceDirectory 'input-core'
     $inputCoreEnvironment = @{}
-    if ($Stage -eq 'InputCore') {
+    if ($Stage -in @('InputCore', 'Storage', 'Portable')) {
         New-Item -ItemType Directory -Path $inputCoreEvidenceDirectory -Force | Out-Null
         foreach ($name in @('INPUTTRACKER_INPUTCORE_EVIDENCE_DIRECTORY', 'INPUTTRACKER_INPUTCORE_INJECTION')) {
             $inputCoreEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -455,6 +584,28 @@ try {
             'INPUTTRACKER_INPUTCORE_INJECTION',
             $(if ($InjectInputCoreOutOfOrder) { 'out-of-order' } else { $null }),
             'Process')
+    }
+    $storageEnvironment = @{}
+    if ($Stage -in @('Storage', 'Portable')) {
+        $name = 'INPUTTRACKER_STORAGE_INJECTION'
+        $storageEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        $storageInjection = if ($InjectStorageChunkCorruption) {
+            'chunk-corruption'
+        }
+        elseif ($InjectStorageAggregateMismatch) {
+            'aggregate-mismatch'
+        }
+        else {
+            $null
+        }
+        [Environment]::SetEnvironmentVariable($name, $storageInjection, 'Process')
+        $script:evidence.storage = [ordered]@{
+            injection = $(if ($null -eq $storageInjection) { 'none' } else { $storageInjection })
+            hardwareTerminalStatus = 'not-run'
+            physicalPowerStatus = 'not-run'
+            deletionCapability = 'not-run'
+            releaseEligible = $false
+        }
     }
     try {
         foreach ($testProject in $testProjects) {
@@ -470,12 +621,16 @@ try {
         foreach ($name in $inputCoreEnvironment.Keys) {
             [Environment]::SetEnvironmentVariable($name, $inputCoreEnvironment[$name], 'Process')
         }
+        foreach ($name in $storageEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $storageEnvironment[$name], 'Process')
+        }
     }
 
     $totalTests = 0
     $failedTests = 0
     $skippedTests = 0
     $acceptanceTests = 0
+    $trxDocuments = @{}
     foreach ($testProject in $testProjects) {
         $trxPath = Join-Path $trxDirectory "$($testProject.Name).trx"
         if (-not (Test-Path -LiteralPath $trxPath -PathType Leaf)) {
@@ -483,6 +638,7 @@ try {
         }
 
         [xml]$trx = Get-Content -LiteralPath $trxPath -Raw -Encoding UTF8
+        $trxDocuments[$testProject.Name] = $trx
         $counters = $trx.SelectSingleNode("/*[local-name()='TestRun']/*[local-name()='ResultSummary']/*[local-name()='Counters']")
         if ($null -eq $counters) {
             throw "TRX 缺少 Counters：$trxPath"
@@ -525,7 +681,7 @@ try {
     Add-Gate -Id 'tests-no-skip' -Details "total=$totalTests, failed=0, skipped=0"
     Add-Gate -Id 'acceptance-test-count' -Details "acceptance=$acceptanceTests"
 
-    if ($Stage -eq 'InputCore') {
+    if ($Stage -in @('InputCore', 'Storage', 'Portable')) {
         $pipeline = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'pipeline'
         $outOfOrder = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'out-of-order'
         $overflow = Get-InputCoreReport -Directory $inputCoreEvidenceDirectory -Name 'overflow'
@@ -628,6 +784,192 @@ try {
         }
     }
 
+    if ($Stage -in @('Storage', 'Portable')) {
+        [xml]$storageTrx = $trxDocuments['InputTracker.Storage.Tests']
+        [xml]$appTrx = $trxDocuments['InputTracker.App.Tests']
+        [xml]$acceptanceTrx = $trxDocuments['InputTracker.AcceptanceTests']
+        if ($null -eq $storageTrx -or $null -eq $appTrx -or $null -eq $acceptanceTrx) {
+            throw 'Storage 阶段缺少 Storage、App 或 Acceptance TRX。'
+        }
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.PeriodsAreExplicitHalfOpenWindowsRanges' 4
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.PacificDaysUseActualDstDuration' 2
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StoragePeriodResolverTests.ResolvesLocalHalfOpenPeriodBoundaries' 4
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StoragePeriodResolverTests.PacificDayUsesActualDstUtcDuration' 2
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StoragePeriodResolverTests.ChinaAndUtcUseExplicitWindowsZones'
+        Add-Gate -Id 'storage-period-timezone-dst' -Details 'day/week/month/year half-open boundaries plus Pacific 23h/25h, China and UTC passed'
+
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageExportTests.CsvUsesStablePrivacySafeColumnsAndEscapesDeviceAlias'
+        Add-Gate -Id 'storage-export-csv-privacy' -Details 'CSV stable privacy-safe columns and alias escaping passed'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageExportTests.PngIsDeterministicLosslessHeatmapWithRequestedDimensions'
+        Add-Gate -Id 'storage-export-png' -Details 'PNG deterministic lossless dimensions passed'
+
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.BackupAndRestoreRoundTripsCommittedDataAndCreatesPreRestoreBackup'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.BackupAndRestoreRoundTripsMouseButtonAggregatesWithoutTrajectoryFiles'
+        Add-Gate -Id 'storage-backup-restore' -Details 'keyboard and mouse committed data round-trip with pre-restore backup passed'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.CorruptBackupFailsClosedWithoutChangingLiveStore'
+        Add-Gate -Id 'storage-backup-corruption-fail-closed' -Details 'corrupt backup leaves live store unchanged'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.RestoreRejectsActiveStorageOwnerWithoutCreatingAutomaticBackup'
+        Add-Gate -Id 'storage-active-owner-rejected' -Details 'active storage owner prevents restore and automatic backup'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.RestoreBudgetRejectsEntryCountSingleTotalAndCompressionBombBoundaries'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.AggregateCompressionBombFailsPublicRestorePathBeforeLiveOrAutomaticBackupChanges'
+        Add-Gate -Id 'storage-restore-budget' -Details 'entry, aggregate and compression restore budgets fail closed'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.EveryStoreMoveFaultRestoresOriginalLiveStore' 12
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageBackupRestoreTests.NewStorageServiceOwnerRecoversJournalLeftBySimulatedProcessTermination'
+        Add-Gate -Id 'storage-restore-journal-recovery' -Details 'all move fault points rollback and a new owner recovers simulated termination journal'
+
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDatabaseTests.FutureSchemaVersionFailsClosed'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDatabaseTests.MigrationChecksumMismatchFailsClosed'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDatabaseTests.VersionOneDatabaseMigratesToCurrentVersionWithRecordedChecksums'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDatabaseTests.VersionTwoDatabaseMigratesToVersionThreeWithoutReplacingExistingTables'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDatabaseTests.VersionThreeDatabaseMigratesToVersionFourWithCompleteObjectsAndChecksum'
+        Add-Gate -Id 'storage-migration-versioned' -Details 'v1-v4 migrations, checksums and future-version fail-closed passed'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.PublicKeyboardStorageContractContainsNoTextOrApplicationIdentity'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageServicePrivacyTests.KeyboardIngestionSourcesExcludeForbiddenContentIdentifiers'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeviceCatalogTests.IdentityMappingsPersistOnlyFingerprintsWhileAliasRemainsVisibleMetadata'
+        Add-Gate -Id 'storage-privacy-schema-source-policy' -Details 'public keyboard schema and storage source/persistence privacy tests passed'
+
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeviceCatalogTests.StableHardwareAndAliasSurviveCloseReopenAndChangedInterface'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeviceCatalogTests.StableHardwareReinsertReusesPersistentGuidAndAliasAcrossInterfacePaths'
+        Add-Gate -Id 'storage-device-mapping-confidence' -Details 'persistent hardware remapping and alias survive close/reopen without raw identifiers'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Storage.StorageAcceptanceTests.MouseButtonsCreateNoTrajectoryArtifactsOrPublicPlaybackApi'
+        Add-Gate -Id 'storage-no-trajectory-artifacts' -Details 'mouse buttons persist without trajectory files or public playback APIs'
+
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.FullDayDeletionCreatesBackupAndRemovesOnlyTheSelectedDeviceRange'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.MouseButtonFullDayDeletionCreatesBackupAndKeepsOtherDeviceAndDate'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.CombinedDeletionUsesOneBackupAndOneAtomicKeyboardMouseCommit'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageDeletionPreviewTests.PartialDayAndMixedTimeZoneOverlapFailClosedWithoutCreatingBackup'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppStorageDataToolsTests.KeyboardDeletionRequiresUserPauseAndExecutesOnlyThePreparedConfirmedPreview'
+        Add-Gate -Id 'deletion-preview-and-execution-blocked' -Details 'complete local-day deletion requires user pause, fresh prepared preview, final confirmation and pre-deletion backup; partial or mixed-time-zone ranges fail closed'
+
+        $storageRunbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\storage-checklist.md'
+        $storageSchemaPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\storage-evidence.schema.json'
+        if (-not (Test-Path -LiteralPath $storageRunbookPath -PathType Leaf)) {
+            throw "Storage 现场验收清单不存在：$storageRunbookPath"
+        }
+        $null = Assert-TerminalEvidenceSchema $storageSchemaPath @(
+            'hardwareTerminalStatus', 'physicalPowerStatus', 'pipeline', 'diskGrowth',
+            'deletionCapability', 'releaseEligible')
+        Add-Gate -Id 'storage-manual-terminal-status' -Details 'hardware and physical-power terminal status remain not-run; releaseEligible=false'
+
+        $script:evidence.storage = [ordered]@{
+            injection = 'none'
+            hardwareTerminalStatus = 'not-run'
+            physicalPowerStatus = 'not-run'
+            deletionCapability = 'not-run'
+            releaseEligible = $false
+            runbook = Get-RelativePath -BasePath $repositoryRoot -Path $storageRunbookPath
+            evidenceSchema = Get-RelativePath -BasePath $repositoryRoot -Path $storageSchemaPath
+        }
+    }
+
+    if ($Stage -eq 'Portable') {
+        [xml]$appTrx = $trxDocuments['InputTracker.App.Tests']
+        [xml]$acceptanceTrx = $trxDocuments['InputTracker.AcceptanceTests']
+        if ($null -eq $appTrx -or $null -eq $acceptanceTrx) {
+            throw 'Portable 阶段缺少 App 或 Acceptance TRX。'
+        }
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.PortableContractAcceptanceTests.SettingsStayProgramLocalAndConsentFailsClosed'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.PortableSettingsTests.DeclinedConsentDoesNotWriteSettings'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.PortableSettingsTests.GrantedConsentIsPromptedOnceAndPersisted'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.PortableSettingsTests.MalformedOrFutureSettingsFailClosed'
+        Add-Gate -Id 'portable-consent-fail-closed' -Details 'program-local first-run consent persists only after grant and malformed/future data fails closed'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.PortableContractAcceptanceTests.StartupUsesOnlyExactOwnedShortcut'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.StartupShortcutManagerTests.EnableAndDisableAreExactAndIdempotent'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.StartupShortcutManagerTests.ForeignShortcutIsNeverOverwrittenOrDeleted'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.StartupShortcutManagerTests.SameTargetWithAnyForeignPropertyIsNeverOwned' 3
+        Add-Gate -Id 'portable-startup-exact-ownership' -Details 'only exact owned Startup shortcut is created/deleted; foreign shortcut is preserved'
+
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.PortablePauseControllerTests.UnlockDoesNotClearUserPause'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.PortablePauseControllerTests.SuspendAndLockReasonsAreIndependentlyRemoved'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.PortablePauseControllerTests.SynchronousDispatchDoesNotReturnBeforePauseBarrier'
+        Add-Gate -Id 'portable-lock-suspend-barrier' -Details 'user/session/suspend reasons remain independent and pause barrier is synchronous'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.PortableContractAcceptanceTests.LockSuspendAndSessionEndingHaveExplicitControlPaths'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.WindowClosePolicyTests.SessionEndingAllowsCloseWithoutHideSideEffect'
+        Add-Gate -Id 'portable-session-ending-controlled' -Details 'session ending allows controlled shutdown rather than tray hiding'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.StoragePublicSurfaceHasOneOfflineEntryAndNoFaultSeam'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.PublicSurfaceHasOneNarrowOfflineRestoreEntryPointWithoutFaultInjection'
+        Add-Gate -Id 'offline-restore-public-facade' -Details 'exactly one public RestoreOffline(StorageLayout,String) entry; no public fault seam'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.ActiveOwnerRejectsOfflineRestoreBeforeJournalOrAutomaticBackup'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.ActiveStorageOwnerFailsClosedWithoutAutomaticBackupOrJournal'
+        Add-Gate -Id 'offline-restore-active-owner-fail-closed' -Details 'active Storage owner rejects restore before journal or automatic backup'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.DisposableAtoBRestoreAndAutomaticBackupRoundTripExactly'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.DisposableStoresRoundTripBOverAThenAutomaticBackupRestoresAIntoC'
+        Add-Gate -Id 'offline-restore-abc-roundtrip' -Details 'disposable A/B/C reopen round-trip and automatic pre-restore backup are exact'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.RelativePathBoundaryRejectsEscapeAbsoluteWrongExtensionAndMissingFile'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.FacadeRejectsNonRelativeContainedBackupPath' 4
+        Add-Gate -Id 'offline-restore-path-boundary' -Details 'escape, absolute, wrong-extension and missing backup paths fail closed without external writes'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.JunctionBackupPathIsRejectedWithoutChangingExternalDirectory'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.FacadeRejectsBackupBehindDirectoryJunction'
+        Add-Gate -Id 'offline-restore-reparse-boundary' -Details 'directory junction backup is rejected and external directory snapshot is unchanged'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.ForgedLayoutIsRejectedBeforeWritingOutsideProgramDirectory'
+        Assert-PassedTestContract $storageTrx 'InputTracker.Storage.Tests.StorageOfflineRestoreTests.FacadeRejectsForgedLayoutWithoutWritingOutsideProgramDirectory'
+        Add-Gate -Id 'offline-restore-forged-layout-boundary' -Details 'forged StorageLayout fails before any external write'
+
+        Assert-PassedTestContract $acceptanceTrx 'InputTracker.AcceptanceTests.Portable.OfflineRestoreAcceptanceTests.AppSourceLocksUserConsentOrderTerminalStateAndSingleShutdownContract'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppStorageDataToolsTests.RestoreTransferRejectsUnsafeBoundaryWithoutClosingController' 6
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppStorageDataToolsTests.RestoreLeaseIsSingleUseAndPermanentlyBlocksOtherLifecycleOwners'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.HappyPathUsesExactOrderAndTerminatesOnce'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.TeardownFailurePreventsRestoreAndNeverRepeatsOwnerRelease' 7
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.RestoreFailureIsTerminalAndNeverReopensOwners' 2
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.OpenCaptureDiagnosticsProducesExplicitUncertainTerminalState'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.AppOfflineRestoreCoordinatorTests.RestoreLifecycleSuppressesNormalExitCleanupAndDeduplicatesShutdown'
+        Assert-PassedTestContract $appTrx 'InputTracker.App.Tests.CollectionControllerTests.OfflineRestoreStatesAreTerminalAndCannotPauseOrResume' 4
+        Add-Gate -Id 'offline-restore-app-lifecycle-contract' -Details 'User pause plus final confirmation, exact teardown, fail-closed diagnostics, terminal state and single shutdown passed'
+
+        $portableRunbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\portable-checklist.md'
+        $portableSchemaPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\portable-evidence.schema.json'
+        if (-not (Test-Path -LiteralPath $portableRunbookPath -PathType Leaf)) {
+            throw "Portable 现场验收清单不存在：$portableRunbookPath"
+        }
+        $null = Assert-TerminalEvidenceSchema $portableSchemaPath @(
+            'startupShortcutTerminalStatus', 'sessionLockSuspendTerminalStatus', 'hardwareTerminalStatus',
+            'visualTerminalStatus', 'runtimeNetworkStatus', 'releaseEligible')
+        Add-Gate -Id 'portable-terminal-status-not-run' -Details 'Startup/session/hardware/visual/network terminal checks remain not-run; releaseEligible=false'
+        $offlineRestoreRunbookPath = Join-Path $repositoryRoot 'tests\Acceptance\Manual\offline-restore-checklist.md'
+        if (-not (Test-Path -LiteralPath $offlineRestoreRunbookPath -PathType Leaf)) {
+            throw "离线恢复人工验收清单不存在：$offlineRestoreRunbookPath"
+        }
+        $offlineRestoreRunbook = Get-Content -LiteralPath $offlineRestoreRunbookPath -Raw -Encoding UTF8
+        foreach ($requiredText in @('not-run', 'releaseEligible=false', '全新可丢弃副本', '二次确认', '手动重启')) {
+            if ($offlineRestoreRunbook.IndexOf($requiredText, [StringComparison]::Ordinal) -lt 0) {
+                throw "离线恢复人工验收清单缺少不可省略字段：$requiredText"
+            }
+        }
+        Add-Gate -Id 'offline-restore-manual-terminal-status' -Details 'real WPF restore remains not-run and releaseEligible=false; disposable-copy runbook present'
+        $script:evidence.portable = [ordered]@{
+            startupShortcutTerminalStatus = 'not-run'
+            sessionLockSuspendTerminalStatus = 'not-run'
+            hardwareTerminalStatus = 'not-run'
+            visualTerminalStatus = 'not-run'
+            runtimeNetworkStatus = 'not-run'
+            releaseEligible = $false
+            runbook = Get-RelativePath -BasePath $repositoryRoot -Path $portableRunbookPath
+            evidenceSchema = Get-RelativePath -BasePath $repositoryRoot -Path $portableSchemaPath
+        }
+        $script:evidence.offlineRestore = [ordered]@{
+            acceptanceStoreRoot = '.tools\acceptance'
+            publicFacade = 'StorageOfflineRestore.RestoreOffline(StorageLayout,String)'
+            activeOwnerFailClosed = $true
+            disposableRoundTrip = 'A-to-B; automatic-A-to-C'
+            appLifecycleContract = 'passed-automated'
+            publishedDisposableSelfCheck = 'pending'
+            manualTerminalStatus = 'not-run'
+            releaseEligible = $false
+            runbook = Get-RelativePath -BasePath $repositoryRoot -Path $offlineRestoreRunbookPath
+        }
+    }
+
     $null = Invoke-CheckedCommand -Name 'publish' -FilePath $dotnetPath -Arguments @(
         'publish', (Join-Path $repositoryRoot 'src\InputTracker.App\InputTracker.App.csproj'),
         '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '--no-restore',
@@ -673,6 +1015,29 @@ try {
     try {
         $null = Invoke-CheckedCommand -Name 'published-self-check' -FilePath $publishedExecutable -Arguments @('--self-check')
         Add-Gate -Id 'unicode-space-self-check' -Details '发布产物从中文和空格目录自检退出码 0。'
+
+        if ($Stage -eq 'Portable') {
+            $offlineRestoreSmokeDirectory = Join-Path $toolsRoot "acceptance\offline restore published\$timestamp\中文 空格副本"
+            New-Item -ItemType Directory -Path $offlineRestoreSmokeDirectory -Force | Out-Null
+            Get-ChildItem -LiteralPath $publishDirectory -Force | Copy-Item -Destination $offlineRestoreSmokeDirectory -Recurse -Force
+            $offlineRestoreSmokeExecutable = Join-Path $offlineRestoreSmokeDirectory 'InputTracker.exe'
+            $offlineRestoreSmokeBefore = Get-DirectoryState -Path $offlineRestoreSmokeDirectory
+            $offlineRestoreSmokeResult = Invoke-CheckedCommand -Name 'offline-restore-disposable-self-check' -FilePath $offlineRestoreSmokeExecutable -Arguments @('--self-check')
+            $offlineRestoreSmokeAfter = Get-DirectoryState -Path $offlineRestoreSmokeDirectory
+            if (@(Compare-Object -ReferenceObject $offlineRestoreSmokeBefore -DifferenceObject $offlineRestoreSmokeAfter).Count -ne 0) {
+                throw '离线恢复发布副本 self-check 产生或修改了数据。'
+            }
+            if (Test-Path -LiteralPath (Join-Path $offlineRestoreSmokeDirectory 'data')) {
+                throw '离线恢复发布副本 self-check 创建了 data 目录。'
+            }
+            if ($null -ne (Get-Process -Id $offlineRestoreSmokeResult.ProcessId -ErrorAction SilentlyContinue)) {
+                throw "离线恢复发布副本 self-check 留下进程：$($offlineRestoreSmokeResult.ProcessId)"
+            }
+            Add-Gate -Id 'offline-restore-published-disposable-self-check' -Details 'published Unicode-space disposable copy self-check exited 0 with no data changes or residual process'
+            $script:evidence.offlineRestore.publishedDisposableSelfCheck = 'passed-no-data-no-residual-process'
+            $script:evidence.offlineRestore.publishedDisposablePath = Get-RelativePath -BasePath $repositoryRoot -Path $offlineRestoreSmokeDirectory
+            Write-Evidence
+        }
 
         $outsideAfterSelfCheck = Get-DirectoryState -Path $runtimeOutsideRoot
         $outsideDifference = @(Compare-Object -ReferenceObject $outsideBefore -DifferenceObject $outsideAfterSelfCheck)
@@ -723,7 +1088,7 @@ try {
         }
     }
 
-    if ($Stage -eq 'InputCore') {
+    if ($Stage -in @('InputCore', 'Storage', 'Portable')) {
         $passedGateIdsBeforeRegression = @($script:evidence.gates | Where-Object { $_.passed } | ForEach-Object { [string]$_.id })
         foreach ($gateId in $bootstrapGateIds) {
             if ($passedGateIdsBeforeRegression -notcontains $gateId) {
@@ -731,6 +1096,32 @@ try {
             }
         }
         Add-Gate -Id 'inputcore-bootstrap-regression' -Details 'all Bootstrap gates passed before InputCore result is accepted'
+    }
+
+    if ($Stage -in @('Storage', 'Portable')) {
+        $passedGateIdsBeforeStorageRegression = @($script:evidence.gates | Where-Object { $_.passed } | ForEach-Object { [string]$_.id })
+        foreach ($gateId in $bootstrapGateIds) {
+            if ($passedGateIdsBeforeStorageRegression -notcontains $gateId) {
+                throw "Storage 不允许绕过 Bootstrap gate：$gateId"
+            }
+        }
+        foreach ($gateId in $inputCoreGateIds) {
+            if ($passedGateIdsBeforeStorageRegression -notcontains $gateId) {
+                throw "Storage 不允许绕过 InputCore gate：$gateId"
+            }
+        }
+        Add-Gate -Id 'storage-bootstrap-regression' -Details 'all Bootstrap gates passed before Storage result is accepted'
+        Add-Gate -Id 'storage-inputcore-regression' -Details 'all InputCore gates passed before Storage result is accepted'
+    }
+
+    if ($Stage -eq 'Portable') {
+        $passedGateIdsBeforePortableRegression = @($script:evidence.gates | Where-Object { $_.passed } | ForEach-Object { [string]$_.id })
+        foreach ($gateId in $storageGateIds) {
+            if ($passedGateIdsBeforePortableRegression -notcontains $gateId) {
+                throw "Portable 不允许绕过 Storage gate：$gateId"
+            }
+        }
+        Add-Gate -Id 'portable-storage-regression' -Details 'all Storage gates passed before Portable result is accepted'
     }
 
     $passedGateIds = @($script:evidence.gates | Where-Object { $_.passed } | ForEach-Object { [string]$_.id })

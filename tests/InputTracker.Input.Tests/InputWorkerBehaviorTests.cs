@@ -40,7 +40,7 @@ public sealed class InputWorkerBehaviorTests
         Assert.Equal(CapturedInputKind.DeviceChange, arrival.Kind);
         Assert.Equal(DeviceChangeKind.Arrived, arrival.DeviceChange.Change);
         Assert.Equal(timestamp, arrival.DeviceChange.Timestamp);
-        Assert.Equal($"path-{handle}", arrival.DeviceChange.Device.InterfacePath);
+        Assert.Null(arrival.DeviceChange.Device.InterfacePath);
         Assert.Equal("test", arrival.DeviceChange.Device.HardwareSummary);
         Assert.False(run.IsCompleted);
 
@@ -214,6 +214,167 @@ public sealed class InputWorkerBehaviorTests
             item.Boundary.Boundary == AggregationBoundaryKind.DeviceRemoved);
     }
 
+    [Fact]
+    public async Task GamepadControlAndStatusKeepRawIdentityAndDescriptorState()
+    {
+        var counters = new InputPipelineCounters();
+        var queue = new BoundedInputQueue(16, counters);
+        var sink = new RecordingSink();
+        var worker = CreateWorker(queue, counters, sink, new FixedProvider(RawDeviceKind.Gamepad));
+        Task run = worker.Start();
+        nint handle = new(31);
+
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.GamepadStatus,
+            handle,
+            1,
+            GamepadStatus: GamepadCaptureStatus.Ready)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.Gamepad,
+            handle,
+            2,
+            GamepadControl: new GamepadControlId(0x01, 0x32, 3, 0),
+            GamepadValue: 127,
+            GamepadBaseline: true,
+            GamepadLogicalMinimum: 0,
+            GamepadLogicalMaximum: 255)));
+        queue.Complete();
+        await run;
+
+        CapturedInput status = Assert.Single(sink.Items, item => item.Kind == CapturedInputKind.GamepadStatus);
+        Assert.Equal(GamepadCaptureStatus.Ready, status.GamepadStatus.Status);
+        CapturedInput control = Assert.Single(sink.Items, item => item.Kind == CapturedInputKind.Gamepad);
+        Assert.Equal(new GamepadControlId(0x01, 0x32, 3, 0), control.Gamepad.Control);
+        Assert.Equal(127, control.Gamepad.Value);
+        Assert.True(control.Gamepad.IsBaseline);
+        Assert.Equal(0, control.Gamepad.LogicalMinimum);
+        Assert.Equal(255, control.Gamepad.LogicalMaximum);
+        Assert.Equal(status.GamepadStatus.DeviceId, control.Gamepad.DeviceId);
+    }
+
+    [Fact]
+    public async Task PauseInvalidatesGamepadHandleIdentityButPreservesKeyboardIdentity()
+    {
+        var counters = new InputPipelineCounters();
+        var queue = new BoundedInputQueue(32, counters);
+        var sink = new RecordingSink();
+        var worker = CreateWorker(queue, counters, sink, new HintProvider());
+        Task run = worker.Start();
+        nint gamepadHandle = new(51);
+        nint keyboardHandle = new(52);
+
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.DeviceArrived,
+            gamepadHandle,
+            1,
+            DeviceKind: RawDeviceKind.Gamepad)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.DeviceArrived,
+            keyboardHandle,
+            2,
+            DeviceKind: RawDeviceKind.Keyboard)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.Gamepad,
+            gamepadHandle,
+            3,
+            GamepadControl: new GamepadControlId(0x09, 1, 0, 0),
+            GamepadValue: 1)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.Keyboard,
+            keyboardHandle,
+            4,
+            MakeCode: 30,
+            KeyTransition: PhysicalKeyTransition.Down)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.Boundary,
+            0,
+            5,
+            BoundaryKind: AggregationBoundaryKind.Paused,
+            PauseReasons: PauseReason.User)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.Gamepad,
+            gamepadHandle,
+            6,
+            GamepadControl: new GamepadControlId(0x09, 1, 0, 0),
+            GamepadValue: 1)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(
+            IngressEventKind.Keyboard,
+            keyboardHandle,
+            7,
+            MakeCode: 30,
+            KeyTransition: PhysicalKeyTransition.Down)));
+        queue.Complete();
+        await run;
+
+        CapturedInput[] gamepadArrivals = sink.Items.Where(item =>
+            item.Kind == CapturedInputKind.DeviceChange &&
+            item.DeviceChange.Change == DeviceChangeKind.Arrived &&
+            item.DeviceChange.Device.Kind == RawDeviceKind.Gamepad).ToArray();
+        Assert.Equal(2, gamepadArrivals.Length);
+        Assert.Equal(1, gamepadArrivals[0].DeviceChange.Device.ArrivalGeneration);
+        Assert.Equal(2, gamepadArrivals[1].DeviceChange.Device.ArrivalGeneration);
+        Assert.NotEqual(
+            gamepadArrivals[0].DeviceChange.Device.RuntimeId,
+            gamepadArrivals[1].DeviceChange.Device.RuntimeId);
+        Assert.Contains(sink.Items, item =>
+            item.Kind == CapturedInputKind.DeviceChange &&
+            item.DeviceChange.Change == DeviceChangeKind.Removed &&
+            item.DeviceChange.Device.RuntimeId == gamepadArrivals[0].DeviceChange.Device.RuntimeId);
+
+        CapturedInput[] keyboardEvents = sink.Items.Where(item => item.Kind == CapturedInputKind.Keyboard).ToArray();
+        Assert.Equal(2, keyboardEvents.Length);
+        Assert.Equal(keyboardEvents[0].Keyboard.DeviceId, keyboardEvents[1].Keyboard.DeviceId);
+        Assert.Single(sink.Items, item =>
+            item.Kind == CapturedInputKind.DeviceChange &&
+            item.DeviceChange.Change == DeviceChangeKind.Arrived &&
+            item.DeviceChange.Device.Kind == RawDeviceKind.Keyboard);
+    }
+
+    [Fact]
+    public async Task DisablingGamepadCaptureInvalidatesOnlyGamepadIdentity()
+    {
+        var counters = new InputPipelineCounters();
+        var queue = new BoundedInputQueue(32, counters);
+        var sink = new RecordingSink();
+        var worker = CreateWorker(queue, counters, sink, new HintProvider());
+        Task run = worker.Start();
+        nint gamepadHandle = new(61);
+        nint keyboardHandle = new(62);
+
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.DeviceArrived, gamepadHandle, 1, DeviceKind: RawDeviceKind.Gamepad)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.DeviceArrived, keyboardHandle, 2, DeviceKind: RawDeviceKind.Keyboard)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.Gamepad, gamepadHandle, 3, GamepadControl: new GamepadControlId(0x09, 1, 0, 0), GamepadValue: 1)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.Keyboard, keyboardHandle, 4, MakeCode: 30, KeyTransition: PhysicalKeyTransition.Down)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.GamepadBarrier, 0, 5, GamepadCaptureEnabled: false)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.Keyboard, keyboardHandle, 6, MakeCode: 30, KeyTransition: PhysicalKeyTransition.Up)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.GamepadBarrier, 0, 7, GamepadCaptureEnabled: true)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.Gamepad, gamepadHandle, 8, GamepadControl: new GamepadControlId(0x09, 1, 0, 0), GamepadValue: 1)));
+        Assert.True(queue.TryWrite(new InputIngressEvent(IngressEventKind.Keyboard, keyboardHandle, 9, MakeCode: 30, KeyTransition: PhysicalKeyTransition.Down)));
+        queue.Complete();
+        await run;
+
+        CapturedInput[] gamepadArrivals = sink.Items.Where(item =>
+            item.Kind == CapturedInputKind.DeviceChange &&
+            item.DeviceChange.Change == DeviceChangeKind.Arrived &&
+            item.DeviceChange.Device.Kind == RawDeviceKind.Gamepad).ToArray();
+        Assert.Equal(2, gamepadArrivals.Length);
+        Assert.Equal(1, gamepadArrivals[0].DeviceChange.Device.ArrivalGeneration);
+        Assert.Equal(2, gamepadArrivals[1].DeviceChange.Device.ArrivalGeneration);
+        Assert.NotEqual(gamepadArrivals[0].DeviceChange.Device.RuntimeId, gamepadArrivals[1].DeviceChange.Device.RuntimeId);
+        Assert.Contains(sink.Items, item =>
+            item.Kind == CapturedInputKind.DeviceChange &&
+            item.DeviceChange.Change == DeviceChangeKind.Removed &&
+            item.DeviceChange.Device.RuntimeId == gamepadArrivals[0].DeviceChange.Device.RuntimeId);
+
+        CapturedInput[] keyboardEvents = sink.Items.Where(item => item.Kind == CapturedInputKind.Keyboard).ToArray();
+        Assert.Equal(3, keyboardEvents.Length);
+        Assert.All(keyboardEvents, item => Assert.Equal(keyboardEvents[0].Keyboard.DeviceId, item.Keyboard.DeviceId));
+        Assert.Single(sink.Items, item =>
+            item.Kind == CapturedInputKind.DeviceChange &&
+            item.DeviceChange.Change == DeviceChangeKind.Arrived &&
+            item.DeviceChange.Device.Kind == RawDeviceKind.Keyboard);
+    }
+
     private sealed class RecordingSink : IInputEventSink
     {
         public List<CapturedInput> Items { get; } = [];
@@ -264,6 +425,15 @@ public sealed class InputWorkerBehaviorTests
     {
         public RawDeviceMetadata Query(nint deviceHandle, RawDeviceKind hintedKind) => new(
             kind,
+            $"path-{deviceHandle}",
+            "test",
+            DeviceIdentityConfidence.SessionOnly);
+    }
+
+    private sealed class HintProvider : IRawDeviceInfoProvider
+    {
+        public RawDeviceMetadata Query(nint deviceHandle, RawDeviceKind hintedKind) => new(
+            hintedKind,
             $"path-{deviceHandle}",
             "test",
             DeviceIdentityConfidence.SessionOnly);

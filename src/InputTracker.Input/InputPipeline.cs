@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using InputTracker.Input.Win32;
 
 namespace InputTracker.Input;
 
@@ -6,6 +7,9 @@ internal enum IngressEventKind : byte
 {
     Keyboard,
     Mouse,
+    Gamepad,
+    GamepadStatus,
+    GamepadBarrier,
     DeviceArrived,
     DeviceRemoved,
     Boundary
@@ -25,6 +29,14 @@ internal readonly record struct InputIngressEvent(
     MouseButtonChanges ButtonChanges = MouseButtonChanges.None,
     short VerticalWheelDelta = 0,
     short HorizontalWheelDelta = 0,
+    GamepadControlId GamepadControl = default,
+    int GamepadValue = 0,
+    bool GamepadBaseline = false,
+    bool GamepadCaptureEnabled = false,
+    int? GamepadLogicalMinimum = null,
+    int? GamepadLogicalMaximum = null,
+    GamepadCaptureStatus GamepadStatus = GamepadCaptureStatus.Ready,
+    string? GamepadError = null,
     RawDeviceKind DeviceKind = RawDeviceKind.Unknown,
     AggregationBoundaryKind BoundaryKind = AggregationBoundaryKind.Paused,
     PauseReason PauseReasons = PauseReason.None,
@@ -123,7 +135,8 @@ internal readonly record struct RawDeviceMetadata(
     RawDeviceKind Kind,
     string? InterfacePath,
     string? HardwareSummary,
-    DeviceIdentityConfidence Confidence);
+    DeviceIdentityConfidence Confidence,
+    RawDeviceIdentityObservation? Identity = null);
 
 internal sealed class InputWorker
 {
@@ -131,6 +144,7 @@ internal sealed class InputWorker
     private readonly InputPipelineCounters _counters;
     private readonly IInputEventSink _sink;
     private readonly IRawDeviceInfoProvider _deviceInfo;
+    private readonly IRawDeviceIdentityObserver _identityObserver;
     private readonly RawDeviceRegistry _devices = new();
     private readonly HashSet<PressedKey> _pressedKeys = [];
     private readonly Func<Exception, ValueTask> _onFault;
@@ -145,12 +159,14 @@ internal sealed class InputWorker
         IInputEventSink sink,
         IRawDeviceInfoProvider deviceInfo,
         Func<Exception, ValueTask> onFault,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IRawDeviceIdentityObserver? identityObserver = null)
     {
         _queue = queue;
         _counters = counters;
         _sink = sink;
         _deviceInfo = deviceInfo;
+        _identityObserver = identityObserver ?? NullRawDeviceIdentityObserver.Instance;
         _onFault = onFault;
         _cancellationToken = cancellationToken;
     }
@@ -218,13 +234,15 @@ internal sealed class InputWorker
                     break;
                 }
 
-                RawDeviceMetadata metadata = _deviceInfo.Query(input.DeviceHandle, input.DeviceKind);
-                InputDeviceDescriptor descriptor = _devices.Arrive(
-                    input.DeviceHandle,
-                    metadata,
-                    out bool created);
+                RawDeviceMetadata metadata = default;
+                InputDeviceDescriptor descriptor = _devices.Resolve(input.DeviceHandle, () =>
+                {
+                    metadata = _deviceInfo.Query(input.DeviceHandle, input.DeviceKind);
+                    return metadata;
+                }, out bool created);
                 if (created)
                 {
+                    await ObserveIdentityAsync(descriptor, metadata).ConfigureAwait(false);
                     await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
                         DeviceChangeKind.Arrived,
                         descriptor,
@@ -286,6 +304,46 @@ internal sealed class InputWorker
                     input.Timestamp))).ConfigureAwait(false);
                 break;
             }
+            case IngressEventKind.Gamepad:
+            {
+                InputDeviceDescriptor descriptor = await ResolveAsync(
+                    input.DeviceHandle,
+                    RawDeviceKind.Gamepad,
+                    input.Timestamp).ConfigureAwait(false);
+                await WriteAsync(CapturedInput.FromGamepad(new GamepadControlEvent(
+                    descriptor.RuntimeId,
+                    input.GamepadControl,
+                    input.GamepadValue,
+                    input.Timestamp,
+                    input.GamepadBaseline,
+                    input.GamepadLogicalMinimum,
+                    input.GamepadLogicalMaximum))).ConfigureAwait(false);
+                break;
+            }
+            case IngressEventKind.GamepadStatus:
+            {
+                InputDeviceDescriptor descriptor = await ResolveAsync(
+                    input.DeviceHandle,
+                    RawDeviceKind.Gamepad,
+                    input.Timestamp).ConfigureAwait(false);
+                await WriteAsync(CapturedInput.FromGamepadStatus(new GamepadInputStatusEvent(
+                    descriptor.RuntimeId,
+                    input.GamepadStatus,
+                    input.GamepadError,
+                    input.Timestamp))).ConfigureAwait(false);
+                break;
+            }
+            case IngressEventKind.GamepadBarrier:
+            {
+                if (!input.GamepadCaptureEnabled)
+                {
+                    await RemoveGamepadDevicesAsync(input.Timestamp).ConfigureAwait(false);
+                }
+
+                input.Barrier?.TrySetResult(true);
+                _counters.SinkAcknowledged();
+                break;
+            }
             case IngressEventKind.Boundary:
             {
                 _pressedKeys.Clear();
@@ -294,6 +352,11 @@ internal sealed class InputWorker
                     RuntimeDeviceId.Unattributed,
                     input.PauseReasons,
                     input.Timestamp))).ConfigureAwait(false);
+                if (input.BoundaryKind == AggregationBoundaryKind.Paused)
+                {
+                    await RemoveGamepadDevicesAsync(input.Timestamp).ConfigureAwait(false);
+                }
+
                 input.Barrier?.TrySetResult(true);
                 break;
             }
@@ -307,12 +370,15 @@ internal sealed class InputWorker
         RawDeviceKind kind,
         long timestamp)
     {
-        InputDeviceDescriptor descriptor = _devices.Resolve(
-            handle,
-            () => _deviceInfo.Query(handle, kind),
-            out bool created);
+        RawDeviceMetadata metadata = default;
+        InputDeviceDescriptor descriptor = _devices.Resolve(handle, () =>
+        {
+            metadata = _deviceInfo.Query(handle, kind);
+            return metadata;
+        }, out bool created);
         if (created)
         {
+            await ObserveIdentityAsync(descriptor, metadata).ConfigureAwait(false);
             await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
                 DeviceChangeKind.Arrived,
                 descriptor,
@@ -321,6 +387,11 @@ internal sealed class InputWorker
 
         return descriptor;
     }
+
+    private ValueTask ObserveIdentityAsync(InputDeviceDescriptor descriptor, RawDeviceMetadata metadata) =>
+        metadata.Identity is { } identity
+            ? _identityObserver.ObserveAsync(descriptor.RuntimeId, identity, _cancellationToken)
+            : ValueTask.CompletedTask;
 
     private async ValueTask WriteBoundaryForDeviceAsync(
         RuntimeDeviceId deviceId,
@@ -333,6 +404,21 @@ internal sealed class InputWorker
             deviceId,
             PauseReason.None,
             timestamp))).ConfigureAwait(false);
+    }
+
+    private async ValueTask RemoveGamepadDevicesAsync(long timestamp)
+    {
+        foreach (InputDeviceDescriptor descriptor in _devices.RemoveKind(RawDeviceKind.Gamepad))
+        {
+            await WriteBoundaryForDeviceAsync(
+                descriptor.RuntimeId,
+                AggregationBoundaryKind.DeviceRemoved,
+                timestamp).ConfigureAwait(false);
+            await WriteAsync(CapturedInput.FromDeviceChange(new DeviceChangeEvent(
+                DeviceChangeKind.Removed,
+                descriptor,
+                timestamp))).ConfigureAwait(false);
+        }
     }
 
     private async ValueTask WriteAsync(CapturedInput input)

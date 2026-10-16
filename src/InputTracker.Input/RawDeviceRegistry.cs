@@ -56,7 +56,7 @@ internal sealed class RawDeviceRegistry
             new RuntimeDeviceId(++_nextRuntimeId),
             generation,
             metadata.Kind,
-            metadata.InterfacePath,
+            null,
             metadata.HardwareSummary,
             metadata.Confidence);
         _active[handle] = new ActiveDevice(descriptor);
@@ -83,6 +83,21 @@ internal sealed class RawDeviceRegistry
             null,
             null,
             DeviceIdentityConfidence.RequiresConfirmation);
+    }
+
+    public IReadOnlyList<InputDeviceDescriptor> RemoveKind(RawDeviceKind kind)
+    {
+        var removed = new List<InputDeviceDescriptor>();
+        foreach ((nint handle, ActiveDevice active) in _active.ToArray())
+        {
+            if (active.Descriptor.Kind == kind)
+            {
+                _active.Remove(handle);
+                removed.Add(active.Descriptor);
+            }
+        }
+
+        return removed;
     }
 
     private static InputDeviceDescriptor Unattributed() => new(

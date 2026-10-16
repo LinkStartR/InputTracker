@@ -13,6 +13,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.Input", "src\I
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.Input.Tests", "tests\InputTracker.Input.Tests\InputTracker.Input.Tests.csproj", "{93DA1968-8225-42DF-A568-C41A8DA2D820}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.Storage", "src\InputTracker.Storage\InputTracker.Storage.csproj", "{62E6A2C9-D4ED-43FD-B45C-FC4A54DCA101}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputTracker.Storage.Tests", "tests\InputTracker.Storage.Tests\InputTracker.Storage.Tests.csproj", "{71B66892-77A9-40DF-A8DE-83649AF16CB7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,5 +43,13 @@ Global
 		{93DA1968-8225-42DF-A568-C41A8DA2D820}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{93DA1968-8225-42DF-A568-C41A8DA2D820}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{93DA1968-8225-42DF-A568-C41A8DA2D820}.Release|Any CPU.Build.0 = Release|Any CPU
+		{62E6A2C9-D4ED-43FD-B45C-FC4A54DCA101}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{62E6A2C9-D4ED-43FD-B45C-FC4A54DCA101}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{62E6A2C9-D4ED-43FD-B45C-FC4A54DCA101}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{62E6A2C9-D4ED-43FD-B45C-FC4A54DCA101}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71B66892-77A9-40DF-A8DE-83649AF16CB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71B66892-77A9-40DF-A8DE-83649AF16CB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71B66892-77A9-40DF-A8DE-83649AF16CB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71B66892-77A9-40DF-A8DE-83649AF16CB7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

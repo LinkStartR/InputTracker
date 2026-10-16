@@ -48,6 +48,11 @@ public interface IInputCaptureControl
     DiagnosticsSnapshot Diagnostics { get; }
     event EventHandler<InputCaptureStatus>? StatusChanged;
     ValueTask SetPauseReasonAsync(PauseReason reason, bool active, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Enables gamepad Raw Input only after the caller has obtained gamepad-specific user consent.
+    /// Gamepad capture is disabled by default and does not inherit keyboard/mouse consent.
+    /// </summary>
+    ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken = default);
 }
 
 public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
@@ -67,9 +72,15 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
     private long _successfulUnregistrations;
     private long _completedPauseBarriers;
     private int _disposed;
+    private bool _gamepadCaptureEnabled;
 
     public InputCaptureService(IInputEventSink sink, InputCaptureOptions? options = null)
-        : this(sink, options, RawInputHostFactory.Instance)
+        : this(
+            sink,
+            options,
+            RawInputHostFactory.Instance,
+            new RawDeviceInfoProvider(),
+            NullRawDeviceIdentityObserver.Instance)
     {
     }
 
@@ -77,17 +88,35 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
         IInputEventSink sink,
         InputCaptureOptions? options,
         IRawInputHostFactory hostFactory)
+        : this(
+            sink,
+            options,
+            hostFactory,
+            new RawDeviceInfoProvider(),
+            NullRawDeviceIdentityObserver.Instance)
+    {
+    }
+
+    internal InputCaptureService(
+        IInputEventSink sink,
+        InputCaptureOptions? options,
+        IRawInputHostFactory hostFactory,
+        IRawDeviceInfoProvider deviceInfo,
+        IRawDeviceIdentityObserver identityObserver)
     {
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(hostFactory);
+        ArgumentNullException.ThrowIfNull(deviceInfo);
+        ArgumentNullException.ThrowIfNull(identityObserver);
         options ??= new InputCaptureOptions();
         _queue = new BoundedInputQueue(options.QueueCapacity, _counters);
         _worker = new InputWorker(
             _queue,
             _counters,
             sink,
-            new RawDeviceInfoProvider(),
-            OnWorkerFaultAsync);
+            deviceInfo,
+            OnWorkerFaultAsync,
+            identityObserver: identityObserver);
         _host = hostFactory.Create(
             _queue,
             _counters,
@@ -152,6 +181,11 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
             try
             {
                 await _host.StartAsync(cancellationToken).ConfigureAwait(false);
+                if (_gamepadCaptureEnabled)
+                {
+                    await _host.SetGamepadCaptureEnabledAsync(true, cancellationToken).ConfigureAwait(false);
+                }
+
                 SetStatus(InputCaptureState.Running, PauseReason.None, null);
             }
             catch (Exception error)
@@ -166,6 +200,33 @@ public sealed class InputCaptureService : IInputCaptureControl, IAsyncDisposable
                 SetStatus(InputCaptureState.StartFailed, PauseReason.None, error.Message);
                 throw;
             }
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    public async ValueTask SetGamepadCaptureEnabledAsync(
+        bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _lifecycle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            InputCaptureState state = CurrentStatus.State;
+            if (state is InputCaptureState.IntegrityFault or InputCaptureState.StartFailed or InputCaptureState.Stopping)
+            {
+                return;
+            }
+
+            if (state is InputCaptureState.Running or InputCaptureState.Paused)
+            {
+                await _host.SetGamepadCaptureEnabledAsync(enabled, cancellationToken).ConfigureAwait(false);
+            }
+
+            _gamepadCaptureEnabled = enabled;
         }
         finally
         {
@@ -395,6 +456,7 @@ internal interface IRawInputHost
     void CloseIngress();
     ValueTask PauseAsync(PauseReason reasons, CancellationToken cancellationToken);
     ValueTask ResumeAsync(CancellationToken cancellationToken);
+    ValueTask SetGamepadCaptureEnabledAsync(bool enabled, CancellationToken cancellationToken);
     ValueTask PrepareStopAsync(bool enqueueBarrier, CancellationToken cancellationToken);
     ValueTask DestroyAsync(CancellationToken cancellationToken);
     ValueTask StopAfterFaultAsync(CancellationToken cancellationToken);

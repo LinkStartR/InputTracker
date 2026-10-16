@@ -3,10 +3,58 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <SolidColorBrush x:Key="AccentBrush" Color="#2563EB" />
-        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFDFB" />
-        <SolidColorBrush x:Key="CardBrush" Color="#FFFFFFFF" />
-        <SolidColorBrush x:Key="TextBrush" Color="#FF172033" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#FF526071" />
+        <!-- The named source colors make both palettes auditable without starting WPF. -->
+        <Color x:Key="LightWindowBackgroundColor">#FFF4F8F7</Color>
+        <Color x:Key="LightPrimaryTextColor">#FF18332F</Color>
+        <Color x:Key="DarkWindowBackgroundColor">#FF101C1A</Color>
+        <Color x:Key="DarkPrimaryTextColor">#FFEAF4EF</Color>
+        <FontFamily x:Key="AppTextFontFamily">Segoe UI Variable Text, DengXian, Microsoft YaHei UI, Microsoft YaHei, Segoe UI</FontFamily>
+
+        <Color x:Key="WindowBackgroundColor">#FFF4F8F7</Color>
+        <Color x:Key="CardBackgroundColor">#FFFFFFFF</Color>
+        <Color x:Key="SubtleBackgroundColor">#FFEEF6F3</Color>
+        <Color x:Key="PrimaryTextColor">#FF18332F</Color>
+        <Color x:Key="SecondaryTextColor">#FF5B7068</Color>
+        <Color x:Key="BorderColor">#FFDCE8E3</Color>
+        <Color x:Key="AccentColor">#FF087F75</Color>
+        <Color x:Key="AccentSoftColor">#FFE4F4EF</Color>
+        <Color x:Key="SidebarBackgroundColor">#FFFFFFFF</Color>
+        <Color x:Key="SidebarTextColor">#FF075F57</Color>
+        <Color x:Key="SidebarMutedTextColor">#FF5B7068</Color>
+        <Color x:Key="SidebarSelectionColor">#FFE4F4EF</Color>
+        <Color x:Key="AccentTextColor">#FFFFFFFF</Color>
+
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{DynamicResource WindowBackgroundColor}" />
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="SubtleBackgroundBrush" Color="{DynamicResource SubtleBackgroundColor}" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="{DynamicResource PrimaryTextColor}" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="{DynamicResource SecondaryTextColor}" />
+        <SolidColorBrush x:Key="BorderBrush" Color="{DynamicResource BorderColor}" />
+        <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource AccentColor}" />
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="{DynamicResource AccentSoftColor}" />
+        <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="{DynamicResource SidebarBackgroundColor}" />
+        <SolidColorBrush x:Key="SidebarTextBrush" Color="{DynamicResource SidebarTextColor}" />
+        <SolidColorBrush x:Key="SidebarMutedTextBrush" Color="{DynamicResource SidebarMutedTextColor}" />
+        <SolidColorBrush x:Key="SidebarSelectionBrush" Color="{DynamicResource SidebarSelectionColor}" />
+        <SolidColorBrush x:Key="AccentTextBrush" Color="{DynamicResource AccentTextColor}" />
+
+        <SolidColorBrush x:Key="HeatmapLevel0Brush" Color="#FFE3EDEA" />
+        <SolidColorBrush x:Key="HeatmapLevel0TextBrush" Color="#FF0F172A" />
+        <SolidColorBrush x:Key="HeatmapLevel1Brush" Color="#FFCFE6E0" />
+        <SolidColorBrush x:Key="HeatmapLevel1TextBrush" Color="#FF0F172A" />
+        <SolidColorBrush x:Key="HeatmapLevel2Brush" Color="#FF8FC9BE" />
+        <SolidColorBrush x:Key="HeatmapLevel2TextBrush" Color="#FF0F172A" />
+        <SolidColorBrush x:Key="HeatmapLevel3Brush" Color="#FF37AC9C" />
+        <SolidColorBrush x:Key="HeatmapLevel3TextBrush" Color="#FF0F172A" />
+        <SolidColorBrush x:Key="HeatmapLevel4Brush" Color="#FF146B5F" />
+        <SolidColorBrush x:Key="HeatmapLevel4TextBrush" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="HeatmapLevel5Brush" Color="#FF0A3A34" />
+        <SolidColorBrush x:Key="HeatmapLevel5TextBrush" Color="#FFFFFFFF" />
+
+        <!-- Compatibility aliases retained for existing code-behind and tray bootstrap. -->
+        <SolidColorBrush x:Key="SurfaceBrush" Color="{DynamicResource WindowBackgroundColor}" />
+        <SolidColorBrush x:Key="CardBrush" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="TextBrush" Color="{DynamicResource PrimaryTextColor}" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="{DynamicResource SecondaryTextColor}" />
     </Application.Resources>
 </Application>
