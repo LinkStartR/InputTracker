@@ -132,6 +132,26 @@ public sealed class UiPresentationTests
     }
 
     [Fact]
+    public void GamepadCentreKeyIsDecorativeAndCarriesNoStatistics()
+    {
+        XElement root = Assert.IsType<XElement>(LoadXaml("MainWindow.xaml").Root);
+        XElement canvas = root.Descendants(Presentation + "Canvas")
+            .Single(element => element.Elements(Presentation + "ItemsControl")
+                .Any(items => HasName(items, "GamepadHeatmapItems")));
+
+        XElement centre = canvas.Elements(Presentation + "Border")
+            .Single(element => HasName(element, "GamepadCentreKey"));
+        string markup = centre.ToString(SaveOptions.DisableFormatting);
+
+        Assert.DoesNotContain("Binding", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("HeatLevel", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToolTip", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("AccessibleLabel", markup, StringComparison.Ordinal);
+        Assert.Equal("False", (string?)centre.Attribute("IsHitTestVisible"));
+        Assert.Contains("{DynamicResource AccentBrush}", markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GamepadConfirmationUsesThemeAwareExplicitChoiceAndPreservesDisclosure()
     {
         XDocument document = LoadXaml("GamepadConfirmationWindow.xaml");

@@ -551,6 +551,9 @@
                                HorizontalAlignment="Center" VerticalAlignment="Top" />
                     <TextBlock Text="{Binding CountText}" FontSize="12"
                                HorizontalAlignment="Center" VerticalAlignment="Bottom" />
+                    <Border Height="1.5" Margin="2,0,2,1" VerticalAlignment="Bottom"
+                            CornerRadius="1" Opacity="0.35"
+                            Background="{DynamicResource SecondaryTextBrush}" />
                 </Grid>
             </Border>
         </DataTemplate>
@@ -866,19 +869,29 @@
                                             Background="{DynamicResource SubtleBackgroundBrush}"
                                             CornerRadius="12">
                                         <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
-                                            <ItemsControl x:Name="HeatmapItems"
-                                                          Width="1180" Height="340"
-                                                          ItemTemplate="{StaticResource KeyboardKeyTemplate}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemContainerStyle>
-                                                    <Style TargetType="ContentPresenter">
-                                                        <Setter Property="Canvas.Left" Value="{Binding X}" />
-                                                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
-                                                    </Style>
-                                                </ItemsControl.ItemContainerStyle>
-                                            </ItemsControl>
+                                            <Grid Width="1220" Height="380">
+                                                <Border CornerRadius="16" BorderThickness="1.5" Opacity="0.5"
+                                                        BorderBrush="{DynamicResource SecondaryTextBrush}" />
+                                                <Border Margin="8" CornerRadius="10" BorderThickness="1" Opacity="0.7"
+                                                        BorderBrush="{DynamicResource BorderBrush}" />
+                                                <Border Margin="16,0,16,10" Height="6" VerticalAlignment="Bottom"
+                                                        CornerRadius="3" Opacity="0.45"
+                                                        Background="{DynamicResource BorderBrush}" />
+                                                <ItemsControl x:Name="HeatmapItems"
+                                                              Width="1180" Height="340"
+                                                              Margin="20,16,20,24"
+                                                              ItemTemplate="{StaticResource KeyboardKeyTemplate}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemContainerStyle>
+                                                        <Style TargetType="ContentPresenter">
+                                                            <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                                            <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                                        </Style>
+                                                    </ItemsControl.ItemContainerStyle>
+                                                </ItemsControl>
+                                            </Grid>
                                         </Viewbox>
                                     </Border>
                                     <TextBlock Margin="0,14,0,0" Text="其他按键" FontWeight="SemiBold" />
@@ -1170,6 +1183,11 @@
                                             <Canvas Width="680" Height="440">
                                                 <Image Source="Assets/GamepadController.png" Width="680" Height="440"
                                                        Stretch="Uniform" IsHitTestVisible="False" />
+                                                <Border x:Name="GamepadCentreKey"
+                                                        Canvas.Left="321" Canvas.Top="182" Width="35" Height="23"
+                                                        CornerRadius="11" Background="{DynamicResource AccentSoftBrush}"
+                                                        BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1.5"
+                                                        IsHitTestVisible="False" />
                                                 <ItemsControl x:Name="GamepadHeatmapItems"
                                                               Width="680" Height="440"
                                                               ItemTemplate="{StaticResource GamepadHeatmapPositionTemplate}">
